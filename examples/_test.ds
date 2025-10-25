@@ -1,0 +1,17 @@
+#[
+    benchmark test.
+
+    5 passes with an average of 3.43s
+    so thats about ~60mins for 1 billion iterations
+    fucking sucks
+]#
+
+iterations = 1000000
+sum = 0
+
+while iterations > 0
+    sum = sum + iterations
+    iterations = iterations - 1
+end
+
+puts sum

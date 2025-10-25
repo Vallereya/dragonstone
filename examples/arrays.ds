@@ -1,0 +1,31 @@
+# Array literals
+numbers = [1, 2, 3, 4, 5]
+p! numbers
+
+# Array indexing
+first = numbers[0]
+p! first
+
+last = numbers[4]
+p! last
+
+# Array methods
+p! numbers.length
+p! numbers.first
+p! numbers.last
+
+# Modifying arrays
+numbers.push(6)
+p! numbers
+
+popped = numbers.pop
+p! popped
+p! numbers
+
+# Empty array
+empty = []
+p! empty.empty
+
+# Mixed types
+mixed = [1, "hello", 3.14, true]
+p! mixed

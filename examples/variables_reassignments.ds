@@ -1,0 +1,7 @@
+message = "Hello!"
+
+puts message
+
+message = "Hello from Dragonstone!"
+
+puts message

@@ -1,0 +1,7 @@
+message = "Hello!"
+
+puts typeof(message)
+
+message = "Hello!"
+
+p! typeof(message)

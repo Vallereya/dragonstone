@@ -1,0 +1,33 @@
+message = "Hello!"
+p! message
+
+name = "Jules"
+p! name
+
+# Using typeof
+p! typeof(message)
+
+x = 42
+p! typeof(x)
+
+y = 3.14
+p! typeof(y)
+
+flag = true
+p! typeof(flag)
+
+# Complex expressions
+a = 10
+b = 5
+p! a + b
+
+p! a + b * 2
+
+# typeof with expressions
+p! typeof(a + b)
+p! typeof("test")
+
+# Combining typeof with variables
+result = a * b
+p! result
+p! typeof(result)

@@ -1,0 +1,25 @@
+name: dragonstone
+version: 0.0.1
+
+authors:
+  - Vallereya <v@vallereya.com>
+
+description: |
+  The Dragonstone Programming Language
+
+# dependencies:
+#   [NAME]:
+#     github: [REPO/NAME]
+#     version: "[VERSION]"
+
+# development_dependencies:
+#   [NAME]:
+#     github: [REPO/FILENAME.EXT]
+
+targets:
+  dragonstone:
+    main: bin/dragonstone
+
+license: Apache-2.0
+
+crystal: ">= 1.0.0"

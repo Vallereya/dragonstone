@@ -1,0 +1,32 @@
+#[
+    This is a Multi-Line Comment examples,
+    It can span multiple lines.
+]#
+
+#[
+    This is a Nested Multi-Line Comment example.
+    #[
+        Inner comment.
+        #[
+            It can go deep if you want.
+        ]#
+    ]#
+    Back to the outer comment.
+]#
+
+# This is a Single Line Comment.
+
+message = "Hello!" # Trailing Comment.
+puts message  # Another Trailing Comment.
+
+#[ Multi-Line Comment on one line. ]# numbers = 10 #[ Inside or outside, doesn't matter. ]#
+puts numbers
+
+#[
+    Comments can contain code that won't execute.
+    y = 100
+    puts y
+    puts "This won't print"
+]#
+
+puts "Comments are working"

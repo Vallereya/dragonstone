@@ -1,0 +1,14 @@
+# Example using Dragonstone ffi to call
+# methods from C, Ruby and Crystal.
+
+# Ruby's puts
+result = ffi.call_ruby("puts", ["Hello from Ruby!"])
+puts result
+
+# Crystal's puts
+result = ffi.call_crystal("puts", ["Hello from Crystal!"])
+puts result
+
+# C's printf
+result = ffi.call_c("printf", ["Hello from C!\n"])
+puts result

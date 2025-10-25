@@ -1,0 +1,58 @@
+# Combining features
+
+# Function that works with arrays
+def sum_array(arr)
+  total = 0
+  i = 0
+  while i < arr.length
+    total = total + arr[i]
+    i = i + 1
+  end
+  return total
+end
+
+numbers = [1, 2, 3, 4, 5]
+total = sum_array(numbers)
+p! total
+
+# Function with string interpolation
+def describe_array(arr)
+  msg = "Array has #{arr.length} elements"
+  puts msg
+  puts "First: #{arr.first}, Last: #{arr.last}"
+end
+
+describe_array(numbers)
+
+# Factorial function
+def factorial(n)
+  if n <= 1
+    return 1
+  else
+    return n * factorial(n - 1)
+  end
+end
+
+p! factorial(5)
+p! factorial(10)
+
+# Find maximum in array
+def find_max(arr)
+  if arr.empty
+    return nil
+  end
+  
+  max = arr[0]
+  i = 1
+  while i < arr.length
+    if arr[i] > max
+      max = arr[i]
+    end
+    i = i + 1
+  end
+  return max
+end
+
+values = [3, 7, 2, 9, 1, 5]
+maximum = find_max(values)
+puts "Maximum value: #{maximum}"

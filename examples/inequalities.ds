@@ -1,0 +1,14 @@
+x = 1 < 2
+puts x
+
+z = 1 <= 2
+puts z
+
+c = 1 > 2
+puts c
+
+v = 1 >= 2
+puts v
+
+b = 1 <=> 2
+puts b

@@ -1,0 +1,25 @@
+## .dragonstone = dragonstone
+## .ds files = dragonstone file
+## .eds files = embedded dragonstone file (coming soon)
+## .forge files = dragonstone package manager file (coming soon)
+
+## This is all for GitHub.
+
+## Sources.
+*.dragonstone   text eol=lf
+*.ds            text eol=lf
+*.eds           text eol=lf
+*.forge         text eol=lf
+
+## Dragonstone language files.
+## Maps to Crystal for syntax highlighting for now, and 
+## prevents Dragonstone files from being counted as Crystal.
+*.dragonstone   linguist-language=Crystal   linguist-vendored
+*.ds            linguist-language=Crystal   linguist-vendored
+*.eds           linguist-language=Crystal   linguist-vendored
+*.forge         linguist-language=Crystal   linguist-vendored
+
+## Syntax highlighting.
+Makefile.win    linguist-language=makefile  # Windows Makefile
+Makefile.mac    linguist-language=makefile  # MacOS Makefile
+Makefile.lin    linguist-language=makefile  # Linux Makefile

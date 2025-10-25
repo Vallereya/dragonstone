@@ -1,0 +1,10 @@
+# So it ignores my build files.
+
+# Output
+dragonstone.exe
+dragonstone.pdb
+gc.dll
+iconv-2.dll
+pcre2-8.dll
+NUL
+version.h

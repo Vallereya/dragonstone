@@ -1,0 +1,11 @@
+# Boolean Test
+puts true
+
+# Integer Test
+puts 42
+
+# Float Test
+puts 3.14
+
+# Nil Test
+puts nil
