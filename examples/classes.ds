@@ -1,3 +1,13 @@
+#[
+    module      = grouping methods/constants, namespaces.
+    class       = defining classes. 
+    def         = defining methods.
+
+    fun         = single block functions.
+
+    con         = constants for immutability for variables, parameters, or the state of an object within a method.
+]#
+
 class Person
   happy = true
   

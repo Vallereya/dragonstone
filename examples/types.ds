@@ -1,0 +1,39 @@
+#[
+    char    = Character
+    str     = String
+    int     = Integer 
+    float   = float
+    bool    = Boolean
+    nil     = null/nil
+]#
+
+
+# untyped variable, dynamic typing
+name = "Jay"
+
+# typed variable, with optional strict typing
+name: str = "Jay"
+
+# method with typed parameters and return type
+def greet(name: str) -> str
+    "Hello, #{name}!"
+end
+
+# method with dynamic parameters and return type
+def greet(name)
+    "Hello, #{name}!"
+end
+
+# Union type example (an argument can be a String or Nil)
+def greet(name: str | nil) -> str
+    if name.nil?
+        "Hello, guest!"
+    else
+        "Hello, #{name}!"
+    end
+end
+
+# Nullable shorthand with ?
+def find_user(id: int) -> User?
+    # returns User or nil
+end

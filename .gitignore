@@ -8,3 +8,6 @@ iconv-2.dll
 pcre2-8.dll
 NUL
 version.h
+
+# Annoying IDE ignores.
+.fake

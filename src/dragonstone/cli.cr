@@ -17,6 +17,8 @@ module Dragonstone
 
             return print_version(stdout) if version_command?(argv)
 
+            return print_help(stdout) if help_command?(argv)
+
             return show_usage(stdout) if argv.size < 2
             
             command = argv[0]
@@ -41,11 +43,20 @@ module Dragonstone
         end
 
         private def version_command?(argv : Array(String)) : Bool
-            argv.size == 1 && {"version", "--version", "-v"}.includes?(argv[0])
+            argv.size == 1 && {"version", "--version", "--v"}.includes?(argv[0])
+        end
+
+        private def help_command?(argv : Array(String)) : Bool
+            argv.size == 1 && {"help", "--help", "--h"}.includes?(argv[0])
         end
 
         private def print_version(stdout : IO) : Int32
             stdout.puts "Dragonstone #{Dragonstone::VERSION}"
+            return 0
+        end
+
+        private def print_help(stdout : IO) : Int32
+            print_usage(stdout)
             return 0
         end
 
@@ -104,10 +115,11 @@ module Dragonstone
             io.puts "Usage: dragonstone <command> [options]"
             io.puts
             io.puts "Commands:"
-            io.puts "  lex <file>       Tokenize a .ds file"
-            io.puts "  parse <file>     Parse a .ds file and show AST"
-            io.puts "  run <file>       Run a .ds file"
-            io.puts "  -version or -v   Show version information"
+            io.puts "  lex <file>           Tokenize a .ds file"
+            io.puts "  parse <file>         Parse a .ds file and show AST"
+            io.puts "  run <file>           Run a .ds file"
+            io.puts "  --help or --h        Show help information"
+            io.puts "  --version or --v     Show version information"
         end
 
         private def print_ast(node : Dragonstone::AST::Node, indent = 0, io : IO = STDOUT)

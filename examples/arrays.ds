@@ -6,6 +6,12 @@ p! numbers
 first = numbers[0]
 p! first
 
+# broken right now.........
+# Array-like indexing
+# like = numbers([1, 2, 3])
+# puts like
+# p! like
+
 last = numbers[4]
 p! last
 

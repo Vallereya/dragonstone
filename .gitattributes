@@ -20,6 +20,6 @@
 *.forge         linguist-language=Crystal   linguist-vendored
 
 ## Syntax highlighting.
-Makefile.win    linguist-language=makefile  # Windows Makefile
-Makefile.mac    linguist-language=makefile  # MacOS Makefile
-Makefile.lin    linguist-language=makefile  # Linux Makefile
+Makefile.win    linguist-language=makefile
+Makefile.mac    linguist-language=makefile
+Makefile.lin    linguist-language=makefile
