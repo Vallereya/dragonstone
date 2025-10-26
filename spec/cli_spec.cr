@@ -14,7 +14,6 @@ describe Dragonstone::CLI do
         status = Dragonstone::CLI.run(["version"], stdout, stderr)
         status.should eq(0)
         stdout.to_s.should contain("Dragonstone #{Dragonstone::VERSION}")
-        stdout.to_s.should contain("Crystal #{Crystal::VERSION}")
     end
     it "lexes a program" do
         File.tempfile("dragonstone", suffix: ".ds") do |file|

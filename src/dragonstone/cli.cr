@@ -60,7 +60,6 @@ module Dragonstone
 
         private def print_version(stdout : IO) : Int32
             stdout.puts "Dragonstone #{Dragonstone::VERSION}"
-            stdout.puts "Crystal #{Crystal::VERSION}"
             return 0
         end
 
