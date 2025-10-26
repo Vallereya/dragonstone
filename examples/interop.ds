@@ -10,5 +10,5 @@ result = ffi.call_crystal("puts", ["Hello from Crystal!"])
 puts result
 
 # C's printf
-result = ffi.call_c("printf", ["Hello from C!\n"])
+result = ffi.call_c("printf", ["Hello from C!"])
 puts result

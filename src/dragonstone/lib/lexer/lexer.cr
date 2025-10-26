@@ -67,6 +67,9 @@ module Dragonstone
             break 
             next 
             rescue
+            use
+            from
+            as
         ]
 
         getter source_name : String
@@ -544,6 +547,9 @@ module Dragonstone
                     when "break" then :BREAK
                     when "next" then :NEXT
                     when "rescue" then :RESCUE
+                    when "use" then :USE
+                    when "from" then :FROM
+                    when "as" then :AS
                     else
                         :IDENTIFIER
                     end

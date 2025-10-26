@@ -1,0 +1,3 @@
+use "test_use.ds"
+
+puts add(MAGIC, 8)

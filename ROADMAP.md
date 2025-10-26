@@ -43,11 +43,11 @@
 ```
             - set CI + cross-platform builds (Linux/macOS/Windows).
             - freeze current grammar subset if needed on C side.
-            - stack VM, single-pass bytecode.
-            - simple syntax (Ruby-like/Crystal-like) with unambiguous block/indent rules.
+            ✅ stack VM, single-pass bytecode.
+            ✅ simple syntax (Ruby-like/Crystal-like) with unambiguous block/indent rules.
             - implement Pratt/precedence parser and produce typed AST.
-            - implement basic diagnostics (file:line:col, caret spans, suggestion hints).
-            - basic loops, strings, some math, etc.
+            ✅ implement basic diagnostics (file:line:col, caret spans, suggestion hints).
+            ✅ basic loops, strings, some math, etc.
             - no regressions moving forward, and clear grammar and recovery. 
 ```
 
@@ -57,11 +57,11 @@
 
 ```
             - stack-based bytecode (compact op codes "opc", constant pool, interned symbols).
-            - basic values: Nil, Bool, Int, Float, String, Symbol, Object*.
-            - VM in Crystal: frames, call stack, globals/envs, upvalues placeholder.
-            - additional testing both success and coverage for syntax/runtime failures.
-            - benchmark test.
-            - basic datatypes.
+            ✅ basic values: Nil, Bool, Int, Float, String, Symbol, Object*.
+            ✅ VM in Crystal: frames, call stack, globals/envs, upvalues placeholder.
+            ✅ additional testing both success and coverage for syntax/runtime failures.
+            ✅ benchmark test.
+            ✅ basic datatypes.
 ```
 
 ###     <h2 style="text-align:center;">         Phase Four

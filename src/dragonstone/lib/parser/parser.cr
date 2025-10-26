@@ -1,21 +1,61 @@
 # ---------------------------------
 # ------------ Parser -------------
 # ---------------------------------
+require "../lexer/*"
 require "../codegen/ast"
 require "../resolver/*"
 
 module Dragonstone
     class Parser
+        def self.parse(source : String, source_name : String = "<source>") : AST::Program
+            lexer = Lexer.new(source, source_name: source_name)
+            tokens = lexer.tokenize
+            new(tokens).parse
+        end
+
         TERMINATOR_TOKENS = [
-            :EOF, :END, :ELSIF, :ELSE, :WHEN, :RESCUE, :RETURN, :BREAK, :NEXT, :CON, :DEF, :CLASS, :MODULE, :CASE, :SELECT, :IF, :UNLESS, :WHILE, :PUTS, :DEBUG_PRINT
+            :EOF, 
+            :END, 
+            :ELSIF, 
+            :ELSE, 
+            :WHEN, 
+            :RESCUE, 
+            :RETURN, 
+            :BREAK, 
+            :NEXT, 
+            :CON, 
+            :DEF, 
+            :CLASS, 
+            :MODULE, 
+            :CASE, 
+            :SELECT, 
+            :IF, 
+            :UNLESS, 
+            :WHILE, 
+            :PUTS, 
+            :DEBUG_PRINT
         ]
 
         ASSIGNMENT_TOKENS = [
-            :ASSIGN, :PLUS_ASSIGN, :MINUS_ASSIGN, :MULTIPLY_ASSIGN, :DIVIDE_ASSIGN, :MODULO_ASSIGN, :POWER_ASSIGN, :FLOOR_DIVIDE_ASSIGN,
-            :WRAP_PLUS_ASSIGN, :WRAP_MINUS_ASSIGN, :WRAP_MULTIPLY_ASSIGN, :WRAP_POWER_ASSIGN,
-            :BIT_AND_ASSIGN, :BIT_OR_ASSIGN, :BIT_XOR_ASSIGN,
-            :SHIFT_LEFT_ASSIGN, :SHIFT_RIGHT_ASSIGN,
-            :LOGICAL_OR_ASSIGN, :LOGICAL_AND_ASSIGN
+            :ASSIGN, 
+            :PLUS_ASSIGN, 
+            :MINUS_ASSIGN, 
+            :MULTIPLY_ASSIGN, 
+            :DIVIDE_ASSIGN, 
+            :MODULO_ASSIGN, 
+            :POWER_ASSIGN, 
+            :FLOOR_DIVIDE_ASSIGN,
+            :WRAP_PLUS_ASSIGN, 
+            :WRAP_MINUS_ASSIGN, 
+            :WRAP_MULTIPLY_ASSIGN, 
+            :WRAP_POWER_ASSIGN,
+            :BIT_AND_ASSIGN, 
+            :BIT_OR_ASSIGN, 
+            :BIT_XOR_ASSIGN,
+            :SHIFT_LEFT_ASSIGN, 
+            :SHIFT_RIGHT_ASSIGN,
+            :LOGICAL_OR_ASSIGN, 
+            :LOGICAL_AND_ASSIGN
         ]
 
         PRECEDENCE = {
@@ -118,7 +158,12 @@ module Dragonstone
             :"..." => PRECEDENCE[:range]
         }
 
-        RIGHT_ASSOCIATIVE = [:"**", :"&**", :"..", :"..."]
+        RIGHT_ASSOCIATIVE = [
+            :"**", 
+            :"&**", 
+            :"..", 
+            :"..."
+        ]
 
         def initialize(tokens : Array(Token))
             @tokens = tokens
@@ -127,11 +172,18 @@ module Dragonstone
 
         def parse : AST::Program
             statements = [] of AST::Node
+            use_decls  = [] of AST::UseDecl
+
             while current_token.type != :EOF
+                if current_token.type == :USE
+                    use_decls << parse_use_decl
+                    next
+                end
                 statements << parse_statement
             end
+
             expect(:EOF)
-            AST::Program.new(statements)
+            AST::Program.new(statements, use_decls)
         end
 
         def parse_expression_entry : AST::Node
@@ -173,6 +225,8 @@ module Dragonstone
                 parse_next_statement
             when :END, :ELSIF, :ELSE, :RESCUE, :WHEN
                 error("Unexpected #{token.type.to_s.downcase}", token)
+            when :USE
+                error("'use' is only allowed at the top level", token)
             else
                 parse_expression_statement
             end
@@ -356,7 +410,7 @@ module Dragonstone
             expect(:END)
             AST::CaseStatement.new(expression, when_clauses, else_block, location: case_token.location)
         end
-
+        
         private def parse_when_clause : AST::WhenClause
             when_token = expect(:WHEN)
             conditions = [] of AST::Node
@@ -730,6 +784,68 @@ module Dragonstone
                 token.type == :EOF ? "Check for missing tokens before the end of the file" : nil
 
             end
+        end
+
+        private def parse_use_decl : AST::UseDecl
+            use_token = expect(:USE)
+
+            # Two forms:
+            # use "./file.ds", "../lib/*", "./**"
+            # use { Foo, bar as baz } from "./file.ds"
+            items = [] of AST::UseItem
+
+            if current_token.type == :LBRACE
+                items << parse_use_from
+            else
+                specs = parse_path_spec_list
+                items << AST::UseItem.new(
+                    kind: AST::UseItemKind::Paths,
+                    specs: specs
+                )
+            end
+
+            AST::UseDecl.new(items, location: use_token.location)
+        end
+
+        private def parse_use_from : AST::UseItem
+            expect(:LBRACE)
+            imports = [] of AST::NamedImport
+
+            # { Foo, bar as baz }
+            loop do
+                name_tok = expect(:IDENTIFIER)
+                alias_name = nil
+                if current_token.type == :AS
+                    advance
+                    alias_tok = expect(:IDENTIFIER)
+                    alias_name = alias_tok.value.as(String)
+                end
+                imports << AST::NamedImport.new(name_tok.value.as(String), alias_name)
+                break if current_token.type == :RBRACE
+                expect(:COMMA)
+            end
+            expect(:RBRACE)
+            expect(:FROM)
+            file_tok = expect(:STRING)
+
+            AST::UseItem.new(
+                kind: AST::UseItemKind::From,
+                from: file_tok.value.as(String),
+                imports: imports
+            )
+        end
+
+        private def parse_path_spec_list : Array(String)
+            # one or more STRING tokens, comma-separated
+            specs = [] of String
+            first = expect(:STRING)
+            specs << first.value.as(String)
+            while current_token.type == :COMMA
+                advance
+                tok = expect(:STRING)
+                specs << tok.value.as(String)
+            end
+            specs
         end
     end
 end
