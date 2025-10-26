@@ -244,10 +244,15 @@ module Dragonstone
         private def parse_constant_declaration : AST::Node
             keyword = expect(:CON)
             name_token = expect(:IDENTIFIER)
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
             expect(:ASSIGN)
             value = parse_expression
             location = name_token.location || keyword.location
-            AST::ConstantDeclaration.new(name_token.value.as(String), value, location: location)
+            AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
         end
 
         private def parse_keyword_method_call : AST::Node
@@ -299,29 +304,49 @@ module Dragonstone
             def_token = expect(:DEF)
             name_token = expect(:IDENTIFIER)
             parameters = parse_parameter_list
+            return_type = parse_optional_return_type
             body = parse_block([:END, :RESCUE])
             rescue_clauses = [] of AST::RescueClause
             while current_token.type == :RESCUE
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, location: def_token.location)
+            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, location: def_token.location)
         end
 
-        private def parse_parameter_list : Array(String)
-            parameters = [] of String
-            return parameters unless current_token.type == :LPAREN
+        private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)
+            parameters = [] of AST::TypedParameter
+            unless current_token.type == :LPAREN
+                return parameters unless required
+                error("Expected '(' to start parameter list", current_token)
+            end
 
-            advance
+            expect(:LPAREN)
             unless current_token.type == :RPAREN
-                parameters << expect(:IDENTIFIER).value.as(String)
+                parameters << parse_typed_parameter
                 while current_token.type == :COMMA
                     advance
-                    parameters << expect(:IDENTIFIER).value.as(String)
+                    parameters << parse_typed_parameter
                 end
             end
             expect(:RPAREN)
             parameters
+        end
+
+        private def parse_typed_parameter : AST::TypedParameter
+            name_token = expect(:IDENTIFIER)
+            param_annotation = nil
+            if current_token.type == :COLON
+                advance
+                param_annotation = parse_type_expression
+            end
+            AST::TypedParameter.new(name_token.value.as(String), param_annotation)
+        end
+
+        private def parse_optional_return_type : AST::TypeExpression?
+            return nil unless current_token.type == :THIN_ARROW
+            expect(:THIN_ARROW)
+            parse_type_expression
         end
 
         private def parse_rescue_clause : AST::RescueClause
@@ -469,6 +494,13 @@ module Dragonstone
             loop do
                 left = parse_postfix(left)
                 token = current_token
+
+                if token.type == :COLON && left.is_a?(AST::Variable)
+                    advance
+                    var_annotation = parse_type_expression
+                    left = AST::Variable.new(left.name, var_annotation, location: left.location)
+                    next
+                end
 
                 if token.type == :QUESTION
                     info_precedence = PRECEDENCE[:conditional]
@@ -627,16 +659,8 @@ module Dragonstone
 
         private def parse_function_literal : AST::Node
             fun_token = expect(:FUN)
-            expect(:LPAREN)
-            parameters = [] of String
-            unless current_token.type == :RPAREN
-                parameters << expect(:IDENTIFIER).value.as(String)
-                while current_token.type == :COMMA
-                    advance
-                    parameters << expect(:IDENTIFIER).value.as(String)
-                end
-            end
-            expect(:RPAREN)
+            parameters = parse_parameter_list(required: true)
+            return_type = parse_optional_return_type
             advance if current_token.type == :DO
             body = parse_block([:END, :RESCUE])
             rescue_clauses = [] of AST::RescueClause
@@ -644,7 +668,7 @@ module Dragonstone
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionLiteral.new(parameters, body, rescue_clauses, location: fun_token.location)
+            AST::FunctionLiteral.new(parameters, body, rescue_clauses, return_type, location: fun_token.location)
         end
 
         private def parse_argument_list : Array(AST::Node)
@@ -689,7 +713,7 @@ module Dragonstone
 
             case left
             when AST::Variable
-                AST::Assignment.new(left.name, value, operator: operator, location: location)
+                AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
             when AST::IndexAccess
                 AST::IndexAssignment.new(left.object, left.index, value, operator: operator, nil_safe: left.nil_safe, location: location)
             when AST::MethodCall
@@ -846,6 +870,49 @@ module Dragonstone
                 specs << tok.value.as(String)
             end
             specs
+        end
+
+        private def parse_type_expression : AST::TypeExpression
+            parse_union_type_expression
+        end
+
+        private def parse_union_type_expression : AST::TypeExpression
+            members = [] of AST::TypeExpression
+            members << parse_optional_type_expression
+            while current_token.type == :BIT_OR
+                advance
+                members << parse_optional_type_expression
+            end
+            return members.first if members.size == 1
+            AST::UnionTypeExpression.new(members, location: members.first.location)
+        end
+
+        private def parse_optional_type_expression : AST::TypeExpression
+            type = parse_primary_type_expression
+            while current_token.type == :QUESTION
+                token = expect(:QUESTION)
+                type = AST::OptionalTypeExpression.new(type, location: token.location)
+            end
+            type
+        end
+
+        private def parse_primary_type_expression : AST::TypeExpression
+            token = current_token
+            case token.type
+            when :IDENTIFIER
+                identifier_token = expect(:IDENTIFIER)
+                AST::SimpleTypeExpression.new(identifier_token.value.as(String), location: identifier_token.location)
+            when :NIL
+                nil_token = expect(:NIL)
+                AST::SimpleTypeExpression.new("nil", location: nil_token.location)
+            when :LPAREN
+                expect(:LPAREN)
+                type = parse_type_expression
+                expect(:RPAREN)
+                type
+            else
+                error("Expected type name", token)
+            end
         end
     end
 end

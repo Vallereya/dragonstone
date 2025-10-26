@@ -20,8 +20,9 @@ module Dragonstone
         getter canonical_path : String
         getter ast : AST::Program?
         getter deps : Array(String) = [] of String
+        getter typed : Bool
 
-        def initialize(@canonical_path : String, @ast : AST::Program? = nil)
+        def initialize(@canonical_path : String, @ast : AST::Program? = nil, @typed : Bool = false)
         end
     end
 
@@ -84,8 +85,10 @@ module Dragonstone
             raise "Cyclic import: #{(parents + [path]).join(" -> ")}" if parents.includes?(path)
 
             normalized = Encoding.read(path)
-            ast = parse(normalized.data, path)
-            graph.add(ModuleNode.new(path, ast))
+            processed_source, typed = Dragonstone.process_typed_directive(normalized.data)
+            ast = parse(processed_source, path)
+            node = ModuleNode.new(path, ast, typed)
+            graph.add(node)
             cache.set(path, ast)
 
             base_dir = File.dirname(path)

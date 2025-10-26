@@ -1,15 +1,21 @@
 module Dragonstone
     module AST
         class FunctionLiteral < Node
-            getter parameters : Array(String)
+            getter typed_parameters : Array(TypedParameter)
+            getter return_type : TypeExpression?
             getter body : NodeArray
             getter rescue_clauses : RescueArray
 
-            def initialize(parameters : Array(String), body : NodeArray, rescue_clauses : RescueArray = [] of RescueClause, location : Location? = nil)
+            def initialize(typed_parameters : Array(TypedParameter), body : NodeArray, rescue_clauses : RescueArray = [] of RescueClause, return_type : TypeExpression? = nil, location : Location? = nil)
                 super(location: location)
-                @parameters = parameters
+                @typed_parameters = typed_parameters
                 @body = body
                 @rescue_clauses = rescue_clauses
+                @return_type = return_type
+            end
+
+            def parameters : Array(String)
+                @typed_parameters.map(&.name)
             end
 
             def accept(visitor)

@@ -1,6 +1,6 @@
 # Simple function
 def greet(name)
-  puts "Hello, #{name}!"
+    puts "Hello, #{name}!"
 end
 
 greet("Jules")
@@ -8,7 +8,7 @@ greet("Ringo")
 
 # Function with return value
 def add(a, b)
-  return a + b
+    return a + b
 end
 
 result = add(5, 3)
@@ -19,11 +19,11 @@ puts sum
 
 # Function with multiple statements
 def calculate(x, y)
-  sum = x + y
-  product = x * y
-  p! sum
-  p! product
-  return product
+    sum = x + y
+    product = x * y
+    p! sum
+    p! product
+    return product
 end
 
 final = calculate(4, 7)
@@ -31,11 +31,11 @@ p! final
 
 # Nested function calls
 def double(n)
-  return n * 2
+    return n * 2
 end
 
 def triple(n)
-  return n * 3
+    return n * 3
 end
 
 x = 5
@@ -49,8 +49,8 @@ p! combined
 
 # Function without explicit return
 def print_twice(msg)
-  puts msg
-  puts msg
+    puts msg
+    puts msg
 end
 
 print_twice("Hello!")

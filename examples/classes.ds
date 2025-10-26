@@ -9,13 +9,13 @@
 ]#
 
 class Person
-  happy = true
+    happy = true
   
-  def greet
-    if happy
-      puts "Hello!"
+    def greet
+        if happy
+            puts "Hello!"
+        end
     end
-  end
 end
 
 person = Person.new

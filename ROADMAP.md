@@ -18,6 +18,8 @@
                             * Core Language Setup
                             * Runtime and Stdlib
                             * Tooling
+                            * Optional types, garbage collection and ownership.
+                            * Bindings to C at least, maybe with Ruby and Crystal too.
                             * Good Performance; Compile to machine code/Interpret to bytecode
                             * Self-Hosting and removal donor languages
 ```
@@ -41,14 +43,12 @@
 #####   <h6 style="text-align:center;">         `v0.0.1 -> v0.0.2`
 
 ```
-            - set CI + cross-platform builds (Linux/macOS/Windows).
-            - freeze current grammar subset if needed on C side.
             ✅ stack VM, single-pass bytecode.
             ✅ simple syntax (Ruby-like/Crystal-like) with unambiguous block/indent rules.
-            - implement Pratt/precedence parser and produce typed AST.
+            ✅ implement Pratt/precedence parser and produce typed AST.
             ✅ implement basic diagnostics (file:line:col, caret spans, suggestion hints).
             ✅ basic loops, strings, some math, etc.
-            - no regressions moving forward, and clear grammar and recovery. 
+            ✅ no regressions moving forward, and clear grammar and recovery. 
 ```
 
 ###     <h2 style="text-align:center;">         Phase Three
@@ -56,6 +56,8 @@
 #####   <h6 style="text-align:center;">         `v0.0.2 -> v0.0.3`
 
 ```
+            - set CI + cross-platform builds (Linux/macOS/Windows).
+            - freeze current grammar subset if needed on C side.
             - stack-based bytecode (compact op codes "opc", constant pool, interned symbols).
             ✅ basic values: Nil, Bool, Int, Float, String, Symbol, Object*.
             ✅ VM in Crystal: frames, call stack, globals/envs, upvalues placeholder.

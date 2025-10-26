@@ -1,5 +1,5 @@
 a = 1 - 2
 puts a
 
-b = 1 &- 2
+b = 10 &- 2
 puts b

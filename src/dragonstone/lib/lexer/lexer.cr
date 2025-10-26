@@ -151,8 +151,12 @@ module Dragonstone
                         advance
                     end
                 when '-'
-                    if peek_char == '='
+                    case peek_char
+                    when '='
                         add_token(:MINUS_ASSIGN, "-=", @line, @column, 2)
+                        advance(2)
+                    when '>'
+                        add_token(:THIN_ARROW, "->", @line, @column, 2)
                         advance(2)
                     else
                         add_token(:MINUS, "-", @line, @column, 1)

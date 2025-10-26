@@ -5,12 +5,14 @@ require "../resolver/errors"
 require "../lexer/*"
 require "../parser/*"
 require "../codegen/*"
+require "../typing/*"
 
 module Dragonstone
     alias RangeValue = Range(Int64, Int64) | Range(Float64, Float64) | Range(Char, Char)
     alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule
     alias ScopeValue = RuntimeValue | ConstantBinding
     alias Scope = Hash(String, ScopeValue)
+    alias TypeScope = Hash(String, Typing::Descriptor)
 
     class ReturnValue < Exception
         getter value : RuntimeValue?
@@ -33,23 +35,41 @@ module Dragonstone
 
     class Function
         getter name : String?
-        getter parameters : Array(String)
+        getter typed_parameters : Array(AST::TypedParameter)
         getter body : Array(AST::Node)
         getter closure : Scope
+        getter type_closure : TypeScope
         getter rescue_clauses : Array(AST::RescueClause)
+        getter return_type : AST::TypeExpression?
+        @parameter_names : Array(String)
 
-        def initialize(@name : String?, @parameters : Array(String), @body : Array(AST::Node), @closure : Scope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause)
+        def initialize(@name : String?, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil)
+            @typed_parameters = typed_parameters
+            @parameter_names = typed_parameters.map(&.name)
+        end
+
+        def parameters : Array(String)
+            @parameter_names
         end
     end
 
     class MethodDefinition
         getter name : String
-        getter parameters : Array(String)
+        getter typed_parameters : Array(AST::TypedParameter)
         getter body : Array(AST::Node)
         getter closure : Scope
+        getter type_closure : TypeScope
         getter rescue_clauses : Array(AST::RescueClause)
+        getter return_type : AST::TypeExpression?
+        @parameter_names : Array(String)
 
-        def initialize(@name : String, @parameters : Array(String), @body : Array(AST::Node), @closure : Scope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause)
+        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil)
+            @typed_parameters = typed_parameters
+            @parameter_names = typed_parameters.map(&.name)
+        end
+
+        def parameters : Array(String)
+            @parameter_names
         end
     end
 
@@ -105,16 +125,27 @@ module Dragonstone
 
     class Interpreter
         getter output : String
+        @type_scopes : Array(TypeScope)
+        @typing_context : Typing::Context?
+        @descriptor_cache : Typing::DescriptorCache
 
-        def initialize(log_to_stdout : Bool = false)
+        def initialize(log_to_stdout : Bool = false, typing_enabled : Bool = false)
             @global_scope = Scope.new
             @scopes = [@global_scope]
+            @type_scopes = [new_type_scope]
+            @typing_enabled = typing_enabled
+            @descriptor_cache = Typing::DescriptorCache.new
+            @typing_context = nil
             @output = String.new
             @log_to_stdout = log_to_stdout
             @container_stack = [] of DragonModule
             @loop_depth = 0
             @container_definition_depth = 0
             set_variable("ffi", FFIModule.new)
+        end
+
+        def typing_enabled? : Bool
+            @typing_enabled
         end
 
         def interpret(ast : AST::Program) : String
@@ -144,13 +175,14 @@ module Dragonstone
         end
 
         def visit_assignment(node : AST::Assignment) : RuntimeValue?
+            descriptor = typing_enabled? && node.type_annotation ? descriptor_for(node.type_annotation.not_nil!) : nil
             value = if operator = node.operator
                 current = get_variable(node.name, location: node.location)
                 evaluate_compound_assignment(current, operator, node.value, node)
             else
                 node.value.accept(self)
             end
-            set_variable(node.name, value, location: node.location)
+            set_variable(node.name, value, location: node.location, type_descriptor: descriptor)
             value
         end
 
@@ -195,7 +227,9 @@ module Dragonstone
         end
 
         def visit_constant_declaration(node : AST::ConstantDeclaration) : RuntimeValue?
+            descriptor = typing_enabled? && node.type_annotation ? descriptor_for(node.type_annotation.not_nil!) : nil
             value = node.value.accept(self)
+            ensure_type!(descriptor, value, node) if descriptor
             if current_container && @container_definition_depth.positive?
                 define_container_constant(current_container.not_nil!, node.name, value, node)
 
@@ -337,13 +371,14 @@ module Dragonstone
 
         def visit_function_def(node : AST::FunctionDef) : RuntimeValue?
             closure = current_scope.dup
+            type_closure = current_type_scope.dup
             if current_container
-                method = MethodDefinition.new(node.name, node.parameters, node.body, closure, node.rescue_clauses)
+                method = MethodDefinition.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type)
                 current_container.not_nil!.define_method(node.name, method)
                 nil
 
             else
-                func = Function.new(node.name, node.parameters, node.body, closure, node.rescue_clauses)
+                func = Function.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type)
                 set_variable(node.name, func, location: node.location)
                 nil
 
@@ -351,7 +386,7 @@ module Dragonstone
         end
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
-            Function.new(nil, node.parameters, node.body, current_scope.dup, node.rescue_clauses)
+            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup, node.rescue_clauses, node.return_type)
         end
 
         def visit_return_statement(node : AST::ReturnStatement) : RuntimeValue?
@@ -377,7 +412,7 @@ module Dragonstone
 
             with_container(mod) do
                 @container_definition_depth += 1
-                push_scope(Scope.new)
+                push_scope(Scope.new, new_type_scope)
 
                 begin
                     execute_block(node.body)
@@ -415,7 +450,7 @@ module Dragonstone
 
             with_container(klass) do
                 @container_definition_depth += 1
-                push_scope(Scope.new)
+                push_scope(Scope.new, new_type_scope)
                 begin
                     execute_block(node.body)
                 ensure
@@ -1166,18 +1201,30 @@ module Dragonstone
                 runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{func.parameters.size} arguments, got #{args.size}", call_location)
             end
 
-            push_scope(func.closure.dup)
-            func.parameters.each_with_index do |param, index|
-                current_scope[param] = args[index]
+            push_scope(func.closure.dup, func.type_closure.dup)
+            scope_index = @scopes.size - 1
+            func.typed_parameters.each_with_index do |param, index|
+                value = args[index]
+                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                ensure_type!(descriptor, value, call_location) if descriptor
+                current_scope[param.name] = value
+                assign_type_to_scope(scope_index, param.name, descriptor)
             end
 
+            result = nil
             begin
-                execute_block_with_rescue(func.body, func.rescue_clauses)
+                result = execute_block_with_rescue(func.body, func.rescue_clauses)
             rescue e : ReturnValue
-                e.value
+                result = e.value
             ensure
                 pop_scope
             end
+
+            if typing_enabled? && func.return_type
+                descriptor = descriptor_for(func.return_type.not_nil!)
+                ensure_type!(descriptor, result, call_location)
+            end
+            result
         end
 
         private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
@@ -1185,19 +1232,31 @@ module Dragonstone
                 runtime_error(TypeError, "Method #{method_def.name} expects #{method_def.parameters.size} arguments, got #{args.size}", call_location)
             end
 
-            push_scope(method_def.closure.dup)
+            push_scope(method_def.closure.dup, method_def.type_closure.dup)
             current_scope["self"] = self_object || receiver
-            method_def.parameters.each_with_index do |param, index|
-                current_scope[param] = args[index]
+            scope_index = @scopes.size - 1
+            method_def.typed_parameters.each_with_index do |param, index|
+                value = args[index]
+                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                ensure_type!(descriptor, value, call_location) if descriptor
+                current_scope[param.name] = value
+                assign_type_to_scope(scope_index, param.name, descriptor)
             end
 
+            result = nil
             begin
-                execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
+                result = execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
             rescue e : ReturnValue
-                e.value
+                result = e.value
             ensure
                 pop_scope
             end
+
+            if typing_enabled? && method_def.return_type
+                descriptor = descriptor_for(method_def.return_type.not_nil!)
+                ensure_type!(descriptor, result, call_location)
+            end
+            result
         end
 
         private def evaluate_arguments(nodes : Array(AST::Node)) : Array(RuntimeValue)
@@ -1269,26 +1328,32 @@ module Dragonstone
             runtime_error(NameError, "Undefined variable or constant: #{name}", location)
         end
 
-        private def set_variable(name : String, value, location : Location? = nil)
+        private def set_variable(name : String, value, location : Location? = nil, type_descriptor : Typing::Descriptor? = nil)
             binding_info = find_binding_with_scope(name)
+
+            target_scope = current_scope
+            scope_index = @scopes.size - 1
 
             if binding_info
                 stored_value = binding_info[:value]
 
                 if stored_value.is_a?(ConstantBinding)
                     runtime_error(ConstantError, "Cannot reassign constant #{name}", location)
-
                 elsif binding_info[:scope] == current_scope
-                    binding_info[:scope][name] = value
-
-                else
-                    current_scope[name] = value
-
+                    target_scope = binding_info[:scope]
+                    scope_index = binding_info[:index]
                 end
-            else
-                current_scope[name] = value
-
             end
+
+            descriptor = nil
+            if typing_enabled?
+                descriptor = type_descriptor || type_descriptor_for_scope(scope_index, name)
+                ensure_type!(descriptor, value, location) if descriptor
+            end
+
+            target_scope[name] = value
+
+            assign_type_to_scope(scope_index, name, type_descriptor || descriptor) if typing_enabled?
             value
         end
 
@@ -1324,7 +1389,7 @@ module Dragonstone
         private def find_binding_with_scope(name : String)
             (@scopes.size - 1).downto(0) do |index|
                 scope = @scopes[index]
-                return {scope: scope, value: scope[name]?} if scope.has_key?(name)
+                return {index: index, scope: scope, value: scope[name]?} if scope.has_key?(name)
             end
             nil
         end
@@ -1346,16 +1411,22 @@ module Dragonstone
             @scopes.last
         end
 
+        private def current_type_scope
+            @type_scopes.last
+        end
+
         private def current_container
             @container_stack.last?
         end
 
-        private def push_scope(scope : Scope)
+        private def push_scope(scope : Scope, type_scope : TypeScope? = nil)
             @scopes << scope
+            @type_scopes << (type_scope || new_type_scope)
         end
 
         private def pop_scope
             @scopes.pop
+            @type_scopes.pop
         end
 
         private def with_container(container : DragonModule)
@@ -1363,6 +1434,77 @@ module Dragonstone
             yield
         ensure
             @container_stack.pop
+        end
+
+        private def descriptor_for(expr : AST::TypeExpression) : Typing::Descriptor
+            @descriptor_cache.fetch(expr)
+        end
+
+        private def ensure_type!(descriptor : Typing::Descriptor?, value, node_or_location = nil)
+            return unless typing_enabled?
+            return unless descriptor
+
+            context = typing_context
+            begin
+                return if descriptor.satisfied_by?(value, context)
+            rescue e : Typing::UnknownTypeError
+                runtime_error(NameError, "Unknown type '#{e.type_name}'", node_or_location)
+            end
+
+            runtime_error(TypeError, "Expected #{descriptor.to_s}, got #{describe_runtime_value(value)}", node_or_location)
+        end
+
+        private def typing_context : Typing::Context
+            @typing_context ||= Typing::Context.new(
+                ->(name : String) { lookup_constant_value(name) },
+                ->(constant : RuntimeValue, value : RuntimeValue) { constant_type_match?(constant, value) }
+            )
+        end
+
+        private def constant_type_match?(constant : RuntimeValue, value : RuntimeValue)
+            case constant
+            when DragonClass
+                value.is_a?(DragonInstance) && value.klass == constant
+            when DragonModule
+                value.is_a?(DragonModule) && value == constant
+            when Function
+                value.is_a?(Function) && value == constant
+            else
+                value == constant
+            end
+        end
+
+        private def describe_runtime_value(value)
+            case value
+            when DragonInstance
+                "#{value.klass.name} instance"
+            when DragonClass
+                "#{value.name} class"
+            when DragonModule
+                "#{value.name} module"
+            when Nil
+                "nil"
+            else
+                value.class.name
+            end
+        end
+
+        private def new_type_scope : TypeScope
+            {} of String => Typing::Descriptor
+        end
+
+        private def assign_type_to_scope(index : Int32, name : String, descriptor : Typing::Descriptor?)
+            scope = @type_scopes[index]
+            if descriptor
+                scope[name] = descriptor
+            else
+                scope.delete(name)
+            end
+        end
+
+        private def type_descriptor_for_scope(index : Int32, name : String) : Typing::Descriptor?
+            scope = @type_scopes[index]?
+            scope ? scope[name]? : nil
         end
 
         private def runtime_error(klass, message : String, node_or_location = nil)
