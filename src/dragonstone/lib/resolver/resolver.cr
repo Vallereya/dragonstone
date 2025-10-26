@@ -83,8 +83,8 @@ module Dragonstone
             return if graph[path]
             raise "Cyclic import: #{(parents + [path]).join(" -> ")}" if parents.includes?(path)
 
-            src = File.read(path)
-            ast = parse(src, path)
+            normalized = Encoding.read(path)
+            ast = parse(normalized.data, path)
             graph.add(ModuleNode.new(path, ast))
             cache.set(path, ast)
 

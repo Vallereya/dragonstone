@@ -1,6 +1,8 @@
 # ---------------------------------
 # ------------- Lexer -------------
 # ---------------------------------
+require "unicode"
+require "string/grapheme"
 require "../resolver/*"
 
 module Dragonstone
@@ -390,7 +392,7 @@ module Dragonstone
         end
 
         private def skip_whitespace
-            while (char = current_char) && char.ascii_whitespace?
+            while (char = current_char) && char.whitespace?
                 advance
             end
         end
@@ -437,20 +439,7 @@ module Dragonstone
 
                 if char == '\\'
                     advance
-                    escape = current_char
-                    case escape
-                    when 'n'
-                        current_part << '\n'
-                    when 't'
-                        current_part << '\t'
-                    when '\\'
-                        current_part << '\\'
-                    when '"'
-                        current_part << '"'
-                    else
-                        current_part << escape.not_nil!
-                    end
-                    advance
+                    current_part << read_escape_sequence(:string, start_line, start_col)
                 elsif char == '#' && peek_char == '{'
                     unless current_part.empty?
                         parts << {:string, current_part.to_s}
@@ -601,17 +590,7 @@ module Dragonstone
 
             value = if char == '\\'
                 advance
-                escaped = current_char
-                mapped = case escaped
-                    when 'n' then '\n'
-                    when 't' then '\t'
-                    when '\\' then '\\'
-                    when '\'' then '\''
-                    else
-                    escaped.not_nil!
-                    end
-                advance
-                mapped
+                read_escape_sequence(:char, start_line, start_col)
             else
                 advance
                 char
@@ -626,11 +605,146 @@ module Dragonstone
         end
 
         private def identifier_start?(char : Char) : Bool
-            char.ascii_letter? || char == '_'
+            char.ascii_letter? || char == '_' || unicode_identifier_start?(char)
         end
 
         private def identifier_part?(char : Char) : Bool
-            char.ascii_letter? || char.ascii_number? || char == '_'
+            char.ascii_letter? || char.ascii_number? || char == '_' || unicode_identifier_part?(char)
+        end
+
+        private def unicode_identifier_start?(char : Char) : Bool
+            return false if char.ascii?
+            Unicode.letter?(char) || emoji_identifier_char?(char)
+        end
+
+        private def unicode_identifier_part?(char : Char) : Bool
+            return false if char.ascii?
+            Unicode.letter?(char) || Unicode.number?(char) || char.mark? || emoji_identifier_char?(char)
+        end
+
+        private def emoji_identifier_char?(char : Char) : Bool
+            String::Grapheme::Property.from(char).extended_pictographic?
+        end
+
+        private def read_escape_sequence(_literal : Symbol, start_line : Int32, start_col : Int32) : Char
+            escape = current_char || raise error_at(start_line, start_col, "Unterminated escape sequence")
+
+            case escape
+            when 'n'
+                advance
+                '\n'
+            when 't'
+                advance
+                '\t'
+            when 'r'
+                advance
+                '\r'
+            when 'b'
+                advance
+                '\b'
+            when 'f'
+                advance
+                '\f'
+            when 'v'
+                advance
+                '\v'
+            when '0'
+                advance
+                '\0'
+            when '\\'
+                advance
+                '\\'
+            when '"'
+                advance
+                '"'
+            when '\''
+                advance
+                '\''
+            when 'u'
+                advance
+                read_unicode_codepoint(start_line, start_col)
+            when 'x'
+                advance
+                read_fixed_length_hex_escape(2, start_line, start_col)
+            else
+                advance
+                escape
+            end
+        end
+
+        private def read_unicode_codepoint(start_line : Int32, start_col : Int32) : Char
+            codepoint = if current_char == '{'
+                advance
+                read_variable_length_unicode_escape(start_line, start_col)
+            else
+                read_fixed_length_hex_value(4, start_line, start_col)
+            end
+
+            Encoding::Checks.ensure_scalar!(codepoint, @source_name, start_line, start_col)
+            codepoint.chr
+        end
+
+        private def read_variable_length_unicode_escape(start_line : Int32, start_col : Int32) : Int32
+            digits = String::Builder.new
+
+            while (char = current_char)
+                break if char == '}'
+                unless hex_digit?(char)
+                    raise error_at(start_line, start_col, "Invalid unicode escape sequence")
+                end
+                digits << char
+                advance
+            end
+
+            unless current_char == '}'
+                raise error_at(start_line, start_col, "Unterminated unicode escape sequence")
+            end
+
+            if digits.empty?
+                raise error_at(start_line, start_col, "Unicode escape must contain at least one hex digit")
+            end
+
+            value = digits.to_s.to_i(16)
+            advance # consume closing brace
+            value
+        end
+
+        private def read_fixed_length_hex_escape(length : Int32, start_line : Int32, start_col : Int32) : Char
+            codepoint = read_fixed_length_hex_value(length, start_line, start_col)
+            Encoding::Checks.ensure_scalar!(codepoint, @source_name, start_line, start_col)
+            codepoint.chr
+        end
+
+        private def read_fixed_length_hex_value(length : Int32, start_line : Int32, start_col : Int32) : Int32
+            value = 0
+            length.times do
+                char = current_char || raise error_at(start_line, start_col, "Unterminated escape sequence")
+                unless hex_digit?(char)
+                    raise error_at(start_line, start_col, "Invalid hex digit `#{char}` in escape sequence")
+                end
+                value = (value << 4) | hex_digit_value(char)
+                advance
+            end
+            value
+        end
+
+        private def hex_digit?(char : Char) : Bool
+            (char >= '0' && char <= '9') ||
+                (char >= 'a' && char <= 'f') ||
+                (char >= 'A' && char <= 'F')
+        end
+
+        private def hex_digit_value(char : Char) : Int32
+            case char
+            when '0'..'9'
+                char.ord - '0'.ord
+            when 'a'..'f'
+                10 + (char.ord - 'a'.ord)
+            when 'A'..'F'
+                10 + (char.ord - 'A'.ord)
+            else
+                0
+            end
         end
 
         private def add_token(type : Symbol, value : TokenValue, line : Int32 = @line, column : Int32 = @column, length : Int32 = default_length(value))

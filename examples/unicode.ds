@@ -1,3 +1,6 @@
 message = "🔥"
-
 puts message
+
+🔥 = "message"
+
+puts 🔥
