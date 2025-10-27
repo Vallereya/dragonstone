@@ -1,4 +1,8 @@
-#! typed
+#[
+    To force types use this pragma at the top:
+
+    #! typed
+]#
 
 #[
     char    = Character
@@ -9,32 +13,35 @@
     nil     = null/nil
 ]#
 
+#! typed
 
 # untyped variable, dynamic typing
-name = "Jay"
+name = "Ringo"
 puts name
 
 # typed variable, with optional strict typing
-name: str = "Jay"
+name: str = "Jules"
 puts name
 
 # method with typed parameters and return type
-def greet(name: str) -> str
-    "Hello, #{name}!"
+def 😱(name: str) -> str
+    puts "Hello, #{name}!"
 end
+😱("Peet")
 
 # method with dynamic parameters and return type
 def greet(name)
-    "Hello, #{name}!"
+    puts "Hello, #{name}!"
 end
+greet("V")
 
 # not working yet....
 # Union type example (an argument can be a String or Nil)
 # def greet(name: str | nil) -> str
 #    if name.nil?
-#        "Hello, guest!"
+#        puts "Hello, guest!"
 #    else
-#        "Hello, #{name}!"
+#        puts "Hello, #{name}!"
 #    end
 #end
 
