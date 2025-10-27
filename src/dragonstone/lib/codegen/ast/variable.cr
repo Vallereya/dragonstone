@@ -2,10 +2,12 @@ module Dragonstone
     module AST
         class Variable < Node
             getter name : String
+            getter type_annotation : TypeExpression?
 
-            def initialize(name : String, location : Location? = nil)
+            def initialize(name : String, type_annotation : TypeExpression? = nil, location : Location? = nil)
                 super(location: location)
                 @name = name
+                @type_annotation = type_annotation
             end
 
             def accept(visitor)
@@ -13,7 +15,8 @@ module Dragonstone
             end
 
             def to_source : String
-                name
+                return name unless type_annotation
+                "#{name}: #{type_annotation.not_nil!.to_source}"
             end
         end
     end

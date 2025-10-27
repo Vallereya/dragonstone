@@ -19,22 +19,30 @@ module Dragonstone
 
             return print_help(stdout) if help_command?(argv)
 
-            return show_usage(stdout) if argv.size < 2
-            
-            command = argv[0]
-            filename = argv[1]
+            return show_usage(stdout) if argv.empty?
 
-            return handle_missing_file(filename, stderr) unless File.exists?(filename)
-            warn_if_unknown_extension(filename, stderr)
+            command = argv[0]
+            args = argv[1..-1]
 
             case command
 
             when "lex"
+                return show_usage(stdout) if args.empty?
+                filename = args[0]
+                return handle_missing_file(filename, stderr) unless File.exists?(filename)
+                warn_if_unknown_extension(filename, stderr)
                 handle_lex(filename, stdout)
+
             when "parse"
+                return show_usage(stdout) if args.empty?
+                filename = args[0]
+                return handle_missing_file(filename, stderr) unless File.exists?(filename)
+                warn_if_unknown_extension(filename, stderr)
                 handle_parse(filename, stdout)
+
             when "run"
-                handle_run(filename, stdout, stderr)
+                handle_run_command(args, stdout, stderr)
+
             else
                 stderr.puts "Unknown command: #{command}"
                 print_usage(stdout)
@@ -95,9 +103,36 @@ module Dragonstone
             return 0
         end
 
-        private def handle_run(filename : String, stdout : IO, stderr : IO) : Int32
+        private def handle_run_command(args : Array(String), stdout : IO, stderr : IO) : Int32
+            typed = false
+            filename = nil
+
+            args.each do |arg|
+                if arg == "--typed"
+                    typed = true
+                elsif arg.starts_with?("--")
+                    stderr.puts "Unknown option: #{arg}"
+                    return 1
+                elsif filename.nil?
+                    filename = arg
+                else
+                    stderr.puts "Too many arguments for run command"
+                    return 1
+                end
+            end
+
+            unless filename
+                return show_usage(stdout)
+            end
+
+            return handle_missing_file(filename, stderr) unless File.exists?(filename)
+            warn_if_unknown_extension(filename, stderr)
+            handle_run(filename, stdout, stderr, typed: typed)
+        end
+
+        private def handle_run(filename : String, stdout : IO, stderr : IO, typed : Bool = false) : Int32
             begin
-                result = Dragonstone.run_file(filename, log_to_stdout: false)
+                result = Dragonstone.run_file(filename, log_to_stdout: false, typed: typed)
                 stdout.puts result.output
                 return 0
 
@@ -115,11 +150,12 @@ module Dragonstone
             io.puts "Usage: dragonstone <command> [options]"
             io.puts
             io.puts "Commands:"
-            io.puts "  lex <file>           Tokenize a .ds file"
-            io.puts "  parse <file>         Parse a .ds file and show AST"
-            io.puts "  run <file>           Run a .ds file"
-            io.puts "  --help or --h        Show help information"
-            io.puts "  --version or --v     Show version information"
+            io.puts "  lex <file>               Tokenize a .ds file"
+            io.puts "  parse <file>             Parse a .ds file and show AST"
+            io.puts "  run <file>               Run a .ds file"
+            io.puts "  run [--typed] <file>     Run a .ds file and enable optional static typing"
+            io.puts "  --help or --h            Show help information"
+            io.puts "  --version or --v         Show version information"
         end
 
         private def print_ast(node : Dragonstone::AST::Node, indent = 0, io : IO = STDOUT)
@@ -145,7 +181,9 @@ module Dragonstone
 
             when Dragonstone::AST::Assignment
                 op = node.operator ? " #{node.operator}" : ""
-                io.puts "#{prefix}Assignment: #{node.name}#{op} ="
+                lhs = node.name
+                lhs += ": #{node.type_annotation.not_nil!.to_source}" if node.type_annotation
+                io.puts "#{prefix}Assignment: #{lhs}#{op} ="
                 print_ast(node.value, indent + 1, io)
 
             when Dragonstone::AST::AttributeAssignment
@@ -162,11 +200,15 @@ module Dragonstone
                 print_ast(node.value, indent + 1, io)
 
             when Dragonstone::AST::ConstantDeclaration
-                io.puts "#{prefix}ConstantDeclaration: #{node.name}"
+                label = node.name
+                label += ": #{node.type_annotation.not_nil!.to_source}" if node.type_annotation
+                io.puts "#{prefix}ConstantDeclaration: #{label}"
                 print_ast(node.value, indent + 1, io)
 
             when Dragonstone::AST::Variable
-                io.puts "#{prefix}Variable: #{node.name}"
+                label = node.name
+                label += ": #{node.type_annotation.not_nil!.to_source}" if node.type_annotation
+                io.puts "#{prefix}Variable: #{label}"
 
             when Dragonstone::AST::Literal
                 io.puts "#{prefix}Literal: #{node.value.inspect}"
@@ -264,11 +306,17 @@ module Dragonstone
                 node.block.each { |stmt| print_ast(stmt, indent + 2, io) }
 
             when Dragonstone::AST::FunctionDef
-                io.puts "#{prefix}FunctionDef: #{node.name}(#{node.parameters.join(", ")})"
+                params = node.typed_parameters.map(&.to_source).join(", ")
+                sig = "#{node.name}(#{params})"
+                sig += " -> #{node.return_type.not_nil!.to_source}" if node.return_type
+                io.puts "#{prefix}FunctionDef: #{sig}"
                 node.body.each { |stmt| print_ast(stmt, indent + 1, io) }
 
             when Dragonstone::AST::FunctionLiteral
-                io.puts "#{prefix}FunctionLiteral(#{node.parameters.join(", ")})"
+                params = node.typed_parameters.map(&.to_source).join(", ")
+                sig = "(#{params})"
+                sig += " -> #{node.return_type.not_nil!.to_source}" if node.return_type
+                io.puts "#{prefix}FunctionLiteral#{sig}"
                 node.body.each { |stmt| print_ast(stmt, indent + 1, io) }
 
             when Dragonstone::AST::ReturnStatement

@@ -7,6 +7,7 @@ require "./dragonstone/lib/**"
 
 module Dragonstone
     PATH_SEPARATOR = {% if flag?(:windows) %} ';' {% else %} ':' {% end %}
+    TYPED_DIRECTIVE_PATTERN = /\A#![ \t]*typed[^\r\n]*(\r?\n)?/i
 
     record RunResult, 
     tokens : Array(Token), 
@@ -15,11 +16,14 @@ module Dragonstone
 
     def self.run_file(
             filename : String, 
-            log_to_stdout : Bool = false
+            log_to_stdout : Bool = false,
+            typed : Bool = false
         ) : RunResult
 
         source = File.read(filename)
-        lexer = Lexer.new(source, source_name: filename)
+        processed_source, directive_typed = process_typed_directive(source)
+        typed ||= directive_typed
+        lexer = Lexer.new(processed_source, source_name: filename)
         tokens = lexer.tokenize
 
         entry_path = File.realpath(filename)
@@ -28,7 +32,7 @@ module Dragonstone
 
         ast = resolver.cache.get(entry_path) || Parser.new(tokens).parse
 
-        runtime = Runtime::Engine.new(resolver, log_to_stdout: log_to_stdout)
+        runtime = Runtime::Engine.new(resolver, log_to_stdout: log_to_stdout, typing_enabled: typed)
         unit = runtime.compile_or_eval(ast, entry_path)
         runtime.unit_cache[entry_path] = unit
 
@@ -38,16 +42,19 @@ module Dragonstone
     def self.run(
             source : String, 
             log_to_stdout : Bool = false, 
-            source_name : String = "<source>"
+            source_name : String = "<source>",
+            typed : Bool = false
         ) : RunResult
 
-        lexer = Lexer.new(source, source_name: source_name)
+        processed_source, directive_typed = process_typed_directive(source)
+        typed ||= directive_typed
+        lexer = Lexer.new(processed_source, source_name: source_name)
         tokens = lexer.tokenize
 
         parser = Parser.new(tokens)
         ast = parser.parse
 
-        interpreter = Interpreter.new(log_to_stdout: log_to_stdout)
+        interpreter = Interpreter.new(log_to_stdout: log_to_stdout, typing_enabled: typed)
         output_text = interpreter.interpret(ast)
 
         RunResult.new(tokens, ast, output_text)
@@ -71,5 +78,18 @@ module Dragonstone
 
         roots << Dir.current
         roots.uniq
+    end
+
+    def self.process_typed_directive(source : String) : Tuple(String, Bool)
+        if match = TYPED_DIRECTIVE_PATTERN.match(source)
+            newline = match[1]? || ""
+            directive_length = match[0].size
+            body_length = directive_length - newline.size
+            replacement = " " * body_length + newline
+            remainder = directive_length < source.size ? source[directive_length..-1] : ""
+            {replacement + remainder, true}
+        else
+            {source, false}
+        end
     end
 end

@@ -27,6 +27,8 @@
 ## What is Dragonstone?
 Well it's a suppose to be an interpreted ruby-like programming language built with ruby (yeeted all of it due to performance), crystal (mostly) and c (some) but I don't know what I'm doing and it's my first time making a language. Sorry if some files don't make sense this is my v4 of this after all, thank you.
 
+The codebase is an absolute mess, the great refactoring will come before v0.1.0 don't worry.
+
 ## Examples
 
 See the `examples/` directory for sample `.ds` files.

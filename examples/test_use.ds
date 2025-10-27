@@ -1,4 +1,4 @@
-con MAGIC = 42
+con magic = 42
 
 def add(a, b)
     a + b

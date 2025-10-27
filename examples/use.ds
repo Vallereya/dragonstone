@@ -1,3 +1,3 @@
 use "test_use.ds"
 
-puts add(MAGIC, 8)
+puts add(magic, 8)

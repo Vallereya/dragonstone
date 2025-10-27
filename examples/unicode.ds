@@ -1,6 +1,30 @@
-message = "🔥"
+#[
+    Example of a various unicode
+    passed as a string and 
+    with args/params.
+]#
+
+message = "❤️"
 puts message
 
-🔥 = "message"
+❤️ = "あ"
+puts ❤️
 
-puts 🔥
+
+class 🔥
+    あ = true
+  
+    def 道
+        if あ
+            puts "Hello!"
+        end
+    end
+end
+
+🔥.道
+
+def Saudação(اسم, อายุ)
+    puts "Hello, #{اسم}! You are #{อายุ}."
+end
+
+Saudação("Jules", 25)
