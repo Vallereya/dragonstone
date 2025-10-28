@@ -61,11 +61,14 @@ module Dragonstone
         getter type_closure : TypeScope
         getter rescue_clauses : Array(AST::RescueClause)
         getter return_type : AST::TypeExpression?
+        getter visibility : Symbol
+        getter owner : DragonModule
         @parameter_names : Array(String)
 
-        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil)
+        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @owner : DragonModule, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, visibility : Symbol = :public)
             @typed_parameters = typed_parameters
             @parameter_names = typed_parameters.map(&.name)
+            @visibility = visibility
         end
 
         def parameters : Array(String)
@@ -104,14 +107,46 @@ module Dragonstone
 
     class DragonClass < DragonModule
         getter superclass : DragonClass?
+        getter ivar_type_annotations : Hash(String, AST::TypeExpression?)
 
         def initialize(name : String, @superclass : DragonClass? = nil)
             super(name)
+            if @superclass
+                parent = @superclass.not_nil!
+                @ivar_type_annotations = parent.ivar_type_annotations.dup
+                @ivar_type_descriptors = parent.ivar_type_descriptors.dup
+            else
+                @ivar_type_annotations = {} of String => AST::TypeExpression?
+                @ivar_type_descriptors = {} of String => Typing::Descriptor?
+            end
         end
 
         def lookup_method(name : String) : MethodDefinition?
             super || @superclass.try &.lookup_method(name)
         end
+
+        def register_ivar_type(name : String, type : AST::TypeExpression?)
+            if type
+                @ivar_type_annotations[name] = type
+            else
+                @ivar_type_annotations[name] = nil unless @ivar_type_annotations.has_key?(name)
+            end
+            @ivar_type_descriptors.delete(name)
+        end
+
+        def ivar_type_annotation(name : String) : AST::TypeExpression?
+            @ivar_type_annotations[name]?
+        end
+
+        def ivar_type_descriptor(name : String) : Typing::Descriptor?
+            @ivar_type_descriptors[name]?
+        end
+
+        def cache_ivar_descriptor(name : String, descriptor : Typing::Descriptor)
+            @ivar_type_descriptors[name] = descriptor
+        end
+
+        getter ivar_type_descriptors : Hash(String, Typing::Descriptor?)
     end
 
     class DragonInstance
@@ -244,6 +279,48 @@ module Dragonstone
             get_variable(node.name, location: node.location)
         end
 
+        def visit_instance_variable(node : AST::InstanceVariable) : RuntimeValue?
+            instance = current_self_instance(node)
+            instance.ivars[node.name]? || nil
+        end
+
+        def visit_instance_variable_assignment(node : AST::InstanceVariableAssignment) : RuntimeValue?
+            instance = current_self_instance(node)
+
+            value = if operator = node.operator
+                current_value = instance.ivars[node.name]? || nil
+                evaluate_compound_assignment(current_value, operator, node.value, node)
+            else
+                node.value.accept(self)
+            end
+
+            set_instance_variable(instance, node.name, value, node)
+            value
+        end
+
+        def visit_instance_variable_declaration(node : AST::InstanceVariableDeclaration) : RuntimeValue?
+            container = current_container
+            unless container.is_a?(DragonClass)
+                runtime_error(InterpreterError, "Instance variable declarations are only allowed inside classes", node)
+            end
+            container.as(DragonClass).register_ivar_type(node.name, node.type_annotation)
+            nil
+        end
+
+        def visit_accessor_macro(node : AST::AccessorMacro) : RuntimeValue?
+            container = current_container
+            unless container.is_a?(DragonClass)
+                runtime_error(InterpreterError, "#{node.kind} is only allowed inside classes", node)
+            end
+
+            klass = container.as(DragonClass)
+            node.entries.each do |entry|
+                klass.register_ivar_type(entry.name, entry.type_annotation)
+                define_accessor_methods(klass, node, entry)
+            end
+            nil
+        end
+
         def visit_literal(node : AST::Literal) : RuntimeValue?
             case value = node.value
 
@@ -372,16 +449,38 @@ module Dragonstone
         def visit_function_def(node : AST::FunctionDef) : RuntimeValue?
             closure = current_scope.dup
             type_closure = current_type_scope.dup
-            if current_container
-                method = MethodDefinition.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type)
-                current_container.not_nil!.define_method(node.name, method)
-                nil
 
+            container = current_container
+            if node.typed_parameters.any?(&.assigns_instance_variable?) && !container.is_a?(DragonClass)
+                runtime_error(InterpreterError, "Instance variable parameters are only allowed inside classes", node)
+            end
+
+            if container
+                if container.is_a?(DragonClass)
+                    klass = container.as(DragonClass)
+                    node.typed_parameters.each do |param|
+                        next unless param.assigns_instance_variable?
+                        klass.register_ivar_type(param.instance_var_name.not_nil!, param.type)
+                    end
+                end
+
+                method = MethodDefinition.new(
+                    node.name,
+                    node.typed_parameters,
+                    node.body,
+                    closure,
+                    type_closure,
+                    container,
+                    node.rescue_clauses,
+                    node.return_type,
+                    visibility: node.visibility
+                )
+                container.define_method(node.name, method)
+                nil
             else
                 func = Function.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type)
                 set_variable(node.name, func, location: node.location)
                 nil
-
             end
         end
 
@@ -905,18 +1004,25 @@ module Dragonstone
                 get_type_name(value)
 
             else
-                func = get_variable(node.name, location: node.location)
-
-                unless func.is_a?(Function)
+                binding = find_binding(node.name)
+                if binding
+                    value = unwrap_binding(binding)
+                    unless value.is_a?(Function)
+                        runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
+                    end
+                    call_function(value.as(Function), node.arguments, node.location)
+                else
+                    if self_value = current_scope["self"]?
+                        call_receiver_method(self_value, node, implicit_self: true)
+                    else
                     runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
-
+                    end
                 end
-                call_function(func.as(Function), node.arguments, node.location)
 
             end
         end
 
-        private def call_receiver_method(receiver, node : AST::MethodCall)
+        private def call_receiver_method(receiver, node : AST::MethodCall, implicit_self : Bool = false)
             case receiver
 
             when Array(RuntimeValue)
@@ -939,26 +1045,32 @@ module Dragonstone
                 else
                     method = receiver.lookup_method(node.name)
                     runtime_error(NameError, "Unknown method '#{node.name}' for class #{receiver.name}", node) unless method
+                    method = method.not_nil!
+                    ensure_method_visible!(receiver, method, node, implicit_self)
                     args = evaluate_arguments(node.arguments)
                     with_container(receiver) do
-                        call_bound_method(receiver, method.not_nil!, args, node.location)
+                        call_bound_method(receiver, method, args, node.location)
                     end
                 end
 
             when DragonModule
                 method = receiver.lookup_method(node.name)
                 runtime_error(NameError, "Unknown method '#{node.name}' for module #{receiver.name}", node) unless method
+                method = method.not_nil!
+                ensure_method_visible!(receiver, method, node, implicit_self)
                 args = evaluate_arguments(node.arguments)
                 with_container(receiver) do
-                    call_bound_method(receiver, method.not_nil!, args, node.location)
+                    call_bound_method(receiver, method, args, node.location)
                 end
 
             when DragonInstance
                 method = receiver.klass.lookup_method(node.name)
                 runtime_error(NameError, "Undefined method '#{node.name}' for instance of #{receiver.klass.name}", node) unless method
+                method = method.not_nil!
+                ensure_method_visible!(receiver, method, node, implicit_self)
                 args = evaluate_arguments(node.arguments)
                 with_container(receiver.klass) do
-                    call_bound_method(receiver.klass, method.not_nil!, args, node.location, self_object: receiver)
+                    call_bound_method(receiver.klass, method, args, node.location, self_object: receiver)
                 end
 
             when Function
@@ -1241,6 +1353,13 @@ module Dragonstone
                 ensure_type!(descriptor, value, call_location) if descriptor
                 current_scope[param.name] = value
                 assign_type_to_scope(scope_index, param.name, descriptor)
+                if param.assigns_instance_variable?
+                    instance = self_object
+                    unless instance && instance.is_a?(DragonInstance)
+                        runtime_error(InterpreterError, "Instance variable parameters require an instance context", call_location)
+                    end
+                    set_instance_variable(instance.as(DragonInstance), param.instance_var_name.not_nil!, value, call_location)
+                end
             end
 
             result = nil
@@ -1472,6 +1591,129 @@ module Dragonstone
             else
                 value == constant
             end
+        end
+
+        private def current_self_instance(node : AST::Node) : DragonInstance
+            self_value = current_scope["self"]?
+            unless self_value && self_value.is_a?(DragonInstance)
+                runtime_error(InterpreterError, "Instance variables can only be accessed inside instance methods", node)
+            end
+            self_value.as(DragonInstance)
+        end
+
+        private def set_instance_variable(instance : DragonInstance, name : String, value, node_or_location)
+            if typing_enabled?
+                if descriptor = resolve_instance_variable_descriptor(instance.klass, name)
+                    ensure_type!(descriptor, value, node_or_location)
+                end
+            end
+            instance.ivars[name] = value
+        end
+
+        private def resolve_instance_variable_descriptor(klass : DragonClass, name : String) : Typing::Descriptor?
+            if descriptor = klass.ivar_type_descriptor(name)
+                descriptor
+            else
+                if type_expr = klass.ivar_type_annotation(name)
+                    descriptor = descriptor_for(type_expr)
+                    klass.cache_ivar_descriptor(name, descriptor)
+                    descriptor
+                else
+                    nil
+                end
+            end
+        end
+
+        private def define_accessor_methods(klass : DragonClass, macro_node : AST::AccessorMacro, entry : AST::AccessorEntry)
+            location = macro_node.location
+            case macro_node.kind
+            when :getter
+                define_getter_method(klass, entry, macro_node.visibility, location)
+            when :setter
+                define_setter_method(klass, entry, macro_node.visibility, location)
+            when :property
+                define_getter_method(klass, entry, macro_node.visibility, location)
+                define_setter_method(klass, entry, macro_node.visibility, location)
+            else
+                runtime_error(InterpreterError, "Unknown accessor macro '#{macro_node.kind}'", macro_node)
+            end
+        end
+
+        private def define_getter_method(klass : DragonClass, entry : AST::AccessorEntry, visibility : Symbol, location : Location?)
+            body = [] of AST::Node
+            body << AST::InstanceVariable.new(entry.name, location: location)
+            method = build_method_definition(klass, entry.name, [] of AST::TypedParameter, body, entry.type_annotation, visibility)
+            klass.define_method(entry.name, method)
+        end
+
+        private def define_setter_method(klass : DragonClass, entry : AST::AccessorEntry, visibility : Symbol, location : Location?)
+            param = AST::TypedParameter.new("value", entry.type_annotation)
+            value_var = AST::Variable.new("value", nil, location: location)
+            assignment = AST::InstanceVariableAssignment.new(entry.name, value_var, location: location)
+            body = [] of AST::Node
+            body << assignment
+            method = build_method_definition(klass, "#{entry.name}=", [param], body, entry.type_annotation, visibility)
+            klass.define_method("#{entry.name}=", method)
+        end
+
+        private def build_method_definition(klass : DragonClass, name : String, typed_parameters : Array(AST::TypedParameter), body : Array(AST::Node), return_type : AST::TypeExpression?, visibility : Symbol) : MethodDefinition
+            MethodDefinition.new(
+                name,
+                typed_parameters,
+                body,
+                current_scope.dup,
+                current_type_scope.dup,
+                klass,
+                [] of AST::RescueClause,
+                return_type,
+                visibility: visibility
+            )
+        end
+
+        private def ensure_method_visible!(receiver, method : MethodDefinition, node : AST::MethodCall, implicit_self : Bool)
+            case method.visibility
+            when :public
+                return
+            when :private
+                runtime_error(InterpreterError, "Cannot call private method '#{method.name}' with an explicit receiver", node) unless implicit_self
+            when :protected
+                owner = method.owner
+                unless owner.is_a?(DragonClass)
+                    runtime_error(InterpreterError, "Cannot call protected method '#{method.name}' with an explicit receiver", node) unless implicit_self
+                    return
+                end
+
+                owner_class = owner.as(DragonClass)
+                caller_self = current_scope["self"]?
+                unless caller_self && caller_self.is_a?(DragonInstance)
+                    runtime_error(InterpreterError, "Protected method '#{method.name}' can only be called from within #{owner_class.name} or its subclasses", node)
+                end
+
+                caller_class = caller_self.as(DragonInstance).klass
+                unless within_hierarchy?(caller_class, owner_class)
+                    runtime_error(InterpreterError, "Protected method '#{method.name}' can only be called from within #{owner_class.name} or its subclasses", node)
+                end
+
+                if receiver.is_a?(DragonInstance)
+                    receiver_class = receiver.as(DragonInstance).klass
+                    unless within_hierarchy?(receiver_class, owner_class)
+                        runtime_error(InterpreterError, "Protected method '#{method.name}' can only be called on instances of #{owner_class.name} or its subclasses", node)
+                    end
+                else
+                    runtime_error(InterpreterError, "Cannot call protected method '#{method.name}' with an explicit receiver", node) unless implicit_self
+                end
+            else
+                runtime_error(InterpreterError, "Unknown method visibility '#{method.visibility}'", node)
+            end
+        end
+
+        private def within_hierarchy?(klass : DragonClass, ancestor : DragonClass) : Bool
+            current = klass
+            while current
+                return true if current == ancestor
+                current = current.superclass
+            end
+            false
         end
 
         private def describe_runtime_value(value)

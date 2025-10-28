@@ -7,7 +7,7 @@ describe Dragonstone::DragonModule do
     scope = {} of String => Dragonstone::ScopeValue
     type_scope = {} of String => Dragonstone::Typing::Descriptor
     params = [Dragonstone::AST::TypedParameter.new("x")]
-    method = Dragonstone::MethodDefinition.new("bar", params, [] of Dragonstone::AST::Node, scope, type_scope)
+    method = Dragonstone::MethodDefinition.new("bar", params, [] of Dragonstone::AST::Node, scope, type_scope, owner: mod)
     mod.define_method("bar", method)
     mod.lookup_method("bar").should_not be_nil
   end

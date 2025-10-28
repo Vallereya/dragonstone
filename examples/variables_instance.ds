@@ -1,0 +1,110 @@
+# A private instance variable stores the account balance.
+# The '@' prefix denotes it as an instance variable.
+# By convention and best practice, instance variables are
+# considered part of the class's internal, private state.
+# The initializer method sets up the initial state.
+# The `initialize` method can access the private instance variable.
+# This is a public method that acts as a controlled interface.
+
+# Example One:
+def name
+    @name
+end
+
+def age
+    @age
+end
+
+# Example Two:
+class Person
+    @name: str
+    @age: int
+
+    # Define getter methods for @name and @age
+    getter name, age
+
+    def initialize(@name, @age)
+    end
+end
+
+person = Person.new("Alice", 30)
+puts person.name
+puts person.age
+
+# Example Three:
+class BankAccount
+    def initialize(balance)
+        @balance = balance
+    end
+
+    def deposit(amount)
+        @balance += amount
+    end
+
+    def withdraw(amount)
+        if sufficient_funds?(amount)
+            @balance -= amount
+        else
+            puts "Insufficient funds."
+        end
+    end
+
+    private def sufficient_funds?(amount)
+        @balance >= amount
+    end
+end
+
+# Create an instance of the class.
+account = BankAccount.new(1000)
+
+# Interact with the public interface.
+account.deposit(500)
+account.withdraw(200)
+
+# This would raise a NoMethodError
+# account.sufficient_funds?(100)
+
+
+class BankAccount
+    private getter balance: int
+
+    def initialize(@balance: int)
+
+    end
+
+    def deposit(amount: int)
+        if amount > 0
+            @balance += amount
+            puts "Deposited #{amount}. New balance: #{@balance}"
+        else
+            puts "Deposit amount must be positive."
+        end
+    end
+
+    # Another public method with our built-in validation logic.
+    def withdraw(amount: int)
+        if amount > @balance
+            puts "Insufficient funds."
+        elsif amount > 0
+            @balance -= amount
+            puts "Withdrew #{amount}. New balance: #{@balance}"
+        else
+            puts "Withdrawal amount must be positive."
+        end
+    end
+end
+
+# Create an instance of the class.
+account = BankAccount.new(100)
+
+# Interact with the public interface.
+account.deposit(50)
+account.withdraw(75)
+
+# Attempting to directly access the internal state will cause a compile-time error.
+# account.balance  # => Error: can't call private method 'balance'
+# account.@balance # => Error: can't access instance variable `@balance` directly from outside
+
+# Calling the public method with invalid data is handled safely.
+# Output: Insufficient funds.
+account.withdraw(200)
