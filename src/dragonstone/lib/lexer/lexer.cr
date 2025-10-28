@@ -72,6 +72,11 @@ module Dragonstone
             use
             from
             as
+            private
+            protected
+            getter
+            setter
+            property
         ]
 
         getter source_name : String
@@ -110,6 +115,8 @@ module Dragonstone
                     scan_number
                 else
                     case char
+                when '@'
+                    scan_instance_variable
                 when '='
                     case peek_char
                     when '='
@@ -510,6 +517,16 @@ module Dragonstone
                 advance
             end          
 
+            trailing = current_char
+            if trailing && trailing_identifier_char?(trailing)
+                if trailing == '=' && (peek_char == '=' || peek_char == '>')
+                    # Treat as operator token instead of identifier suffix
+                else
+                    identifier << trailing
+                    advance
+                end
+            end
+
             identifier_str = identifier.to_s
 
             if KEYWORDS.includes?(identifier_str)
@@ -543,6 +560,11 @@ module Dragonstone
                     when "use" then :USE
                     when "from" then :FROM
                     when "as" then :AS
+                    when "private" then :PRIVATE
+                    when "protected" then :PROTECTED
+                    when "getter" then :GETTER
+                    when "setter" then :SETTER
+                    when "property" then :PROPERTY
                     else
                         :IDENTIFIER
                     end
@@ -557,6 +579,35 @@ module Dragonstone
             else
                 add_token(:IDENTIFIER, identifier_str, start_line, start_col, identifier_str.size)
             end
+        end
+
+        private def trailing_identifier_char?(char : Char) : Bool
+            char == '?' || char == '!' || char == '='
+        end
+
+        private def scan_instance_variable
+            start_line = @line
+            start_col = @column
+            advance # consume '@'
+
+            if current_char == '@'
+                raise error_at_current("Class variables (@@) are not supported yet", 2)
+            end
+
+            char = current_char
+            unless char && identifier_start?(char)
+                raise error_at_current("Invalid instance variable name", 1)
+            end
+
+            identifier = String::Builder.new
+            while (char = current_char) && identifier_part?(char)
+                identifier << char
+                advance
+            end
+
+            name = identifier.to_s
+            length = @column - start_col
+            add_token(:INSTANCE_VAR, name, start_line, start_col, length)
         end
 
         private def scan_number

@@ -56,7 +56,7 @@
 #####   <h6 style="text-align:center;">         `v0.0.2 -> v0.0.3`
 
 ```
-            - stack-based bytecode (compact op codes "opc", constant pool, interned symbols)
+            ✅ stack-based bytecode (compact op codes "opc", constant pool, interned symbols)
             ✅ basic values: Nil, Bool, Int, Float, String, Symbol, Object*
             ✅ VM in Crystal: frames, call stack, globals/envs, upvalues placeholder
             ✅ additional testing both success and coverage for syntax/runtime failures
@@ -83,9 +83,9 @@
 #####   <h6 style="text-align:center;">         `v0.0.4 -> v0.0.5`
 
 ```
-            - implement optional type system
+            ✅ implement optional type system
             - implement optional explicit typing
-            - requiring files (use for files and import for urls)
+            ✅ requiring files (use for files and import for urls)
             - Exception; RuntimeError, TypeError, etc
             - raise, begin/rescue/else/ensure; VM unwind stack w/ exception objects
 ```
@@ -121,7 +121,7 @@
 ```
             - implement full syntax highlighter
             - full exception handling
-            -  arithmetic, comparison, logical, indexing, assignment variants (+=, ||=)
+            - arithmetic, comparison, logical, indexing, assignment variants (+=, ||=)
             - Truthiness rules (nil/false falsey, rest truthy)
             - Parser & bytecode coverage for all operators
             - set CI + cross-platform builds (Linux/macOS/Windows)

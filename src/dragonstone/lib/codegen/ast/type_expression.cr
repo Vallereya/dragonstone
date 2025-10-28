@@ -48,13 +48,19 @@ module Dragonstone
         struct TypedParameter
             getter name : String
             getter type : TypeExpression?
+            getter instance_var_name : String?
 
-            def initialize(@name : String, @type : TypeExpression? = nil)
+            def initialize(@name : String, @type : TypeExpression? = nil, @instance_var_name : String? = nil)
             end
 
             def to_source : String
-                return name unless type
-                "#{name}: #{type.not_nil!.to_source}"
+                param_name = instance_var_name ? "@#{instance_var_name}" : name
+                return param_name unless type
+                "#{param_name}: #{type.not_nil!.to_source}"
+            end
+
+            def assigns_instance_variable? : Bool
+                !!@instance_var_name
             end
         end
     end

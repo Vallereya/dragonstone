@@ -197,6 +197,13 @@ module Dragonstone
             case token.type
             when :IDENTIFIER
                 parse_expression_statement
+            when :INSTANCE_VAR
+                next_token = peek_token
+                if next_token && next_token.type == :COLON
+                    parse_instance_variable_declaration
+                else
+                    parse_expression_statement
+                end
             when :PUTS
                 parse_keyword_method_call
             when :DEBUG_PRINT
@@ -215,6 +222,16 @@ module Dragonstone
                 parse_class_definition
             when :CON
                 parse_constant_declaration
+            when :GETTER
+                parse_accessor_macro(:getter)
+            when :SETTER
+                parse_accessor_macro(:setter)
+            when :PROPERTY
+                parse_accessor_macro(:property)
+            when :PRIVATE
+                parse_visibility_prefixed_statement(:private)
+            when :PROTECTED
+                parse_visibility_prefixed_statement(:protected)
             when :RETURN
                 parse_return_statement
             when :CASE, :SELECT
@@ -255,6 +272,49 @@ module Dragonstone
             AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
         end
 
+        private def parse_visibility_prefixed_statement(visibility : Symbol) : AST::Node
+            expect(visibility == :private ? :PRIVATE : :PROTECTED)
+            case current_token.type
+            when :DEF
+                parse_function_def(visibility)
+            when :GETTER
+                parse_accessor_macro(:getter, visibility)
+            when :SETTER
+                parse_accessor_macro(:setter, visibility)
+            when :PROPERTY
+                parse_accessor_macro(:property, visibility)
+            else
+                error("Expected def/getter/setter/property after #{visibility}", current_token)
+            end
+        end
+
+        private def parse_accessor_macro(kind : Symbol, visibility : Symbol = :public) : AST::AccessorMacro
+            token_type = case kind
+                when :getter then :GETTER
+                when :setter then :SETTER
+                when :property then :PROPERTY
+                else
+                    raise "Unknown accessor macro kind #{kind}"
+                end
+
+            keyword = expect(token_type)
+            entries = [] of AST::AccessorEntry
+
+            loop do
+                name_token = expect(:IDENTIFIER)
+                type_annotation = nil
+                if current_token.type == :COLON
+                    advance
+                    type_annotation = parse_type_expression
+                end
+                entries << AST::AccessorEntry.new(name_token.value.as(String), type_annotation)
+                break unless current_token.type == :COMMA
+                advance
+            end
+
+            AST::AccessorMacro.new(kind, entries, visibility, location: keyword.location)
+        end
+
         private def parse_keyword_method_call : AST::Node
             name_token = current_token
             advance
@@ -271,6 +331,16 @@ module Dragonstone
             end
 
             AST::MethodCall.new(name_token.value.as(String), arguments, nil, location: name_token.location)
+        end
+
+        private def parse_instance_variable_declaration : AST::Node
+            token = expect(:INSTANCE_VAR)
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+            AST::InstanceVariableDeclaration.new(token.value.as(String), type_annotation, location: token.location)
         end
 
         private def parse_debug_print : AST::Node
@@ -300,7 +370,7 @@ module Dragonstone
             AST::ClassDefinition.new(name_token.value.as(String), body, superclass, location: class_token.location)
         end
 
-        private def parse_function_def : AST::Node
+        private def parse_function_def(visibility : Symbol = :public) : AST::Node
             def_token = expect(:DEF)
             name_token = expect(:IDENTIFIER)
             parameters = parse_parameter_list
@@ -311,7 +381,7 @@ module Dragonstone
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, location: def_token.location)
+            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, visibility: visibility, location: def_token.location)
         end
 
         private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)
@@ -334,13 +404,28 @@ module Dragonstone
         end
 
         private def parse_typed_parameter : AST::TypedParameter
-            name_token = expect(:IDENTIFIER)
+            instance_var = false
+            name_token = case current_token.type
+                when :IDENTIFIER
+                    expect(:IDENTIFIER)
+                when :INSTANCE_VAR
+                    instance_var = true
+                    expect(:INSTANCE_VAR)
+                else
+                    error("Expected parameter name", current_token)
+                end
+
             param_annotation = nil
             if current_token.type == :COLON
                 advance
                 param_annotation = parse_type_expression
             end
-            AST::TypedParameter.new(name_token.value.as(String), param_annotation)
+            name = name_token.value.as(String)
+            if instance_var
+                AST::TypedParameter.new(name, param_annotation, name)
+            else
+                AST::TypedParameter.new(name, param_annotation)
+            end
         end
 
         private def parse_optional_return_type : AST::TypeExpression?
@@ -619,6 +704,9 @@ module Dragonstone
             when :IDENTIFIER
                 identifier_token = expect(:IDENTIFIER)
                 AST::Variable.new(identifier_token.value.as(String), location: identifier_token.location)
+            when :INSTANCE_VAR
+                ivar_token = expect(:INSTANCE_VAR)
+                AST::InstanceVariable.new(ivar_token.value.as(String), location: ivar_token.location)
             when :TYPEOF
                 parse_typeof_expression
             when :LBRACKET
@@ -714,6 +802,8 @@ module Dragonstone
             case left
             when AST::Variable
                 AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
+            when AST::InstanceVariable
+                AST::InstanceVariableAssignment.new(left.name, value, operator: operator, location: location)
             when AST::IndexAccess
                 AST::IndexAssignment.new(left.object, left.index, value, operator: operator, nil_safe: left.nil_safe, location: location)
             when AST::MethodCall
@@ -746,7 +836,7 @@ module Dragonstone
         end
 
         private def return_value_terminator?(token : Token) : Bool
-            TERMINATOR_TOKENS.includes?(token.type) || (token.type == :IDENTIFIER && assignment_token?(peek_token))
+            TERMINATOR_TOKENS.includes?(token.type) || ((token.type == :IDENTIFIER || token.type == :INSTANCE_VAR) && assignment_token?(peek_token))
         end
 
         private def argument_terminator?(token : Token) : Bool
@@ -754,7 +844,7 @@ module Dragonstone
         end
 
         private def assignment_ahead? : Bool
-            current_token.type == :IDENTIFIER && assignment_token?(peek_token)
+            (current_token.type == :IDENTIFIER || current_token.type == :INSTANCE_VAR) && assignment_token?(peek_token)
         end
 
         private def assignment_token?(token : Token?) : Bool

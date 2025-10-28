@@ -1,0 +1,9 @@
+module Dragonstone
+    module StdLib
+        class
+            
+        end
+    end
+end
+
+require "./strings/*"
