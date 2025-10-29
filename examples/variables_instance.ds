@@ -27,7 +27,7 @@ class Person
     end
 end
 
-person = Person.new("Alice", 30)
+person = Person.new("Jules", 30)
 puts person.name
 puts person.age
 

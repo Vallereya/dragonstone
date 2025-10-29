@@ -91,6 +91,10 @@ module Dragonstone
         private def compile_statement(node : AST::Node)
             case node
 
+            when AST::AliasDefinition
+                # Type aliases do not emit runtime code.
+                return
+
             when AST::ReturnStatement
                 compile_return(node)
                 

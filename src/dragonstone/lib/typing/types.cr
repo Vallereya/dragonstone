@@ -2,11 +2,21 @@ module Dragonstone
     module Typing
         alias ConstantLookup = Proc(String, RuntimeValue?)
         alias ConstantMatcher = Proc(RuntimeValue, RuntimeValue, Bool)
+        alias AliasLookup = Proc(String, Descriptor?)
+
         class UnknownTypeError < Exception
             getter type_name : String
 
             def initialize(@type_name : String)
                 super("Unknown type '#{type_name}'")
+            end
+        end
+
+        class RecursiveAliasError < Exception
+            getter alias_name : String
+
+            def initialize(@alias_name : String)
+                super("Recursive alias '#{alias_name}' detected")
             end
         end
 
@@ -33,7 +43,8 @@ module Dragonstone
         end
 
         struct Context
-            def initialize(@constant_lookup : ConstantLookup, @constant_matcher : ConstantMatcher)
+            def initialize(@constant_lookup : ConstantLookup, @constant_matcher : ConstantMatcher, @alias_lookup : AliasLookup? = nil)
+                @alias_stack = [] of String
             end
 
             def resolve_constant(name : String)
@@ -42,6 +53,23 @@ module Dragonstone
 
             def matches_constant?(constant, value)
                 @constant_matcher.call(constant, value)
+            end
+
+            def alias_descriptor(name : String) : Descriptor?
+                return nil unless @alias_lookup
+                @alias_lookup.not_nil!.call(name)
+            end
+
+            def alias_in_progress?(name : String) : Bool
+                @alias_stack.includes?(name)
+            end
+
+            def push_alias(name : String)
+                @alias_stack << name
+            end
+
+            def pop_alias
+                @alias_stack.pop
             end
         end
 
@@ -57,6 +85,18 @@ module Dragonstone
             end
 
             def satisfied_by?(value, context : Context) : Bool
+                if alias_descriptor = context.alias_descriptor(@name)
+                    if context.alias_in_progress?(@name)
+                        raise RecursiveAliasError.new(@name)
+                    end
+                    context.push_alias(@name)
+                    begin
+                        return alias_descriptor.satisfied_by?(value, context)
+                    ensure
+                        context.pop_alias
+                    end
+                end
+
                 if matcher = Builtins.matcher_for(@name)
                     return matcher.call(value)
                 end

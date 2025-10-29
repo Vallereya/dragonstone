@@ -1,0 +1,20 @@
+# Work in progress for Dragonstone Package Manager.
+# DON'T TRY AND RUN .forge FILES YET.
+[PACKAGE]
+name        =   "Dragonstone"
+version     =   "0.0.4"
+authors     =   "Dragonstone Core Team"
+license     =   "Apache-2.0"
+description =   "The Dragonstone Programming Language and its Standard Library"
+
+[DRAGONSTONE]
+require     =   "0.0.3"
+
+# [DEPENDENCIES]
+# 
+
+# [DEVELOPMENT DEPENDENCIES]
+# 
+
+# [REGISTRY]
+# 

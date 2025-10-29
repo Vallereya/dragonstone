@@ -1,0 +1,10 @@
+struct Point
+    property x: int
+    property y: int
+
+    def initialize(@x: int, @y: int)
+    end
+end
+
+point = Point.new(10, 20)
+puts "x: #{point.x}, y: #{point.y}"
