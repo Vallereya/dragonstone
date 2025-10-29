@@ -54,6 +54,7 @@
     ├── docs/                           -> documentation
     ├── scripts/                        -> auto scripts
     ├── examples/                       -> example .ds files
+    ├── tests/                          -> unimportant test .ds files
     ├── spec/                           -> testing files
     ├── bin/
     │   ├── dragonstone                 -> main entry

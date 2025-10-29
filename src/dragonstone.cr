@@ -76,8 +76,17 @@ module Dragonstone
             end
         end
 
+        if default_root = default_stdlib_root
+            roots << default_root
+        end
+
         roots << Dir.current
         roots.uniq
+    end
+
+    private def self.default_stdlib_root : String?
+        root = File.expand_path("./dragonstone/stdlib", __DIR__)
+        File.directory?(root) ? root : nil
     end
 
     def self.process_typed_directive(source : String) : Tuple(String, Bool)
