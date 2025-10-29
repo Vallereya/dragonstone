@@ -77,6 +77,9 @@ module Dragonstone
             getter
             setter
             property
+            enum
+            struct
+            alias
         ]
 
         getter source_name : String
@@ -344,8 +347,13 @@ module Dragonstone
                     add_token(:QUESTION, "?", @line, @column, 1)
                     advance
                 when ':'
-                    add_token(:COLON, ":", @line, @column, 1)
-                    advance
+                    if peek_char == ':'
+                        add_token(:DOUBLE_COLON, "::", @line, @column, 2)
+                        advance(2)
+                    else
+                        add_token(:COLON, ":", @line, @column, 1)
+                        advance
+                    end
                 when '.'
                     if peek_char == '.'
                         if peek_char(2) == '.'
@@ -565,6 +573,9 @@ module Dragonstone
                     when "getter" then :GETTER
                     when "setter" then :SETTER
                     when "property" then :PROPERTY
+                    when "enum" then :ENUM
+                    when "struct" then :STRUCT
+                    when "alias" then :ALIAS
                     else
                         :IDENTIFIER
                     end

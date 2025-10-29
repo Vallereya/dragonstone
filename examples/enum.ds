@@ -1,0 +1,34 @@
+# Example 1
+enum Color
+    Red                 # Defaults to 0
+    Green               # Defaults to 1
+    Blue                # Defaults to 2
+end
+
+Color::Green            # You can access an enum member directly using EnumName::MemberName.
+Color::Green.value      # => 1 (.value to get the underlying integer value of an enum member.)
+
+# Example 2
+enum Direction
+    North
+    East
+    South
+    West
+end
+
+# do isnt implemented yet....
+# Direction.each do |direction| # (.each to iterate over all defined members of the enum.)
+#    puts direction
+# end
+
+# Example 3
+enum StatusCodes(code: int)
+    NotFound = 404
+    Success = 200
+    Accepted = 202
+    BadRequest = 400
+end
+
+code = StatusCodes.new(404)
+puts code
+puts code.value

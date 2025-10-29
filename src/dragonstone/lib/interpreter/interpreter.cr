@@ -9,12 +9,12 @@ require "../typing/*"
 
 module Dragonstone
     alias RangeValue = Range(Int64, Int64) | Range(Float64, Float64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule
-    alias ScopeValue = RuntimeValue | ConstantBinding
-    alias Scope = Hash(String, ScopeValue)
-    alias TypeScope = Hash(String, Typing::Descriptor)
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember
+        alias ScopeValue = RuntimeValue | ConstantBinding
+        alias Scope = Hash(String, ScopeValue)
+        alias TypeScope = Hash(String, Typing::Descriptor)
 
-    class ReturnValue < Exception
+        class ReturnValue < Exception
         getter value : RuntimeValue?
 
         def initialize(@value : RuntimeValue?)
@@ -149,6 +149,60 @@ module Dragonstone
         getter ivar_type_descriptors : Hash(String, Typing::Descriptor?)
     end
 
+    class DragonStruct < DragonClass
+        def initialize(name : String)
+            super(name)
+        end
+    end
+
+    class DragonEnum < DragonModule
+        getter value_method_name : String
+        getter value_type_annotation : AST::TypeExpression?
+
+        def initialize(name : String, value_method_name : String = "value", value_type_annotation : AST::TypeExpression? = nil)
+            super(name)
+            @value_method_name = value_method_name.empty? ? "value" : value_method_name
+            @value_type_annotation = value_type_annotation
+            @members = [] of DragonEnumMember
+            @members_by_name = {} of String => DragonEnumMember
+            @members_by_value = {} of Int64 => DragonEnumMember
+        end
+
+        def member(name : String) : DragonEnumMember?
+            @members_by_name[name]?
+        end
+
+        def member_for_value(value : Int64) : DragonEnumMember?
+            @members_by_value[value]?
+        end
+
+        def define_member(name : String, value : Int64) : DragonEnumMember
+            member = DragonEnumMember.new(self, name, value)
+            @members << member
+            @members_by_name[name] = member
+            @members_by_value[value] = member
+            define_constant(name, member)
+            member
+        end
+
+        def members : Array(DragonEnumMember)
+            @members.dup
+        end
+    end
+
+    class DragonEnumMember
+        getter enum : DragonEnum
+        getter name : String
+        getter value : Int64
+
+        def initialize(@enum : DragonEnum, @name : String, @value : Int64)
+        end
+
+        def to_s : String
+            "#{@enum.name}::#{@name}"
+        end
+    end
+
     class DragonInstance
         getter klass : DragonClass
         getter ivars : Hash(String, RuntimeValue)
@@ -176,6 +230,8 @@ module Dragonstone
             @container_stack = [] of DragonModule
             @loop_depth = 0
             @container_definition_depth = 0
+            @type_aliases = {} of String => AST::TypeExpression
+            @alias_descriptor_cache = {} of String => Typing::Descriptor
             set_variable("ffi", FFIModule.new)
         end
 
@@ -275,8 +331,35 @@ module Dragonstone
             value
         end
 
+        def visit_alias_definition(node : AST::AliasDefinition) : RuntimeValue?
+            register_type_alias(node.name, node.type_expression, node)
+            nil
+        end
+
         def visit_variable(node : AST::Variable) : RuntimeValue?
             get_variable(node.name, location: node.location)
+        end
+
+        def visit_constant_path(node : AST::ConstantPath) : RuntimeValue?
+            base = lookup_constant_value(node.head)
+            unless base
+                runtime_error(NameError, "Undefined constant #{node.head}", node)
+            end
+
+            value = base
+            node.tail.each do |segment|
+                unless value.is_a?(DragonModule)
+                    runtime_error(NameError, "Constant #{segment} not found in #{describe_runtime_value(value)}", node)
+                end
+
+                container = value.as(DragonModule)
+                unless container.constant?(segment)
+                    runtime_error(NameError, "Constant #{segment} not found in #{container.name}", node)
+                end
+
+                value = container.fetch_constant(segment)
+            end
+            value
         end
 
         def visit_instance_variable(node : AST::InstanceVariable) : RuntimeValue?
@@ -560,6 +643,74 @@ module Dragonstone
             klass
         end
 
+        def visit_struct_definition(node : AST::StructDefinition) : RuntimeValue?
+            existing = lookup_constant_value(node.name)
+            struct_type = if existing
+                unless existing.is_a?(DragonStruct)
+                    runtime_error(ConstantError, "Constant #{node.name} already defined", node)
+                end
+                existing.as(DragonStruct)
+            else
+                new_struct = DragonStruct.new(node.name)
+                set_constant(node.name, new_struct, location: node.location)
+                new_struct
+            end
+
+            with_container(struct_type) do
+                @container_definition_depth += 1
+                push_scope(Scope.new, new_type_scope)
+                begin
+                    execute_block(node.body)
+                ensure
+                    pop_scope
+                    @container_definition_depth -= 1
+                end
+            end
+
+            struct_type
+        end
+
+        def visit_enum_definition(node : AST::EnumDefinition) : RuntimeValue?
+            if lookup_constant_value(node.name)
+                runtime_error(ConstantError, "Constant #{node.name} already defined", node)
+            end
+
+            accessor_name = node.value_name
+            accessor_name = accessor_name && !accessor_name.empty? ? accessor_name : nil
+            accessor_name ||= "value"
+
+            enum_type = DragonEnum.new(node.name, accessor_name, node.value_type)
+            set_constant(node.name, enum_type, location: node.location)
+
+            last_value = -1_i64
+            node.members.each do |member_node|
+                value = if member_node.value
+                    runtime_value = member_node.value.not_nil!.accept(self)
+                    to_int64(runtime_value, member_node)
+                else
+                    last_value + 1
+                end
+
+                last_value = value
+
+                if enum_type.member(member_node.name)
+                    runtime_error(ConstantError, "Enum member #{member_node.name} already defined for #{enum_type.name}", member_node)
+                end
+
+                if enum_type.member_for_value(value)
+                    runtime_error(ConstantError, "Enum value #{value} already used in #{enum_type.name}", member_node)
+                end
+
+                enum_type.define_member(member_node.name, value)
+            end
+
+            enum_type
+        end
+
+        def visit_enum_member(node : AST::EnumMember) : RuntimeValue?
+            runtime_error(InterpreterError, "Enum members cannot be evaluated directly", node)
+        end
+
         def visit_break_statement(node : AST::BreakStatement) : RuntimeValue?
             if @loop_depth.zero?
                 runtime_error(InterpreterError, "'break' used outside of a loop", node)
@@ -634,6 +785,19 @@ module Dragonstone
             else
                 runtime_error(TypeError, "Index must be a number", node)
 
+            end
+        end
+
+        private def to_int64(value, node : AST::Node) : Int64
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            when Float64
+                value.to_i64
+            else
+                runtime_error(TypeError, "Enum values must be numeric", node)
             end
         end
 
@@ -1037,6 +1201,43 @@ module Dragonstone
                 args = evaluate_arguments(node.arguments)
                 call_ffi_dispatch(node.name, args, node)
 
+            when DragonEnum
+                case node.name
+                when "new"
+                    args = evaluate_arguments(node.arguments)
+                    unless args.size == 1
+                        runtime_error(InterpreterError, "#{receiver.name}.new expects 1 argument, got #{args.size}", node)
+                    end
+                    value = to_int64(args.first, node)
+                    member = receiver.member_for_value(value)
+                    runtime_error(NameError, "No enum member with value #{value} for #{receiver.name}", node) unless member
+                    member
+
+                when "each", "members"
+                    args = evaluate_arguments(node.arguments)
+                    unless args.empty?
+                        runtime_error(InterpreterError, "#{receiver.name}.#{node.name} does not take arguments", node)
+                    end
+                    receiver.members.map { |member| member.as(RuntimeValue) }
+
+                when "values"
+                    args = evaluate_arguments(node.arguments)
+                    unless args.empty?
+                        runtime_error(InterpreterError, "#{receiver.name}.values does not take arguments", node)
+                    end
+                    receiver.members.map { |member| member.value.as(RuntimeValue) }
+
+                else
+                    method = receiver.lookup_method(node.name)
+                    runtime_error(NameError, "Unknown method '#{node.name}' for enum #{receiver.name}", node) unless method
+                    method = method.not_nil!
+                    ensure_method_visible!(receiver, method, node, implicit_self)
+                    args = evaluate_arguments(node.arguments)
+                    with_container(receiver) do
+                        call_bound_method(receiver, method, args, node.location)
+                    end
+                end
+
             when DragonClass
                 if node.name == "new"
                     args = evaluate_arguments(node.arguments)
@@ -1071,6 +1272,22 @@ module Dragonstone
                 args = evaluate_arguments(node.arguments)
                 with_container(receiver.klass) do
                     call_bound_method(receiver.klass, method, args, node.location, self_object: receiver)
+                end
+
+            when DragonEnumMember
+                args = evaluate_arguments(node.arguments)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Enum member methods do not take arguments", node)
+                end
+
+                if node.name == "name"
+                    receiver.name
+                elsif node.name == "enum"
+                    receiver.enum
+                elsif node.name == "value" || node.name == receiver.enum.value_method_name
+                    receiver.value
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for enum member #{receiver}", node)
                 end
 
             when Function
@@ -1568,6 +1785,8 @@ module Dragonstone
                 return if descriptor.satisfied_by?(value, context)
             rescue e : Typing::UnknownTypeError
                 runtime_error(NameError, "Unknown type '#{e.type_name}'", node_or_location)
+            rescue e : Typing::RecursiveAliasError
+                runtime_error(TypeError, "Recursive alias '#{e.alias_name}' detected during type checking", node_or_location)
             end
 
             runtime_error(TypeError, "Expected #{descriptor.to_s}, got #{describe_runtime_value(value)}", node_or_location)
@@ -1576,7 +1795,8 @@ module Dragonstone
         private def typing_context : Typing::Context
             @typing_context ||= Typing::Context.new(
                 ->(name : String) { lookup_constant_value(name) },
-                ->(constant : RuntimeValue, value : RuntimeValue) { constant_type_match?(constant, value) }
+                ->(constant : RuntimeValue, value : RuntimeValue) { constant_type_match?(constant, value) },
+                ->(name : String) { descriptor_for_alias(name) }
             )
         end
 
@@ -1733,6 +1953,28 @@ module Dragonstone
 
         private def new_type_scope : TypeScope
             {} of String => Typing::Descriptor
+        end
+
+        private def register_type_alias(name : String, expr : AST::TypeExpression, node : AST::AliasDefinition)
+            if @type_aliases.has_key?(name)
+                runtime_error(NameError, "Type alias #{name} already defined", node)
+            end
+            @type_aliases[name] = expr
+            @alias_descriptor_cache.delete(name)
+        end
+
+        private def find_type_alias(name : String) : AST::TypeExpression?
+            @type_aliases[name]?
+        end
+
+        private def descriptor_for_alias(name : String) : Typing::Descriptor?
+            expr = find_type_alias(name)
+            return nil unless expr
+            cached = @alias_descriptor_cache[name]?
+            return cached if cached
+            descriptor = descriptor_for(expr)
+            @alias_descriptor_cache[name] = descriptor
+            descriptor
         end
 
         private def assign_type_to_scope(index : Int32, name : String, descriptor : Typing::Descriptor?)

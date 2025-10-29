@@ -1,0 +1,22 @@
+# Example One
+alias Name = str
+
+def greet(name: str)
+    puts "Hello, #{name}!"
+end
+
+greet("Alice")
+
+# Example Two
+alias Data = str | int
+
+def greet(name: str)
+    puts "Hello, #{name}!"
+end
+
+def date(year: int)
+    puts "This year is: #{year}"
+end
+
+greet("Alice")
+date(2025)

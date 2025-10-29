@@ -69,13 +69,13 @@
 #####   <h6 style="text-align:center;">         `v0.0.3 -> v0.0.4`
 
 ```
-            - Class, Module, Object, singleton methods, method tables
-            - Method cache w/ fallback path.
-            - class creation, inheritance, method lookup, operator overrides
-            - additional testing both success and coverage for syntax/runtime failures
-            - constants, arithmetic, variable binding, simple calls
-            - if/elsif/else, unless, while, until, break/next/redo, case (value-match)
-            - 
+            ✅ implement optional type system
+            ✅ implement alias
+            ✅ implement getters, setters and variable instance
+            ✅ requiring files (use for files)
+            ✅ Class, Module, Object, con, struct, enums
+            ✅ constants, arithmetic, variable binding, simple calls
+            ✅ if/elsif/else, while, case (value-match)
 ```
 
 ###     <h2 style="text-align:center;">         Phase Five
@@ -83,9 +83,12 @@
 #####   <h6 style="text-align:center;">         `v0.0.4 -> v0.0.5`
 
 ```
-            ✅ implement optional type system
+            - Method cache w/ fallback path.
+            - class creation, inheritance, method lookup, operator overrides
+            - unless, until, break/next/redo
+            - concurrency, singleton methods, method tables
             - implement optional explicit typing
-            ✅ requiring files (use for files and import for urls)
+            - requiring files (support for urls)
             - Exception; RuntimeError, TypeError, etc
             - raise, begin/rescue/else/ensure; VM unwind stack w/ exception objects
 ```

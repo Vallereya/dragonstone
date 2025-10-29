@@ -222,6 +222,12 @@ module Dragonstone
                 parse_class_definition
             when :CON
                 parse_constant_declaration
+            when :ENUM
+                parse_enum_declaration
+            when :STRUCT
+                parse_struct_declaration
+            when :ALIAS
+                parse_alias_definition
             when :GETTER
                 parse_accessor_macro(:getter)
             when :SETTER
@@ -368,6 +374,58 @@ module Dragonstone
             body = parse_block([:END])
             expect(:END)
             AST::ClassDefinition.new(name_token.value.as(String), body, superclass, location: class_token.location)
+        end
+
+        private def parse_struct_declaration : AST::Node
+            struct_token = expect(:STRUCT)
+            name_token = expect(:IDENTIFIER)
+            body = parse_block([:END])
+            expect(:END)
+            AST::StructDefinition.new(name_token.value.as(String), body, location: struct_token.location)
+        end
+
+        private def parse_enum_declaration : AST::Node
+            enum_token = expect(:ENUM)
+            name_token = expect(:IDENTIFIER)
+
+            value_name = nil
+            value_type = nil
+            if current_token.type == :LPAREN
+                advance
+                value_name_token = expect(:IDENTIFIER)
+                value_name = value_name_token.value.as(String)
+                expect(:COLON)
+                value_type = parse_type_expression
+                expect(:RPAREN)
+            end
+
+            members = [] of AST::EnumMember
+            while current_token.type != :END && current_token.type != :EOF
+                member_token = expect(:IDENTIFIER)
+                member_value = nil
+                if current_token.type == :ASSIGN
+                    advance
+                    member_value = parse_expression
+                end
+                members << AST::EnumMember.new(member_token.value.as(String), member_value, location: member_token.location)
+            end
+
+            expect(:END)
+            AST::EnumDefinition.new(
+                name_token.value.as(String),
+                members,
+                value_name: value_name,
+                value_type: value_type,
+                location: enum_token.location
+            )
+        end
+
+        private def parse_alias_definition : AST::AliasDefinition
+            alias_token = expect(:ALIAS)
+            name_token = expect(:IDENTIFIER)
+            expect(:ASSIGN)
+            type_expr = parse_type_expression
+            AST::AliasDefinition.new(name_token.value.as(String), type_expr, location: alias_token.location)
         end
 
         private def parse_function_def(visibility : Symbol = :public) : AST::Node
@@ -702,8 +760,7 @@ module Dragonstone
                 advance
                 AST::Literal.new(nil, location: token.location)
             when :IDENTIFIER
-                identifier_token = expect(:IDENTIFIER)
-                AST::Variable.new(identifier_token.value.as(String), location: identifier_token.location)
+                parse_identifier_expression
             when :INSTANCE_VAR
                 ivar_token = expect(:INSTANCE_VAR)
                 AST::InstanceVariable.new(ivar_token.value.as(String), location: ivar_token.location)
@@ -721,6 +778,28 @@ module Dragonstone
             else
                 error("Unexpected token #{token.type}", token)
             end
+        end
+
+        private def parse_identifier_expression : AST::Node
+            identifier_token = expect(:IDENTIFIER)
+            node = AST::Variable.new(identifier_token.value.as(String), location: identifier_token.location)
+
+            while current_token.type == :DOUBLE_COLON
+                advance
+                segment_token = expect(:IDENTIFIER)
+                names = case node
+                    when AST::ConstantPath
+                        node.names.dup
+                    when AST::Variable
+                        [node.name]
+                    else
+                        error("Invalid constant path segment", segment_token)
+                    end
+                names << segment_token.value.as(String)
+                node = AST::ConstantPath.new(names, location: identifier_token.location)
+            end
+
+            node
         end
 
         private def parse_typeof_expression : AST::Node
