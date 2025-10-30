@@ -1,0 +1,7 @@
+def foo
+  loop do
+    break "bar"
+  end
+end
+
+puts foo

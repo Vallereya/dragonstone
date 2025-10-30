@@ -199,7 +199,7 @@ module Dragonstone
         end
 
         def to_s : String
-            "#{@enum.name}::#{@name}"
+            @name
         end
     end
 
@@ -577,19 +577,36 @@ module Dragonstone
         end
 
         def visit_module_definition(node : AST::ModuleDefinition) : RuntimeValue?
-            existing = lookup_constant_value(node.name)
-            mod = if existing
+            container = @container_definition_depth.positive? ? current_container : nil
 
+            existing = if container
+                if container.constant?(node.name)
+                    container.fetch_constant(node.name)
+                else
+                    nil
+                end
+            else
+                lookup_constant_value(node.name)
+            end
+
+            mod = if existing
                 unless existing.is_a?(DragonModule)
-                    runtime_error(ConstantError, "Constant #{node.name} already defined", node)
-                    
+                    message = if container
+                        "Constant #{node.name} already defined in #{container.name}"
+                    else
+                        "Constant #{node.name} already defined"
+                    end
+                    runtime_error(ConstantError, message, node)
                 end
                 existing.as(DragonModule)
             else
                 new_module = DragonModule.new(node.name)
-                set_constant(node.name, new_module, location: node.location)
+                if container
+                    define_container_constant(container, node.name, new_module, node)
+                else
+                    set_constant(node.name, new_module, location: node.location)
+                end
                 new_module
-
             end
 
             with_container(mod) do
@@ -598,22 +615,35 @@ module Dragonstone
 
                 begin
                     execute_block(node.body)
-
                 ensure
                     pop_scope
                     @container_definition_depth -= 1
-
                 end
             end
             mod
-            
         end
 
         def visit_class_definition(node : AST::ClassDefinition) : RuntimeValue?
-            existing = lookup_constant_value(node.name)
+            container = @container_definition_depth.positive? ? current_container : nil
+
+            existing = if container
+                if container.constant?(node.name)
+                    container.fetch_constant(node.name)
+                else
+                    nil
+                end
+            else
+                lookup_constant_value(node.name)
+            end
+
             klass = if existing
                 unless existing.is_a?(DragonClass)
-                    runtime_error(ConstantError, "Constant #{node.name} already defined", node)
+                    message = if container
+                        "Constant #{node.name} already defined in #{container.name}"
+                    else
+                        "Constant #{node.name} already defined"
+                    end
+                    runtime_error(ConstantError, message, node)
                 end
                 existing.as(DragonClass)
             else
@@ -626,7 +656,11 @@ module Dragonstone
                     superclass = superclass_value.as(DragonClass)
                 end
                 new_class = DragonClass.new(node.name, superclass)
-                set_constant(node.name, new_class, location: node.location)
+                if container
+                    define_container_constant(container, node.name, new_class, node)
+                else
+                    set_constant(node.name, new_class, location: node.location)
+                end
                 new_class
             end
 
@@ -644,15 +678,35 @@ module Dragonstone
         end
 
         def visit_struct_definition(node : AST::StructDefinition) : RuntimeValue?
-            existing = lookup_constant_value(node.name)
+            container = @container_definition_depth.positive? ? current_container : nil
+
+            existing = if container
+                if container.constant?(node.name)
+                    container.fetch_constant(node.name)
+                else
+                    nil
+                end
+            else
+                lookup_constant_value(node.name)
+            end
+
             struct_type = if existing
                 unless existing.is_a?(DragonStruct)
-                    runtime_error(ConstantError, "Constant #{node.name} already defined", node)
+                    message = if container
+                        "Constant #{node.name} already defined in #{container.name}"
+                    else
+                        "Constant #{node.name} already defined"
+                    end
+                    runtime_error(ConstantError, message, node)
                 end
                 existing.as(DragonStruct)
             else
                 new_struct = DragonStruct.new(node.name)
-                set_constant(node.name, new_struct, location: node.location)
+                if container
+                    define_container_constant(container, node.name, new_struct, node)
+                else
+                    set_constant(node.name, new_struct, location: node.location)
+                end
                 new_struct
             end
 
@@ -671,7 +725,13 @@ module Dragonstone
         end
 
         def visit_enum_definition(node : AST::EnumDefinition) : RuntimeValue?
-            if lookup_constant_value(node.name)
+            container = @container_definition_depth.positive? ? current_container : nil
+
+            if container
+                if container.constant?(node.name)
+                    runtime_error(ConstantError, "Constant #{node.name} already defined in #{container.name}", node)
+                end
+            elsif lookup_constant_value(node.name)
                 runtime_error(ConstantError, "Constant #{node.name} already defined", node)
             end
 
@@ -680,7 +740,11 @@ module Dragonstone
             accessor_name ||= "value"
 
             enum_type = DragonEnum.new(node.name, accessor_name, node.value_type)
-            set_constant(node.name, enum_type, location: node.location)
+            if container
+                define_container_constant(container, node.name, enum_type, node)
+            else
+                set_constant(node.name, enum_type, location: node.location)
+            end
 
             last_value = -1_i64
             node.members.each do |member_node|
@@ -1711,6 +1775,10 @@ module Dragonstone
         end
 
         private def lookup_constant_value(name : String)
+            if container_value = lookup_container_constant(name)
+                return container_value
+            end
+
             binding = find_binding(name)
             unwrap_binding(binding) if binding
         end

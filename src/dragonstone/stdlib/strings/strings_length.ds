@@ -1,4 +1,4 @@
-class strings
+module strings
     def length(str: str) -> int
         count = 0
         str.size

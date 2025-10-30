@@ -10,6 +10,46 @@ private def run_program(source : String, typing : Bool = false)
     interpreter.interpret(ast)
 end
 
+describe "Constant path resolution" do
+    it "resolves nested constants and classes through scope resolution" do
+        source = <<-DS
+        module Outer
+            module Inner
+                VALUE = 99
+
+                class Thing
+                    def initialize
+                    end
+
+                    def greet
+                        "hello"
+                    end
+                end
+            end
+        end
+
+        puts Outer::Inner::VALUE
+        thing = Outer::Inner::Thing.new
+        puts thing.greet
+        DS
+
+        run_program(source).should eq("99\nhello\n")
+    end
+
+    it "prints enum members using their name" do
+        source = <<-DS
+        enum Color
+            Red
+            Green
+        end
+
+        puts Color::Green
+        DS
+
+        run_program(source).should eq("Green\n")
+    end
+end
+
 describe "Interpreter instance variable support" do
     it "exposes instance state through generated getter" do
         source = <<-DS
