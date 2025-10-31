@@ -2,13 +2,13 @@
 # DON'T TRY AND RUN .forge FILES YET.
 [PACKAGE]
 name        =   "Dragonstone"
-version     =   "0.0.4"
+version     =   "0.0.5"
 authors     =   "Dragonstone Core Team"
 license     =   "Apache-2.0"
 description =   "The Dragonstone Programming Language and its Standard Library"
 
 [DRAGONSTONE]
-require     =   "0.0.3"
+require     =   "0.0.4"
 
 # [DEPENDENCIES]
 # 
