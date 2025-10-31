@@ -126,14 +126,15 @@ module Dragonstone
         # "./**" -> "<base_dir>/**/*.ds", "../folder/*" -> "<resolved>/*"
         private def resolve_spec(spec : String, base_dir : String) : String
             if spec.starts_with?("./") || spec.starts_with?("../")
-                joined = File.expand_path(spec, base_dir)
-                joined
+                return append_ext_if_missing(File.expand_path(spec, base_dir))
             else
                 found = config.roots.compact_map do |root|
-                    path = File.expand_path(spec, root)
-                    File.exists?(path) ? path : nil
+                    candidate = append_ext_if_missing(File.expand_path(spec, root))
+                    if candidate.includes?("*") || File.file?(candidate)
+                        candidate
+                    end
                 end.first?
-                found || File.expand_path(spec, base_dir)
+                found || append_ext_if_missing(File.expand_path(spec, base_dir))
             end
         end
 

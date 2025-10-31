@@ -47,7 +47,6 @@
             ✅ simple syntax (Ruby-like/Crystal-like) with unambiguous block/indent rules
             ✅ implement Pratt/precedence parser and produce typed AST
             ✅ implement basic diagnostics (file:line:col, caret spans, suggestion hints)
-            ✅ basic loops, strings, some math, etc
             ✅ no regressions moving forward, and clear grammar and recovery
 ```
 
@@ -61,7 +60,6 @@
             ✅ VM in Crystal: frames, call stack, globals/envs, upvalues placeholder
             ✅ additional testing both success and coverage for syntax/runtime failures
             ✅ benchmark test
-            ✅ basic datatypes
 ```
 
 ###     <h2 style="text-align:center;">         Phase Four
@@ -74,8 +72,6 @@
             ✅ implement getters, setters and variable instance
             ✅ requiring files (use for files)
             ✅ Class, Module, Object, con, struct, enums
-            ✅ constants, arithmetic, variable binding, simple calls
-            ✅ if/elsif/else, while, case (value-match)
 ```
 
 ###     <h2 style="text-align:center;">         Phase Five
@@ -83,14 +79,11 @@
 #####   <h6 style="text-align:center;">         `v0.0.4 -> v0.0.5`
 
 ```
-            - Method cache w/ fallback path.
-            - class creation, inheritance, method lookup, operator overrides
-            - unless, until, break/next/redo
-            - concurrency, singleton methods, method tables
-            - implement optional explicit typing
-            - requiring files (support for urls)
-            - Exception; RuntimeError, TypeError, etc
-            - raise, begin/rescue/else/ensure; VM unwind stack w/ exception objects
+            ✅ constants, arithmetic, variable binding, simple calls
+            ✅ if/elsif/else, while, case (value-match)
+            ✅ basic datatypes
+            ✅ basic loops, strings, some math, etc
+            ✅ unless, until, break/else
 ```
 
 ###     <h2 style="text-align:center;">         Phase Six
@@ -98,12 +91,15 @@
 #####   <h6 style="text-align:center;">         `v0.0.5 -> v0.0.6`
 
 ```
+            ✅ raise, begin/rescue/redo/do/next/ensure
+            ✅ arithmetic, comparison, logical, indexing, assignment variants (+=, ||=)
+            - class creation, inheritance, method lookup, operator overrides
+            - Exception; RuntimeError, TypeError, etc
             - bindings for 3 way interop so Dragonstone can call any C, Ruby or Crystal
             - ffi fixes and boilerplate code avoidance
             - proper upvalues / closed-over locals
             - yield, &block capture, Proc/lambda values
             - each, map, select, inject on core collections via blocks
-            - 
 ```
 
 ###     <h2 style="text-align:center;">         Phase Seven
@@ -114,7 +110,10 @@
             - interpolation & escapes
             - Array, Hash with iteration, slicing, to_s/inspect
             - String builder in runtime
-            - 
+            - concurrency, singleton methods, method tables
+            - implement full syntax highlighter
+            - full exception handling
+            - Method cache w/ fallback path.
 ```
 
 ###     <h2 style="text-align:center;">         Phase Eight
@@ -122,12 +121,13 @@
 #####   <h6 style="text-align:center;">         `v0.0.7 -> v0.0.8`
 
 ```
-            - implement full syntax highlighter
-            - full exception handling
-            - arithmetic, comparison, logical, indexing, assignment variants (+=, ||=)
             - Truthiness rules (nil/false falsey, rest truthy)
             - Parser & bytecode coverage for all operators
-            - set CI + cross-platform builds (Linux/macOS/Windows)
+            - implement optional ownership model (rust-like borrow checker)
+            - implement separate optional garbage collection
+            - requiring files (support for urls)
+            - implement optional explicit typing
+            - VM unwind stack w/ exception objects
 ```
 
 ###     <h2 style="text-align:center;">         Phase Nine
@@ -135,14 +135,13 @@
 #####   <h6 style="text-align:center;">         `v0.0.8 -> v0.0.9`
 
 ```
-            - implement optional ownership model (rust-like borrow checker)
-            - implement separate optional garbage collection
+            - freeze current grammar subset if needed on C side
+            - No Ruby/Crystal/C in build/runtime/tooling and port stdlib to dragonstone
             - VS Code extension for language syntax highlighting/recognition and running files?
             - maximize portability/native cross-platform
             - release and installation pipeline
             - begin dragonstone bootstrapping
-            - No Ruby/Crystal/C in build/runtime/tooling and port stdlib to dragonstone
-            - freeze current grammar subset if needed on C side
+            - set CI + cross-platform builds (Linux/macOS/Windows)
 ```
 
 ###     <h2 style="text-align:center;">         Phase Ten
@@ -157,7 +156,6 @@
             - docs, samples, changelog, versioned grammar, tutorial
             - docs/ site (quickstart, language tour, FFI roadmap)
             - tag v0.1.0, signed binaries, reproducible build notes
-            - 
 ```
 
 ---

@@ -1,0 +1,11 @@
+x = 10
+y = 20
+
+select
+when x > y
+    puts "#{x} is greater"
+when y > x
+    puts "#{y} is greater"
+else
+    puts "They are equal"
+end

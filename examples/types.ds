@@ -35,15 +35,17 @@ def greet(name)
 end
 greet("V")
 
-# not working yet....
 # Union type example (an argument can be a String or Nil)
-# def greet(name: str | nil) -> str
-#    if name.nil?
-#        puts "Hello, guest!"
-#    else
-#        puts "Hello, #{name}!"
-#    end
-#end
+def greet(country: str | nil) -> str
+    if country.nil?
+        puts "Ahhh, I don't know where I'm from!"
+    else
+        puts "Hello, I'm from #{country}!"
+    end
+end
+
+greet(nil)
+greet("Portugal")
 
 # Nullable shorthand with ?
 def find_user(id: int) -> User?

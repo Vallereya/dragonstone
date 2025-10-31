@@ -27,8 +27,17 @@ module Dragonstone
 
                 return base if arguments.empty?
 
-                args = arguments.map(&.to_source).join(", ")
-                "#{base}(#{args})"
+                block_arg = arguments.last.is_a?(BlockLiteral) ? arguments.last.as(BlockLiteral) : nil
+                regular_args = block_arg ? arguments[0...-1] : arguments
+
+                source = if regular_args.empty?
+                    base
+                else
+                    args = regular_args.map(&.to_source).join(", ")
+                    "#{base}(#{args})"
+                end
+
+                block_arg ? "#{source} #{block_arg.to_source}" : source
             end
         end
     end

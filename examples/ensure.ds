@@ -1,0 +1,14 @@
+begin
+    # Code that might raise an exception
+    puts "Performing a potentially dangerous operation..."
+    raise "An error occurred!"
+rescue
+    # Code to handle exceptions
+    puts "Caught an exception!"
+else
+    # Code to execute if no exception was raised
+    puts "Operation completed successfully."
+ensure
+    # This code will always be executed
+    puts "Cleanup actions are being performed."
+end

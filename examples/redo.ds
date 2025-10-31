@@ -1,0 +1,11 @@
+redone_iteration_two = false
+i = 0
+while i < 5
+    puts "Current iteration: #{i}"
+    if i == 2 && !redone_iteration_two
+        puts "Redoing iteration 2..."
+        redone_iteration_two = true
+        redo # Repeat the current iteration (i=2) once
+    end
+    i += 1
+end

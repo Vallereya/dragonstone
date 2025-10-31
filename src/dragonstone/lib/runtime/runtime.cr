@@ -19,8 +19,8 @@ module Dragonstone
             def bind_namespace(namespace : Scope)
                 namespace.each do |name, scope_value|
                     bind_scope_value(name, scope_value)
-                end
-            end
+end
+end
 
             def exported_lookup(name : String) : RuntimeValue?
                 scope_value = @exports[name]?

@@ -1,0 +1,15 @@
+# Inclusive range includes both endpoints
+inclusive = 1..3
+puts inclusive.first
+puts inclusive.last
+puts inclusive.includes?(2)
+
+# Exclusive range skips the end value
+exclusive = 1...4
+puts exclusive.last
+puts exclusive.includes?(4) # => false
+
+# Ranges support iteration with blocks
+('a'..'c').each do |letter|
+    puts "Letter: #{letter}"
+end

@@ -8,6 +8,9 @@ end
 Color::Green            # You can access an enum member directly using EnumName::MemberName.
 Color::Green.value      # => 1 (.value to get the underlying integer value of an enum member.)
 
+puts Color::Green       # => Green
+puts Color::Green.value
+
 # Example 2
 enum Direction
     North
@@ -16,10 +19,10 @@ enum Direction
     West
 end
 
-# do isnt implemented yet....
-# Direction.each do |direction| # (.each to iterate over all defined members of the enum.)
-#    puts direction
-# end
+# (.each iterates over all defined members of the enum.)
+Direction.each do |direction|
+    puts "Direction: #{direction}"
+end
 
 # Example 3
 enum StatusCodes(code: int)

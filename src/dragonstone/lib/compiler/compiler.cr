@@ -2,14 +2,12 @@
 # ----------- Compiler ------------
 # ---------------------------------
 require "../runtime/opc"
+require "../runtime/ffi_module"
 require "../lexer/*"
 require "../parser/*"
 require "../codegen/ast"
 
 module Dragonstone
-    struct FFIModule
-    end
-
     module Bytecode
         alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Symbol | Array(Value) | CompiledCode | NamedTuple(name: String, params: Array(Value), code: CompiledCode) | FFIModule
     end
