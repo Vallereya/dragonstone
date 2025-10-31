@@ -4,8 +4,10 @@ case day
 
 when "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
     puts "It's a weekday"
+    
 when "Saturday", "Sunday"
     puts "It's the weekend"
+
 else
     puts "Not a valid day"
 end

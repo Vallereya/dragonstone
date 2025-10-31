@@ -33,6 +33,7 @@ module Dragonstone
                 "boolean" => ->(value : RuntimeValue) { value.is_a?(Bool) },
                 "char"    => ->(value : RuntimeValue) { value.is_a?(Char) },
                 "array"   => ->(value : RuntimeValue) { value.is_a?(Array) },
+                "map"     => ->(value : RuntimeValue) { value.is_a?(Hash) },
                 "nil"     => ->(value : RuntimeValue) { value.nil? },
                 "any"     => ->(_value : RuntimeValue) { true }
             }

@@ -68,7 +68,12 @@ module Dragonstone
             select 
             break 
             next 
+            begin
             rescue
+            ensure
+            raise
+            redo
+            retry
             use
             from
             as
@@ -565,7 +570,12 @@ module Dragonstone
                     when "select" then :SELECT
                     when "break" then :BREAK
                     when "next" then :NEXT
+                    when "begin" then :BEGIN
                     when "rescue" then :RESCUE
+                    when "ensure" then :ENSURE
+                    when "raise" then :RAISE
+                    when "redo" then :REDO
+                    when "retry" then :RETRY
                     when "use" then :USE
                     when "from" then :FROM
                     when "as" then :AS

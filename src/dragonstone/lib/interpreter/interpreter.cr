@@ -9,11 +9,28 @@ require "../typing/*"
 require "../runtime/ffi_module"
 
 module Dragonstone
-    alias RangeValue = Range(Int64, Int64) | Range(Float64, Float64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember
-        alias ScopeValue = RuntimeValue | ConstantBinding
-        alias Scope = Hash(String, ScopeValue)
-        alias TypeScope = Hash(String, Typing::Descriptor)
+    class RaisedException
+        getter error : InterpreterError
+
+        def initialize(@error : InterpreterError)
+        end
+
+        def message : String
+            @error.original_message
+        end
+
+        def to_s : String
+            class_name = error.class.name.split("::").last
+            "#{class_name}: #{message}"
+        end
+    end
+
+    alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException
+    alias MapValue = Hash(RuntimeValue, RuntimeValue)
+    alias ScopeValue = RuntimeValue | ConstantBinding
+    alias Scope = Hash(String, ScopeValue)
+    alias TypeScope = Hash(String, Typing::Descriptor)
 
         class ReturnValue < Exception
         getter value : RuntimeValue?
@@ -26,6 +43,10 @@ module Dragonstone
     class BreakSignal < Exception; end
     
     class NextSignal < Exception; end
+
+    class RedoSignal < Exception; end
+
+    class RetrySignal < Exception; end
 
     class ConstantBinding
         getter value : RuntimeValue
@@ -251,6 +272,8 @@ module Dragonstone
             @log_to_stdout = log_to_stdout
             @container_stack = [] of DragonModule
             @loop_depth = 0
+            @rescue_depth = 0
+            @exception_stack = [] of InterpreterError
             @container_definition_depth = 0
             @type_aliases = {} of String => AST::TypeExpression
             @alias_descriptor_cache = {} of String => Typing::Descriptor
@@ -271,11 +294,62 @@ module Dragonstone
         end
 
         def visit_method_call(node : AST::MethodCall) : RuntimeValue?
+            args_info = extract_call_arguments(node)
+            block_node = args_info[:block]
+            block_value = if block_node
+                block_node.accept(self).as(Function)
+            else
+                nil
+            end
+
             if node.receiver
                 receiver_value = node.receiver.not_nil!.accept(self)
-                call_receiver_method(receiver_value, node)
+                call_receiver_method(receiver_value, node, args_info[:arg_nodes], block_value)
             else
-                call_function_name(node)
+                call_function_name(node, args_info[:arg_nodes], block_value)
+            end
+        end
+
+        def visit_begin_expression(node : AST::BeginExpression) : RuntimeValue?
+            loop do
+                begin
+                    result = execute_block(node.body)
+                    if node.else_block
+                        result = execute_block(node.else_block.not_nil!)
+                    end
+                    return result
+                rescue e : InterpreterError
+                    handling = handle_rescue_clauses(node.rescue_clauses, e, node)
+                    case handling[:action]
+                    when :retry
+                        next
+                    when :handled
+                        return handling[:result]
+                    else
+                        raise e
+                    end
+                ensure
+                    execute_block(node.ensure_block.not_nil!) if node.ensure_block
+                end
+            end
+        end
+
+        def visit_raise_expression(node : AST::RaiseExpression) : RuntimeValue?
+            value = node.expression ? node.expression.not_nil!.accept(self) : nil
+
+            if value.nil?
+                if @exception_stack.empty?
+                    runtime_error(InterpreterError, "No active exception to re-raise", node)
+                end
+                raise @exception_stack.last
+            elsif value.is_a?(RaisedException)
+                raise value.error
+            elsif value.is_a?(InterpreterError)
+                raise value
+            elsif value.is_a?(String)
+                runtime_error(InterpreterError, value, node)
+            else
+                runtime_error(InterpreterError, value.to_s, node)
             end
         end
 
@@ -305,7 +379,7 @@ module Dragonstone
 
             value = if operator = node.operator
                 current_call = AST::MethodCall.new(node.name, [] of AST::Node, node.receiver, location: node.location)
-                current_value = call_receiver_method(receiver, current_call)
+                current_value = call_receiver_method(receiver, current_call, [] of AST::Node, nil)
                 evaluate_compound_assignment(current_value, operator, node.value, node)
 
             else
@@ -313,11 +387,12 @@ module Dragonstone
 
             end
 
+            value = normalize_runtime_value(value, node)
             literal = literal_node_for(value, node)
             setter_args = [] of AST::Node
             setter_args << literal
             setter_call = AST::MethodCall.new(setter_name, setter_args, nil, location: node.location)
-            call_receiver_method(receiver, setter_call)
+            call_receiver_method(receiver, setter_call, setter_args, nil)
             value
         end
 
@@ -442,12 +517,26 @@ module Dragonstone
             node.elements.map { |element| element.accept(self).as(RuntimeValue) }
         end
 
+        def visit_map_literal(node : AST::MapLiteral) : RuntimeValue?
+            map = MapValue.new
+            node.entries.each do |key_node, value_node|
+                key = key_node.accept(self)
+                value = value_node.accept(self)
+                map[key.as(RuntimeValue)] = value.as(RuntimeValue)
+            end
+            map
+        end
+
         def visit_index_access(node : AST::IndexAccess) : RuntimeValue?
             object = node.object.accept(self)
             return nil if node.nil_safe && object.nil?
 
             index = node.index.accept(self)
             fetch_index_value(object, index, node)
+        end
+
+        def visit_block_literal(node : AST::BlockLiteral) : RuntimeValue?
+            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup)
         end
 
         def visit_interpolated_string(node : AST::InterpolatedString) : RuntimeValue?
@@ -583,16 +672,6 @@ module Dragonstone
                 else
                     false
                 end
-            when Range(Float64, Float64)
-                if value.is_a?(Float64)
-                    range.includes?(value)
-                elsif value.is_a?(Int64)
-                    range.includes?(value.to_f64)
-                elsif value.is_a?(Int32)
-                    range.includes?(value.to_f64)
-                else
-                    false
-                end
             when Range(Char, Char)
                 value.is_a?(Char) && range.includes?(value)
             else
@@ -649,7 +728,14 @@ module Dragonstone
             @loop_depth += 1
             while truthy?(node.condition.accept(self))
                 begin
-                    result = execute_block(node.block)
+                    loop do
+                        begin
+                            result = execute_block(node.block)
+                            break
+                        rescue e : RedoSignal
+                            next
+                        end
+                    end
                 rescue e : NextSignal
                     next
                 rescue e : BreakSignal
@@ -940,6 +1026,22 @@ module Dragonstone
             raise NextSignal.new
         end
 
+        def visit_redo_statement(node : AST::RedoStatement) : RuntimeValue?
+            if @loop_depth.zero?
+                runtime_error(InterpreterError, "'redo' used outside of a loop", node)
+            end
+            return nil unless flow_modifier_allows?(node)
+            raise RedoSignal.new
+        end
+
+        def visit_retry_statement(node : AST::RetryStatement) : RuntimeValue?
+            if @rescue_depth.zero?
+                runtime_error(InterpreterError, "'retry' used outside of a rescue clause", node)
+            end
+            return nil unless flow_modifier_allows?(node)
+            raise RetrySignal.new
+        end
+
         private def evaluate_compound_assignment(current, operator : Symbol, value_node : AST::Node, node : AST::Node)
             case operator
 
@@ -964,6 +1066,9 @@ module Dragonstone
             when Array(RuntimeValue)
                 idx = index_to_int(index, node)
                 object[idx]? || nil
+            when MapValue
+                key = index.as(RuntimeValue)
+                object[key]?
             when String
                 idx = index_to_int(index, node)
                 object[idx]? || nil
@@ -978,6 +1083,9 @@ module Dragonstone
             when Array(RuntimeValue)
                 idx = index_to_int(index, node)
                 object[idx] = value
+            when MapValue
+                key = index.as(RuntimeValue)
+                object[key] = value.as(RuntimeValue)
             else
                 runtime_error(TypeError, "Cannot assign index on #{object.class}", node)
             end
@@ -1194,9 +1302,6 @@ module Dragonstone
             elsif left.is_a?(Char) && right.is_a?(Char)
                 Range.new(left, right, exclusive)
 
-            elsif left.is_a?(Float64) && right.is_a?(Float64)
-                Range.new(left, right, exclusive)
-
             else
                 runtime_error(TypeError, "Unsupported range bounds #{left.class} and #{right.class}", node)
 
@@ -1367,20 +1472,26 @@ module Dragonstone
             end
         end
 
-        private def call_function_name(node : AST::MethodCall)
+        private def call_function_name(node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?)
             case node.name
 
             when "puts"
-                values = node.arguments.map { |arg| arg.accept(self) }
+                if block_value
+                    runtime_error(InterpreterError, "puts does not accept a block", node)
+                end
+                values = arg_nodes.map { |arg| arg.accept(self) }
                 append_output(values.map { |v| v.nil? ? "" : v.to_s }.join(" "))
                 nil
 
             when "typeof"
-                if node.arguments.size != 1
-                    runtime_error(TypeError, "typeof expects exactly 1 argument, got #{node.arguments.size}", node)
+                if block_value
+                    runtime_error(InterpreterError, "typeof does not accept a block", node)
+                end
+                if arg_nodes.size != 1
+                    runtime_error(TypeError, "typeof expects exactly 1 argument, got #{arg_nodes.size}", node)
 
                 end
-                value = node.arguments[0].accept(self)
+                value = arg_nodes[0].accept(self)
                 get_type_name(value)
 
             else
@@ -1390,10 +1501,10 @@ module Dragonstone
                     unless value.is_a?(Function)
                         runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
-                    call_function(value.as(Function), node.arguments, node.location)
+                    call_function(value.as(Function), arg_nodes, block_value, node.location)
                 else
                     if self_value = current_scope["self"]?
-                        call_receiver_method(self_value, node, implicit_self: true)
+                        call_receiver_method(self_value, node, arg_nodes, block_value, implicit_self: true)
                     else
                     runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
@@ -1402,25 +1513,48 @@ module Dragonstone
             end
         end
 
-        private def call_receiver_method(receiver, node : AST::MethodCall, implicit_self : Bool = false)
+        private def call_receiver_method(receiver, node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?, implicit_self : Bool = false)
+            args = evaluate_arguments(arg_nodes)
+
+            if node.name == "nil?"
+                if block_value
+                    runtime_error(InterpreterError, "nil? does not accept a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "nil? does not take arguments", node)
+                end
+                return receiver.nil?
+            end
+
             case receiver
 
             when Array(RuntimeValue)
-                args = evaluate_arguments(node.arguments)
-                call_array_method(receiver, node.name, args, node)
+                call_array_method(receiver, node.name, args, block_value, node)
+
+            when MapValue
+                call_map_method(receiver, node.name, args, block_value, node)
 
             when String
-                args = evaluate_arguments(node.arguments)
-                call_string_method(receiver, node.name, args, node)
+                call_string_method(receiver, node.name, args, block_value, node)
+
+            when RangeValue
+                call_range_method(receiver, node.name, args, block_value, node)
+
+            when RaisedException
+                call_exception_method(receiver, node.name, args, block_value, node)
 
             when FFIModule
-                args = evaluate_arguments(node.arguments)
+                if block_value
+                    runtime_error(InterpreterError, "ffi methods do not accept blocks", node)
+                end
                 call_ffi_dispatch(node.name, args, node)
 
             when DragonEnum
                 case node.name
                 when "new"
-                    args = evaluate_arguments(node.arguments)
+                    if block_value
+                        runtime_error(InterpreterError, "#{receiver.name}.new does not accept a block", node)
+                    end
                     unless args.size == 1
                         runtime_error(InterpreterError, "#{receiver.name}.new expects 1 argument, got #{args.size}", node)
                     end
@@ -1430,14 +1564,22 @@ module Dragonstone
                     member
 
                 when "each", "members"
-                    args = evaluate_arguments(node.arguments)
                     unless args.empty?
                         runtime_error(InterpreterError, "#{receiver.name}.#{node.name} does not take arguments", node)
                     end
-                    receiver.members.map { |member| member.as(RuntimeValue) }
+                    if block_value
+                        receiver.members.each do |member|
+                            invoke_block(block_value, [member.as(RuntimeValue)], node.location)
+                        end
+                        receiver
+                    else
+                        receiver.members.map { |member| member.as(RuntimeValue) }
+                    end
 
                 when "values"
-                    args = evaluate_arguments(node.arguments)
+                    if block_value
+                        runtime_error(InterpreterError, "#{receiver.name}.values does not accept a block", node)
+                    end
                     unless args.empty?
                         runtime_error(InterpreterError, "#{receiver.name}.values does not take arguments", node)
                     end
@@ -1448,15 +1590,16 @@ module Dragonstone
                     runtime_error(NameError, "Unknown method '#{node.name}' for enum #{receiver.name}", node) unless method
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
-                    args = evaluate_arguments(node.arguments)
                     with_container(receiver) do
-                        call_bound_method(receiver, method, args, node.location)
+                        call_bound_method(receiver, method, args, block_value, node.location)
                     end
                 end
 
             when DragonClass
                 if node.name == "new"
-                    args = evaluate_arguments(node.arguments)
+                    if block_value
+                        runtime_error(InterpreterError, "#{receiver.name}.new does not accept a block", node)
+                    end
                     instantiate_class(receiver, args, node)
 
                 else
@@ -1464,9 +1607,8 @@ module Dragonstone
                     runtime_error(NameError, "Unknown method '#{node.name}' for class #{receiver.name}", node) unless method
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
-                    args = evaluate_arguments(node.arguments)
                     with_container(receiver) do
-                        call_bound_method(receiver, method, args, node.location)
+                        call_bound_method(receiver, method, args, block_value, node.location)
                     end
                 end
 
@@ -1475,9 +1617,8 @@ module Dragonstone
                 runtime_error(NameError, "Unknown method '#{node.name}' for module #{receiver.name}", node) unless method
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
-                args = evaluate_arguments(node.arguments)
                 with_container(receiver) do
-                    call_bound_method(receiver, method, args, node.location)
+                    call_bound_method(receiver, method, args, block_value, node.location)
                 end
 
             when DragonInstance
@@ -1485,13 +1626,14 @@ module Dragonstone
                 runtime_error(NameError, "Undefined method '#{node.name}' for instance of #{receiver.klass.name}", node) unless method
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
-                args = evaluate_arguments(node.arguments)
                 with_container(receiver.klass) do
-                    call_bound_method(receiver.klass, method, args, node.location, self_object: receiver)
+                    call_bound_method(receiver.klass, method, args, block_value, node.location, self_object: receiver)
                 end
 
             when DragonEnumMember
-                args = evaluate_arguments(node.arguments)
+                if block_value
+                    runtime_error(InterpreterError, "Enum member methods do not accept blocks", node)
+                end
                 unless args.empty?
                     runtime_error(InterpreterError, "Enum member methods do not take arguments", node)
                 end
@@ -1508,11 +1650,12 @@ module Dragonstone
 
             when Function
                 if node.name == "call"
-                    call_function(receiver, node.arguments, node.location)
-
+                    if block_value
+                        runtime_error(InterpreterError, "Function#call does not accept a block", node)
+                    end
+                    invoke_block(receiver, args, node.location)
                 else
                     runtime_error(InterpreterError, "Unknown method '#{node.name}' for Function", node)
-
                 end
             else
                 runtime_error(TypeError, "Cannot call method '#{node.name}' on #{receiver.class}", node)
@@ -1678,27 +1821,45 @@ module Dragonstone
         end
 
 
-        private def call_array_method(array : Array(RuntimeValue), name : String, args : Array(RuntimeValue), node : AST::MethodCall)
+        private def call_array_method(array : Array(RuntimeValue), name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
             case name
 
             when "length", "size"
+                reject_block(block_value, "Array##{name}", node)
                 array.size.to_i64
 
             when "push"
+                reject_block(block_value, "Array##{name}", node)
                 args.each { |arg| array << arg }
                 array
                 
             when "pop"
+                reject_block(block_value, "Array##{name}", node)
                 array.pop?
 
             when "first"
+                reject_block(block_value, "Array##{name}", node)
                 array.first?
 
             when "last"
+                reject_block(block_value, "Array##{name}", node)
                 array.last?
 
             when "empty"
+                reject_block(block_value, "Array##{name}", node)
                 array.empty?
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                array.each do |element|
+                    invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
+                end
+                array
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Array", node)
@@ -1706,27 +1867,211 @@ module Dragonstone
             end
         end
 
-        private def call_string_method(string : String, name : String, args : Array(RuntimeValue), node : AST::MethodCall)
+        private def call_map_method(map : MapValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
             case name
 
             when "length", "size"
+                reject_block(block_value, "Map##{name}", node)
+                map.size.to_i64
+
+            when "keys"
+                reject_block(block_value, "Map##{name}", node)
+                map.keys.map { |key| key.as(RuntimeValue) }
+
+            when "values"
+                reject_block(block_value, "Map##{name}", node)
+                map.values.map { |value| value.as(RuntimeValue) }
+
+            when "empty"
+                reject_block(block_value, "Map##{name}", node)
+                map.empty?
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "Map##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+                end
+                map.each do |key, value|
+                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                end
+                map
+
+            when "each_key"
+                unless block_value
+                    runtime_error(InterpreterError, "Map##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+                end
+                map.each_key do |key|
+                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue)], node.location)
+                end
+                map
+
+            when "each_value"
+                unless block_value
+                    runtime_error(InterpreterError, "Map##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+                end
+                map.each_value do |value|
+                    invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
+                end
+                map
+
+            when "has_key?", "includes_key?", "key?"
+                reject_block(block_value, "Map##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+                end
+                map.has_key?(args.first)
+
+            when "has_value?", "value?"
+                reject_block(block_value, "Map##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+                end
+                map.has_value?(args.first)
+
+            when "delete"
+                reject_block(block_value, "Map##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+                end
+                map.delete(args.first)
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Map", node)
+
+            end
+        end
+
+        private def call_string_method(string : String, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "length", "size"
+                reject_block(block_value, "String##{name}", node)
                 string.size.to_i64
 
             when "upcase"
+                reject_block(block_value, "String##{name}", node)
                 string.upcase
 
             when "downcase"
+                reject_block(block_value, "String##{name}", node)
                 string.downcase
 
             when "reverse"
+                reject_block(block_value, "String##{name}", node)
                 string.reverse
 
             when "empty"
+                reject_block(block_value, "String##{name}", node)
                 string.empty?
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for String", node)
                 
+            end
+        end
+
+        private def call_range_method(range : RangeValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "Range##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
+                end
+                range.each do |element|
+                    invoke_block(
+                        block_value.not_nil!,
+                        [coerce_range_element(element)],
+                        node.location
+                    )
+                end
+                range
+
+            when "includes?", "include?"
+                reject_block(block_value, "Range##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Range##{name} expects 1 argument, got #{args.size}", node)
+                end
+                value = args.first
+                case range
+                when Range(Int64, Int64)
+                    range.includes?(to_int64(value, node))
+                when Range(Char, Char)
+                    char = if value.is_a?(Char)
+                        value
+                    elsif value.is_a?(String) && value.size == 1
+                        value[0]
+                    else
+                        runtime_error(TypeError, "Expected character value for Range", node)
+                    end
+                    range.includes?(char)
+                else
+                    runtime_error(InterpreterError, "Unsupported range type #{range.class}", node)
+                end
+
+            when "begin", "first"
+                reject_block(block_value, "Range##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
+                end
+                coerce_range_element(range.begin)
+
+            when "end", "last"
+                reject_block(block_value, "Range##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
+                end
+                coerce_range_element(range.end)
+
+            when "size"
+                reject_block(block_value, "Range##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
+                end
+                size = range.size
+                size.nil? ? nil : (size.is_a?(Int32) ? size.to_i64 : size)
+
+            when "to_a"
+                reject_block(block_value, "Range##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                range.each do |element|
+                    result << coerce_range_element(element)
+                end
+                result
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Range", node)
+
+            end
+        end
+
+        private def call_exception_method(exception : RaisedException, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            reject_block(block_value, "Exception##{name}", node)
+            unless args.empty?
+                runtime_error(InterpreterError, "Exception##{name} does not take arguments", node)
+            end
+
+            case name
+            when "message"
+                exception.message
+            when "class", "type"
+                exception.error.class.name.split("::").last
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Exception", node)
+
             end
         end
 
@@ -1736,7 +2081,7 @@ module Dragonstone
             
             if initializer
                 with_container(klass) do
-                    call_bound_method(instance, initializer.not_nil!, args, node.location, self_object: instance)
+                    call_bound_method(instance, initializer.not_nil!, args, nil, node.location, self_object: instance)
                 end
             elsif !args.empty?
                 runtime_error(TypeError, "#{klass.name}#initialize expects 0 arguments, got #{args.size}", node)
@@ -1744,8 +2089,11 @@ module Dragonstone
             instance
         end
 
-        private def call_function(func : Function, arg_nodes : Array(AST::Node), call_location : Location? = nil)
+        private def call_function(func : Function, arg_nodes : Array(AST::Node), block_value : Function?, call_location : Location? = nil)
             args = arg_nodes.map { |arg| arg.accept(self) }
+            if block_value
+                args << block_value.as(RuntimeValue)
+            end
             if args.size != func.parameters.size
                 runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{func.parameters.size} arguments, got #{args.size}", call_location)
             end
@@ -1776,16 +2124,21 @@ module Dragonstone
             result
         end
 
-        private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
-            if args.size != method_def.parameters.size
-                runtime_error(TypeError, "Method #{method_def.name} expects #{method_def.parameters.size} arguments, got #{args.size}", call_location)
+        private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), block_value : Function?, call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
+            final_args = args.dup
+            if block_value
+                final_args << block_value.as(RuntimeValue)
+            end
+
+            if final_args.size != method_def.parameters.size
+                runtime_error(TypeError, "Method #{method_def.name} expects #{method_def.parameters.size} arguments, got #{final_args.size}", call_location)
             end
 
             push_scope(method_def.closure.dup, method_def.type_closure.dup)
             current_scope["self"] = self_object || receiver
             scope_index = @scopes.size - 1
             method_def.typed_parameters.each_with_index do |param, index|
-                value = args[index]
+                value = final_args[index]
                 descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
                 ensure_type!(descriptor, value, call_location) if descriptor
                 current_scope[param.name] = value
@@ -1815,6 +2168,93 @@ module Dragonstone
             result
         end
 
+        private def invoke_block(block : Function, args : Array(RuntimeValue), call_location : Location? = nil)
+            if args.size != block.parameters.size
+                runtime_error(TypeError, "Block expects #{block.parameters.size} arguments, got #{args.size}", call_location)
+            end
+
+            push_scope(block.closure.dup, block.type_closure.dup)
+            scope_index = @scopes.size - 1
+            block.typed_parameters.each_with_index do |param, index|
+                value = args[index]
+                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                ensure_type!(descriptor, value, call_location) if descriptor
+                current_scope[param.name] = value
+                assign_type_to_scope(scope_index, param.name, descriptor)
+            end
+
+            result = nil
+            begin
+                loop do
+                    begin
+                        result = execute_block(block.body)
+                        break
+                    rescue e : RedoSignal
+                        next
+                    end
+                end
+            rescue e : ReturnValue
+                result = e.value
+            ensure
+                pop_scope
+            end
+            result
+        end
+
+        private def reject_block(block_value : Function?, feature : String, node : AST::MethodCall)
+            return unless block_value
+            runtime_error(InterpreterError, "#{feature} does not accept a block", node)
+        end
+
+        private def coerce_range_element(element)
+            case element
+            when Int32
+                element.to_i64
+            else
+                element
+            end
+        end
+
+        private def normalize_runtime_value(value, node : AST::Node) : RuntimeValue
+            case value
+            when Nil, Bool, Int32, Int64, Float64, String, Char, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException
+                value
+            when Array(RuntimeValue)
+                value
+            when Array
+                result = [] of RuntimeValue
+                value.each do |element|
+                    result << normalize_runtime_value(element, node)
+                end
+                result
+            when MapValue
+                value
+            when Hash
+                map = MapValue.new
+                value.each do |key, val|
+                    normalized_key = normalize_runtime_value(key, node)
+                    normalized_value = normalize_runtime_value(val, node)
+                    map[normalized_key] = normalized_value
+                end
+                map
+            else
+                runtime_error(InterpreterError, "Unsupported runtime value #{value.class}", node)
+            end
+        end
+
+        private def extract_call_arguments(node : AST::MethodCall) : NamedTuple(arg_nodes: Array(AST::Node), block: AST::BlockLiteral?)
+            arg_nodes = [] of AST::Node
+            block_node = nil
+            node.arguments.each do |argument|
+                if argument.is_a?(AST::BlockLiteral)
+                    block_node = argument.as(AST::BlockLiteral)
+                else
+                    arg_nodes << argument
+                end
+            end
+            {arg_nodes: arg_nodes, block: block_node}
+        end
+
         private def evaluate_arguments(nodes : Array(AST::Node)) : Array(RuntimeValue)
             nodes.map { |node| node.accept(self).as(RuntimeValue) }
         end
@@ -1833,40 +2273,87 @@ module Dragonstone
             result
         end
 
-        private def execute_block_with_rescue(statements : Array(AST::Node), rescue_clauses : Array(AST::RescueClause))
+        private def handle_rescue_clauses(rescue_clauses : Array(AST::RescueClause), error : InterpreterError, _node : AST::Node?) : NamedTuple(action: Symbol, result: RuntimeValue?)
+            return {action: :unhandled, result: nil} if rescue_clauses.empty?
+            clause = match_rescue_clause(error, rescue_clauses)
+            return {action: :unhandled, result: nil} unless clause
+
+            @exception_stack << error
+            begin
+                clause_execution = run_rescue_clause(clause, error)
+            ensure
+                @exception_stack.pop
+            end
+
+            clause_execution[:retry] ? {action: :retry, result: nil} : {action: :handled, result: clause_execution[:result]}
+        end
+
+        private def run_rescue_clause(clause : AST::RescueClause, error : InterpreterError) : NamedTuple(result: RuntimeValue?, retry: Bool)
+            push_scope(Scope.new, new_type_scope)
+            @rescue_depth += 1
+            if var = clause.exception_variable
+                current_scope[var] = RaisedException.new(error)
+            end
+
             result = nil
             begin
-                statements.each { |stmt| result = stmt.accept(self) }
-                result
-
+                clause.body.each { |stmt| result = stmt.accept(self) }
+                {result: result, retry: false}
+            rescue e : RetrySignal
+                {result: nil, retry: true}
             rescue e : ReturnValue
                 raise e
-
             rescue e : BreakSignal
                 raise e
-
             rescue e : NextSignal
                 raise e
+            rescue e : RedoSignal
+                raise e
+            ensure
+                @rescue_depth -= 1
+                pop_scope
+            end
+        end
 
-            rescue e : InterpreterError
-                clause = match_rescue_clause(e, rescue_clauses)
+        private def execute_block_with_rescue(statements : Array(AST::Node), rescue_clauses : Array(AST::RescueClause))
+            loop do
+                begin
+                    result = nil
+                    statements.each { |stmt| result = stmt.accept(self) }
+                    return result
 
-                if clause
-                    clause_result = nil
-                    clause.body.each { |stmt| clause_result = stmt.accept(self) }
-                    clause_result
-
-                else
+                rescue e : ReturnValue
                     raise e
 
+                rescue e : BreakSignal
+                    raise e
+
+                rescue e : NextSignal
+                    raise e
+
+                rescue e : RedoSignal
+                    raise e
+
+                rescue e : InterpreterError
+                    handling = handle_rescue_clauses(rescue_clauses, e, nil)
+                    case handling[:action]
+                    when :retry
+                        next
+                    when :handled
+                        return handling[:result]
+                    else
+                        raise e
+                    end
                 end
             end
         end
 
         private def match_rescue_clause(error : InterpreterError, rescue_clauses : Array(AST::RescueClause))
             return nil if rescue_clauses.empty?
+            full_name = error.class.name
+            simple_name = full_name.split("::").last
             rescue_clauses.find do |clause|
-                clause.exceptions.empty? || clause.exceptions.any? { |name| error.class.name.split("::").last == name }
+                clause.exceptions.empty? || clause.exceptions.any? { |name| name == simple_name || name == full_name }
             end
         end
 
@@ -2272,6 +2759,9 @@ module Dragonstone
             when Array(RuntimeValue)
                 "Array"
 
+            when Hash(RuntimeValue, RuntimeValue)
+                "Map"
+
             when FFIModule
                 "FFIModule"
 
@@ -2287,7 +2777,7 @@ module Dragonstone
             when Function
                 "Function"
 
-            when Range(Int64, Int64), Range(Float64, Float64), Range(Char, Char)
+            when Range(Int64, Int64), Range(Char, Char)
                 "Range"
 
             else
@@ -2304,6 +2794,10 @@ module Dragonstone
 
             when Array(RuntimeValue)
                 "[#{value.map { |v| format_value(v) }.join(", ")}]"
+
+            when Hash(RuntimeValue, RuntimeValue)
+                pairs = value.map { |k, v| "#{format_value(k)} -> #{format_value(v)}" }.join(", ")
+                "{#{pairs}}"
 
             when Nil
                 "nil"

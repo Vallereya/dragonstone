@@ -1,7 +1,19 @@
-# Using do...end for a multi-line block
+# Simple helper that runs the provided block twice
+def twice(action)
+    action.call
+    action.call
+end
+
+# Using do...end for a multi-line block (zero-arg call needs empty parentheses)
 twice() do
     puts "Hello!"
 end
 
-# Using {} for a single-line block (equivalent to the above)
-twice { puts "Hello!" }
+# Using {} for a single-line block (same parentheses requirement)
+twice() { puts("Hello!") }
+
+# Blocks can declare parameters with | |, matching Array#each
+numbers = [1, 2, 3]
+numbers.each do |number|
+    puts "Number: #{number}"
+end

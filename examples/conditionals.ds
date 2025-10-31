@@ -6,6 +6,8 @@ end
 
 if x > 5
     puts "x is greater than 5"
+
 else
-    puts "x is not greater than 5"  
+    puts "x is not greater than 5" 
+     
 end

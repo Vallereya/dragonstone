@@ -19,10 +19,9 @@ enum Direction
     West
 end
 
-# do isnt implemented yet....
-# (.each to iterate over all defined members of the enum.)
-Direction.each do | direction | 
-   puts direction
+# (.each iterates over all defined members of the enum.)
+Direction.each do |direction|
+    puts "Direction: #{direction}"
 end
 
 # Example 3
