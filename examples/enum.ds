@@ -20,9 +20,10 @@ enum Direction
 end
 
 # do isnt implemented yet....
-# Direction.each do |direction| # (.each to iterate over all defined members of the enum.)
-#    puts direction
-# end
+# (.each to iterate over all defined members of the enum.)
+Direction.each do | direction | 
+   puts direction
+end
 
 # Example 3
 enum StatusCodes(code: int)

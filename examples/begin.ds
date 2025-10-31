@@ -1,0 +1,5 @@
+begin
+    puts "Inside begin block"
+ensure
+    puts "This always runs"
+end

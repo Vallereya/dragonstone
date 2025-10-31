@@ -1,0 +1,14 @@
+class Person
+    property name: str
+
+    def initialize(name: str)
+        self.name = name  # Using self to access the setter method
+    end
+
+    def greet
+        puts "Hello, my name is #{self.name}"  # Using self to access the property
+    end
+end
+
+person = Person.new("Jules")
+person.greet

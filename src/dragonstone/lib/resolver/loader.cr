@@ -2,6 +2,12 @@
 # ----------- Loader --------------
 # ---------------------------------
 module Dragonstone
+    # Forward declare Runtime::Engine so Importer type annotations compile
+    module Runtime
+        class Engine
+        end
+    end
+
     class Importer
         @runtime : Runtime::Engine
 

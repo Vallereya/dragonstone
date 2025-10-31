@@ -1,0 +1,12 @@
+attempts = 0
+
+begin
+    attempts += 1
+    puts "Attempt #{attempts}"
+    raise "Something went wrong!" if attempts < 3
+rescue
+    puts "Caught an exception. Retrying..."
+    retry if attempts < 5 # Limit retries to 5 attempts
+end
+
+puts "Operation completed or maximum retries reached."

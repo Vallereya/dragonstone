@@ -1,0 +1,7 @@
+# Using do...end for a multi-line block
+twice() do
+    puts "Hello!"
+end
+
+# Using {} for a single-line block (equivalent to the above)
+twice { puts "Hello!" }

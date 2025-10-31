@@ -1,7 +1,13 @@
-def foo
-  loop do
-    break "bar"
-  end
+i = 0
+
+while i < 10
+    i += 1
+
+    if i == 5
+        break
+    end
+
+    puts i
 end
 
-puts foo
+puts "Loop ended at i = #{i}"

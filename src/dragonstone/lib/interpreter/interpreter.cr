@@ -6,6 +6,7 @@ require "../lexer/*"
 require "../parser/*"
 require "../codegen/*"
 require "../typing/*"
+require "../runtime/ffi_module"
 
 module Dragonstone
     alias RangeValue = Range(Int64, Int64) | Range(Float64, Float64) | Range(Char, Char)
@@ -51,6 +52,7 @@ module Dragonstone
         def parameters : Array(String)
             @parameter_names
         end
+
     end
 
     class MethodDefinition
@@ -74,6 +76,20 @@ module Dragonstone
         def parameters : Array(String)
             @parameter_names
         end
+
+        def dup_with_owner(new_owner : DragonModule) : MethodDefinition
+            MethodDefinition.new(
+                @name,
+                @typed_parameters.dup,
+                @body.dup,
+                @closure.dup,
+                @type_closure.dup,
+                new_owner,
+                @rescue_clauses.dup,
+                @return_type,
+                visibility: @visibility
+            )
+        end
     end
 
     class DragonModule
@@ -90,6 +106,12 @@ module Dragonstone
 
         def lookup_method(name : String) : MethodDefinition?
             @methods[name]?
+        end
+
+        def each_method
+            @methods.each do |name, method|
+                yield name, method
+            end
         end
 
         def constant?(name : String) : Bool
@@ -497,12 +519,14 @@ module Dragonstone
         end
 
         def visit_case_statement(node : AST::CaseStatement) : RuntimeValue?
+            return execute_select_statement(node) if node.select?
+
             target = node.expression.try &.accept(self)
             node.when_clauses.each do |clause|
                 clause.conditions.each do |condition|
                     value = condition.accept(self)
                     match = if node.expression
-                            value == target
+                            case_match?(value, target, node)
                         else
                             truthy?(value)
                         end
@@ -510,6 +534,114 @@ module Dragonstone
                 end
             end
             execute_block(node.else_block || [] of AST::Node)
+        end
+
+        private def execute_select_statement(node : AST::CaseStatement) : RuntimeValue?
+            node.when_clauses.each do |clause|
+                clause.conditions.each do |condition|
+                    result = condition.accept(self)
+                    if truthy?(result)
+                        return execute_block(clause.block)
+                    end
+                end
+            end
+            execute_block(node.else_block || [] of AST::Node)
+        end
+
+        private def case_match?(condition_value, target, node : AST::Node) : Bool
+            if target.nil?
+                return condition_value.nil?
+            end
+
+            case condition_value
+            when RangeValue
+                range_contains?(condition_value, target, node)
+            when DragonClass
+                if target.is_a?(DragonInstance)
+                    within_hierarchy?(target.as(DragonInstance).klass, condition_value)
+                else
+                    false
+                end
+            when DragonEnum
+                target.is_a?(DragonEnumMember) && target.as(DragonEnumMember).enum == condition_value
+            when DragonEnumMember
+                target == condition_value
+            when DragonModule
+                target == condition_value
+            else
+                condition_value == target
+            end
+        end
+
+        private def range_contains?(range : RangeValue, value, node : AST::Node) : Bool
+            case range
+            when Range(Int64, Int64)
+                if value.is_a?(Int64)
+                    range.includes?(value)
+                elsif value.is_a?(Int32)
+                    range.includes?(value.to_i64)
+                else
+                    false
+                end
+            when Range(Float64, Float64)
+                if value.is_a?(Float64)
+                    range.includes?(value)
+                elsif value.is_a?(Int64)
+                    range.includes?(value.to_f64)
+                elsif value.is_a?(Int32)
+                    range.includes?(value.to_f64)
+                else
+                    false
+                end
+            when Range(Char, Char)
+                value.is_a?(Char) && range.includes?(value)
+            else
+                runtime_error(TypeError, "Unsupported range type #{range.class}", node)
+            end
+        end
+
+        private def triple_equals(left, right, node : AST::Node) : Bool
+            case left
+            when RangeValue
+                range_contains?(left, right, node)
+            when DragonClass
+                if right.is_a?(DragonInstance)
+                    within_hierarchy?(right.as(DragonInstance).klass, left)
+                else
+                    false
+                end
+            when DragonEnum
+                right.is_a?(DragonEnumMember) && right.as(DragonEnumMember).enum == left
+            when DragonModule
+                left == right
+            else
+                left == right
+            end
+        end
+
+        private def resolve_extend_target(container : DragonModule, expr : AST::Node)
+            if expr.is_a?(AST::Variable) && expr.name == "self"
+                container
+            else
+                expr.accept(self)
+            end
+        end
+
+        private def extend_container_with(container : DragonModule, value, node : AST::Node)
+            extension = case value
+            when DragonModule
+                value
+            when DragonClass
+                value
+            else
+                runtime_error(TypeError, "Cannot extend #{container.name} with #{describe_runtime_value(value)}", node)
+            end
+
+            return if extension == container
+
+            extension.each_method do |name, method|
+                container.define_method(name, method.dup_with_owner(container))
+            end
         end
 
         def visit_while_statement(node : AST::WhileStatement) : RuntimeValue?
@@ -612,6 +744,7 @@ module Dragonstone
             with_container(mod) do
                 @container_definition_depth += 1
                 push_scope(Scope.new, new_type_scope)
+                current_scope["self"] = mod
 
                 begin
                     execute_block(node.body)
@@ -667,6 +800,7 @@ module Dragonstone
             with_container(klass) do
                 @container_definition_depth += 1
                 push_scope(Scope.new, new_type_scope)
+                current_scope["self"] = klass
                 begin
                     execute_block(node.body)
                 ensure
@@ -713,6 +847,7 @@ module Dragonstone
             with_container(struct_type) do
                 @container_definition_depth += 1
                 push_scope(Scope.new, new_type_scope)
+                current_scope["self"] = struct_type
                 begin
                     execute_block(node.body)
                 ensure
@@ -773,6 +908,20 @@ module Dragonstone
 
         def visit_enum_member(node : AST::EnumMember) : RuntimeValue?
             runtime_error(InterpreterError, "Enum members cannot be evaluated directly", node)
+        end
+
+        def visit_extend_statement(node : AST::ExtendStatement) : RuntimeValue?
+            container = current_container
+            unless container
+                runtime_error(InterpreterError, "'extend' can only be used inside modules or classes", node)
+            end
+
+            node.targets.each do |target_expr|
+                target = resolve_extend_target(container.not_nil!, target_expr)
+                extend_container_with(container.not_nil!, target, node)
+            end
+
+            nil
         end
 
         def visit_break_statement(node : AST::BreakStatement) : RuntimeValue?
@@ -891,6 +1040,9 @@ module Dragonstone
 
             when :&, :|, :^, :<<, :>>
                 bitwise_values(left, operator, right, node)
+
+            when :===
+                triple_equals(left, right, node)
 
             when :==
                 left == right
@@ -1456,7 +1608,9 @@ module Dragonstone
                 value
 
             when Array
-                value.map { |element| from_ffi_value(element) }
+                converted = [] of RuntimeValue
+                value.each { |element| converted << from_ffi_value(element) }
+                converted
 
             else
                 nil
@@ -1513,7 +1667,9 @@ module Dragonstone
                 value
 
             when Array
-                value.map { |element| from_ffi_value(element) }
+                converted = [] of RuntimeValue
+                value.each { |element| converted << from_ffi_value(element) }
+                converted
 
             else
                 nil
@@ -1785,6 +1941,7 @@ module Dragonstone
 
         private def lookup_container_constant(name : String)
             @container_stack.reverse_each do |container|
+                return container if name == "self"
                 return container.fetch_constant(name) if container.constant?(name)
             end
             nil
@@ -1871,7 +2028,13 @@ module Dragonstone
         private def constant_type_match?(constant : RuntimeValue, value : RuntimeValue)
             case constant
             when DragonClass
-                value.is_a?(DragonInstance) && value.klass == constant
+                if value.is_a?(DragonInstance)
+                    within_hierarchy?(value.as(DragonInstance).klass, constant)
+                elsif value.is_a?(DragonClass)
+                    within_hierarchy?(value.as(DragonClass), constant)
+                else
+                    false
+                end
             when DragonModule
                 value.is_a?(DragonModule) && value == constant
             when Function

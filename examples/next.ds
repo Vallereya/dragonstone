@@ -1,0 +1,11 @@
+i = 0
+
+while i < 5
+    i += 1
+
+    if i == 3
+        next # Skip printing 3
+    end
+
+    puts i
+end

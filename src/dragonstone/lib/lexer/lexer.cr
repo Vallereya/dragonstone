@@ -80,6 +80,7 @@ module Dragonstone
             enum
             struct
             alias
+            extend
         ]
 
         getter source_name : String
@@ -576,6 +577,7 @@ module Dragonstone
                     when "enum" then :ENUM
                     when "struct" then :STRUCT
                     when "alias" then :ALIAS
+                    when "extend" then :EXTEND
                     else
                         :IDENTIFIER
                     end

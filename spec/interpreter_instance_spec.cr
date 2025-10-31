@@ -10,6 +10,96 @@ private def run_program(source : String, typing : Bool = false)
     interpreter.interpret(ast)
 end
 
+describe "Case and select control flow" do
+    it "matches ranges and classes using case" do
+        source = <<-DS
+        class Animal
+            def speak
+                "animal"
+            end
+        end
+
+        class Dog < Animal
+        end
+
+        def classify(value)
+            case value
+            when 1..3
+                "small"
+            when Animal
+                value.speak
+            else
+                "unknown"
+            end
+        end
+
+        puts classify(2)
+        puts classify(Dog.new)
+        puts classify("x")
+        DS
+
+        run_program(source).should eq("small\nanimal\nunknown\n")
+    end
+
+    it "chooses the first ready branch in select" do
+        source = <<-DS
+        select
+        when false
+            puts "first"
+        when true
+            puts "second"
+        else
+            puts "fallback"
+        end
+        DS
+
+        run_program(source).should eq("second\n")
+    end
+end
+
+describe "Self types" do
+    it "enforces return types that reference self" do
+        source = <<-DS
+        class Builder
+            def clone_self : self
+                self
+            end
+
+            def wrong_self : self
+                "oops"
+            end
+        end
+
+        Builder.new.clone_self
+        Builder.new.wrong_self
+        DS
+
+        expect_raises(Dragonstone::TypeError) do
+            run_program(source, typing: true)
+        end
+    end
+end
+
+describe "Module extension" do
+    it "copies methods from the extended module" do
+        source = <<-DS
+        module Shared
+            def hello
+                "hi"
+            end
+        end
+
+        module Greeter
+            extend Shared
+        end
+
+        puts Greeter.hello
+        DS
+
+        run_program(source).should eq("hi\n")
+    end
+end
+
 describe "Constant path resolution" do
     it "resolves nested constants and classes through scope resolution" do
         source = <<-DS

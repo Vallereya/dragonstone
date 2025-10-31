@@ -228,6 +228,8 @@ module Dragonstone
                 parse_struct_declaration
             when :ALIAS
                 parse_alias_definition
+            when :EXTEND
+                parse_extend_statement
             when :GETTER
                 parse_accessor_macro(:getter)
             when :SETTER
@@ -276,6 +278,17 @@ module Dragonstone
             value = parse_expression
             location = name_token.location || keyword.location
             AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
+        end
+
+        private def parse_extend_statement : AST::Node
+            extend_token = expect(:EXTEND)
+            targets = [] of AST::Node
+            targets << parse_expression
+            while current_token.type == :COMMA
+                advance
+                targets << parse_expression
+            end
+            AST::ExtendStatement.new(targets, location: extend_token.location)
         end
 
         private def parse_visibility_prefixed_statement(visibility : Symbol) : AST::Node
@@ -576,7 +589,8 @@ module Dragonstone
                 else_block = parse_block([:END])
             end
             expect(:END)
-            AST::CaseStatement.new(expression, when_clauses, else_block, location: case_token.location)
+            kind = case_token.type == :SELECT ? :select : :case
+            AST::CaseStatement.new(expression, when_clauses, else_block, kind: kind, location: case_token.location)
         end
         
         private def parse_when_clause : AST::WhenClause

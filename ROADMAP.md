@@ -85,12 +85,12 @@
 ```
             - Method cache w/ fallback path.
             - class creation, inheritance, method lookup, operator overrides
-            - unless, until, break/next/redo
+            ✅ unless, until, break/else
             - concurrency, singleton methods, method tables
             - implement optional explicit typing
             - requiring files (support for urls)
             - Exception; RuntimeError, TypeError, etc
-            - raise, begin/rescue/else/ensure; VM unwind stack w/ exception objects
+            - raise, begin/rescue/redo/do/next/ensure; VM unwind stack w/ exception objects
 ```
 
 ###     <h2 style="text-align:center;">         Phase Six

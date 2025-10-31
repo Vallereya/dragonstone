@@ -385,7 +385,9 @@ module Dragonstone
                 value
 
             when Array
-                value.map { |element| from_ffi_value(element) }
+                converted = [] of Bytecode::Value
+                value.each { |element| converted << from_ffi_value(element) }
+                converted
 
             else
                 nil

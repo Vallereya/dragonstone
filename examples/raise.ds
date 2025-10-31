@@ -1,0 +1,9 @@
+def divide(a: int, b: int)
+    if b == 0
+        raise "Cannot divide by zero"
+    end
+    a / b
+end
+
+puts divide(10, 2)  # Outputs: 5
+puts divide(10, 0)  # Raises an exception with message "Cannot divide by zero"

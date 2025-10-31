@@ -10,4 +10,5 @@ module Dragonstone
     end
 end
 
-use "./strings/*"
+use "./strings/**"
+use "./utilities/**"
