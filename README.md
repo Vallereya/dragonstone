@@ -25,11 +25,13 @@
 </p>
 
 ## What is Dragonstone?
-Dragonstone is a work in progress with many core features either not yet implemented or are only partially implemented, its a Ruby-Like/Crystal-Like programming language built using Ruby, Crystal and C. The goal of this language is meant to provide programmers with happiness and choice. The choice of using interpreted for quick scripting, compiled for heavy applications, dynamic by default but with the ability to enable static, interop with C is the goal but might include Ruby and Crystal interop as well, ability to optionally use a garbage collector, or ownership. But, easy enough to pickup for a newcomer.
+Dragonstone is a general purpose, high-level, object-oriented programming language. In its current form it is an interpreted language, inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
 
-P.S. Just a heads up, the codebase is an absolute messy state and some things might not make sense or are duplicated. This is v4 of the project after all and after multiple architecture shifts (v1 pure Ruby -> v2 Ruby/C -> v3 Crystal/Ruby/C -> v4 Crystal/C), Ruby’s gone for performance reasons, interop is bare-bones (currently just puts/printf), garbage collection/ownership is not yet implemented. These will be ironed out and the `Great Refactor` will come before v0.1.0 so don't worry. It's my first time making a language sorry, Thank you.
+*This language is a work in progress.*
 
-P.S.S. oh and its super slow rn 1 billion iterations take 50-60 mins 🤷🏽‍♀️ working on it.
+**P.S.** Just a heads up, it was built with windows and is stable so you can download/clone and get up and running easy; However, I have not tested the build process on Linux or MacOS yet. 
+
+<!-- And, this language is a work in progress. There are a ton of things already done but some of the more interesting core features are either are not yet implemented or are only partially implemented. However, these will be ironed out and the `Great Refactor` will come before v0.1.0 so don't worry. It's my first time making a language sorry, Thank you. -->
 
 ## Project Setup
 
@@ -114,6 +116,26 @@ P.S.S. oh and its super slow rn 1 billion iterations take 50-60 mins 🤷🏽‍
     🔥.道
 ```
 
+```crystal
+    ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
+    puts ages["Jules"]
+```
+
+```crystal
+    module MyModule
+        con Test = 100
+
+        class MyClass
+            def greet
+                "Hello from MyClass"
+            end
+        end
+    end
+
+    puts MyModule::Test
+    puts MyModule::MyClass.greet
+```
+
 #### Some More Examples with Optional Types!
 ```crystal
     name: str = "Peet"
@@ -133,6 +155,36 @@ P.S.S. oh and its super slow rn 1 billion iterations take 50-60 mins 🤷🏽‍
     end
 
     😱("V")
+```
+
+```crystal
+    class Person
+        property name: str
+
+        def initialize(name: str)
+            self.name = name
+        end
+
+        def greet
+            puts "Hello, my name is #{self.name}"
+        end
+    end
+
+    person = Person.new("Jules")
+    person.greet
+```
+
+```crystal
+    struct Point
+        property x: int
+        property y: int
+
+        def initialize(@x: int, @y: int)
+        end
+    end
+
+    point = Point.new(10, 20)
+    puts "x: #{point.x}, y: #{point.y}"
 ```
 
 See the `examples/` directory for more sample `.ds` files.
