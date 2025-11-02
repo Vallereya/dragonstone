@@ -4,9 +4,10 @@
 require "unicode"
 require "string/grapheme"
 require "../resolver/*"
+require "../runtime/symbol"
 
 module Dragonstone
-    alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | Array(Tuple(Symbol, String))
+    alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | SymbolValue | Array(Tuple(Symbol, String))
 
     class Token
         getter type : Symbol
@@ -356,6 +357,8 @@ module Dragonstone
                     if peek_char == ':'
                         add_token(:DOUBLE_COLON, "::", @line, @column, 2)
                         advance(2)
+                    elsif symbol_literal_start?
+                        scan_symbol
                     else
                         add_token(:COLON, ":", @line, @column, 1)
                         advance
@@ -680,6 +683,41 @@ module Dragonstone
 
             advance
             add_token(:CHAR, value, start_line, start_col, 3)
+        end
+
+        private def scan_symbol
+            start_line = @line
+            start_col = @column
+            advance
+
+            char = current_char
+            unless char && identifier_start?(char)
+                raise error_at(start_line, start_col, "Invalid symbol literal", length: 1)
+            end
+
+            identifier = String::Builder.new
+            identifier << char
+            advance
+
+            while (char = current_char) && identifier_part?(char)
+                identifier << char
+                advance
+            end
+
+            name = identifier.to_s
+            length = @column - start_col
+            add_token(:SYMBOL, SymbolValue.new(name), start_line, start_col, length)
+        end
+
+        private def symbol_literal_start? : Bool
+            next_char = peek_char
+            return false unless next_char && identifier_start?(next_char)
+
+            return true if @pos.zero?
+            previous_index = @pos - 1
+            previous_char = @source[previous_index]?
+            return true unless previous_char && identifier_part?(previous_char)
+            false
         end
 
         private def identifier_start?(char : Char) : Bool

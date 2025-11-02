@@ -7,6 +7,7 @@ require "../parser/*"
 require "../codegen/*"
 require "../typing/*"
 require "../runtime/ffi_module"
+require "../runtime/symbol"
 
 module Dragonstone
     class RaisedException
@@ -26,11 +27,27 @@ module Dragonstone
     end
 
     alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException
     alias MapValue = Hash(RuntimeValue, RuntimeValue)
     alias ScopeValue = RuntimeValue | ConstantBinding
     alias Scope = Hash(String, ScopeValue)
     alias TypeScope = Hash(String, Typing::Descriptor)
+
+    class TupleValue
+        getter elements : Array(RuntimeValue)
+
+        def initialize(elements : Array(RuntimeValue))
+            @elements = elements
+        end
+    end
+
+    class NamedTupleValue
+        getter entries : Hash(SymbolValue, RuntimeValue)
+
+        def initialize(entries : Hash(SymbolValue, RuntimeValue))
+            @entries = entries
+        end
+    end
 
         class ReturnValue < Exception
         getter value : RuntimeValue?
@@ -515,6 +532,24 @@ module Dragonstone
 
         def visit_array_literal(node : AST::ArrayLiteral) : RuntimeValue?
             node.elements.map { |element| element.accept(self).as(RuntimeValue) }
+        end
+
+        def visit_tuple_literal(node : AST::TupleLiteral) : RuntimeValue?
+            elements = node.elements.map { |element| element.accept(self).as(RuntimeValue) }
+            TupleValue.new(elements)
+        end
+
+        def visit_named_tuple_literal(node : AST::NamedTupleLiteral) : RuntimeValue?
+            entries = {} of SymbolValue => RuntimeValue
+            node.entries.each do |entry|
+                value = entry.value.accept(self).as(RuntimeValue)
+                if type_annotation = entry.type_annotation
+                    descriptor = typing_enabled? ? descriptor_for(type_annotation) : nil
+                    ensure_type!(descriptor, value, entry.value) if descriptor
+                end
+                entries[SymbolValue.new(entry.name)] = value
+            end
+            NamedTupleValue.new(entries)
         end
 
         def visit_map_literal(node : AST::MapLiteral) : RuntimeValue?
@@ -1063,12 +1098,22 @@ module Dragonstone
         private def fetch_index_value(object, index, node : AST::Node)
             case object
 
+            when TupleValue
+                idx = index_to_int(index, node)
+                object.elements[idx]? || nil
+
+            when NamedTupleValue
+                key = coerce_named_tuple_key(index, node)
+                object.entries[key]?
+
             when Array(RuntimeValue)
                 idx = index_to_int(index, node)
                 object[idx]? || nil
+
             when MapValue
                 key = index.as(RuntimeValue)
                 object[key]?
+
             when String
                 idx = index_to_int(index, node)
                 object[idx]? || nil
@@ -1080,9 +1125,16 @@ module Dragonstone
         private def assign_index_value(object, index, value, node : AST::Node)
             case object
 
+            when TupleValue
+                runtime_error(TypeError, "Cannot assign index on Tuple", node)
+
+            when NamedTupleValue
+                runtime_error(TypeError, "Cannot assign index on NamedTuple", node)
+
             when Array(RuntimeValue)
                 idx = index_to_int(index, node)
                 object[idx] = value
+
             when MapValue
                 key = index.as(RuntimeValue)
                 object[key] = value.as(RuntimeValue)
@@ -1106,6 +1158,17 @@ module Dragonstone
             else
                 runtime_error(TypeError, "Index must be a number", node)
 
+            end
+        end
+
+        private def coerce_named_tuple_key(index, node : AST::Node) : SymbolValue
+            case index
+            when SymbolValue
+                index
+            when String
+                SymbolValue.new(index)
+            else
+                runtime_error(TypeError, "NamedTuple index must be a Symbol or String", node)
             end
         end
 
@@ -1528,6 +1591,12 @@ module Dragonstone
 
             case receiver
 
+            when TupleValue
+                call_tuple_method(receiver, node.name, args, block_value, node)
+
+            when NamedTupleValue
+                call_named_tuple_method(receiver, node.name, args, block_value, node)
+
             when Array(RuntimeValue)
                 call_array_method(receiver, node.name, args, block_value, node)
 
@@ -1820,6 +1889,97 @@ module Dragonstone
             end
         end
 
+
+        private def call_tuple_method(tuple : TupleValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "length", "size"
+                reject_block(block_value, "Tuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
+                end
+                tuple.elements.size.to_i64
+
+            when "first"
+                reject_block(block_value, "Tuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
+                end
+                tuple.elements.first?
+
+            when "last"
+                reject_block(block_value, "Tuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
+                end
+                tuple.elements.last?
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "Tuple##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
+                end
+                tuple.elements.each do |element|
+                    invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
+                end
+                tuple
+
+            when "to_a"
+                reject_block(block_value, "Tuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
+                end
+                tuple.elements.map { |value| value }
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Tuple", node)
+
+            end
+        end
+
+        private def call_named_tuple_method(tuple : NamedTupleValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "length", "size"
+                reject_block(block_value, "NamedTuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
+                end
+                tuple.entries.size.to_i64
+
+            when "keys"
+                reject_block(block_value, "NamedTuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
+                end
+                tuple.entries.keys.map(&.as(RuntimeValue))
+
+            when "values"
+                reject_block(block_value, "NamedTuple##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
+                end
+                tuple.entries.values.map { |value| value.as(RuntimeValue) }
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "NamedTuple##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
+                end
+                tuple.entries.each do |key, value|
+                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                end
+                tuple
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for NamedTuple", node)
+
+            end
+        end
 
         private def call_array_method(array : Array(RuntimeValue), name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
             case name
@@ -2217,7 +2377,7 @@ module Dragonstone
 
         private def normalize_runtime_value(value, node : AST::Node) : RuntimeValue
             case value
-            when Nil, Bool, Int32, Int64, Float64, String, Char, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException
+            when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException, TupleValue, NamedTupleValue
                 value
             when Array(RuntimeValue)
                 value
@@ -2664,6 +2824,12 @@ module Dragonstone
                 "#{value.name} module"
             when Nil
                 "nil"
+            when TupleValue
+                "Tuple"
+            when NamedTupleValue
+                "NamedTuple"
+            when SymbolValue
+                "Symbol"
             else
                 value.class.name
             end
@@ -2756,11 +2922,20 @@ module Dragonstone
             when Nil
                 "Nil"
 
+            when SymbolValue
+                "Symbol"
+
             when Array(RuntimeValue)
                 "Array"
 
             when Hash(RuntimeValue, RuntimeValue)
                 "Map"
+
+            when TupleValue
+                "Tuple"
+
+            when NamedTupleValue
+                "NamedTuple"
 
             when FFIModule
                 "FFIModule"
@@ -2799,6 +2974,13 @@ module Dragonstone
                 pairs = value.map { |k, v| "#{format_value(k)} -> #{format_value(v)}" }.join(", ")
                 "{#{pairs}}"
 
+            when TupleValue
+                "{#{value.elements.map { |element| format_value(element) }.join(", ")}}"
+
+            when NamedTupleValue
+                pairs = value.entries.map { |key, val| "#{key.name}: #{format_value(val)}" }.join(", ")
+                "{#{pairs}}"
+
             when Nil
                 "nil"
 
@@ -2807,6 +2989,9 @@ module Dragonstone
 
             when FFIModule
                 "ffi"
+
+            when SymbolValue
+                value.inspect
 
             else
                 value.to_s

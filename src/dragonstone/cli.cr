@@ -217,6 +217,19 @@ module Dragonstone
                 io.puts "#{prefix}ArrayLiteral:"
                 node.elements.each { |elem| print_ast(elem, indent + 1, io) }
 
+            when Dragonstone::AST::TupleLiteral
+                io.puts "#{prefix}TupleLiteral:"
+                node.elements.each { |elem| print_ast(elem, indent + 1, io) }
+
+            when Dragonstone::AST::NamedTupleLiteral
+                io.puts "#{prefix}NamedTupleLiteral:"
+                node.entries.each do |entry|
+                    entry_label = "#{entry.name}:"
+                    entry_label += " #{entry.type_annotation.not_nil!.to_source}" if entry.type_annotation
+                    io.puts "#{prefix}  #{entry_label}"
+                    print_ast(entry.value, indent + 2, io)
+                end
+
             when Dragonstone::AST::IndexAccess
                 io.puts "#{prefix}IndexAccess:"
                 print_ast(node.object, indent + 1, io)

@@ -6,10 +6,11 @@ require "../runtime/ffi_module"
 require "../lexer/*"
 require "../parser/*"
 require "../codegen/ast"
+require "../runtime/symbol"
 
 module Dragonstone
     module Bytecode
-        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Symbol | Array(Value) | CompiledCode | NamedTuple(name: String, params: Array(Value), code: CompiledCode) | FFIModule
+        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | CompiledCode | NamedTuple(name: String, params: Array(Value), code: CompiledCode) | FFIModule
     end
 
     record CompiledCode,
@@ -503,3 +504,4 @@ module Dragonstone
         end
     end
 end
+
