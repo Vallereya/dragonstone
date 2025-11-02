@@ -269,6 +269,7 @@ module Dragonstone
         private def parse_expression_statement : AST::Node
             expression = parse_expression
             if expression.is_a?(AST::Variable)
+                return expression if expression.name == "self"
                 AST::MethodCall.new(expression.name, [] of AST::Node, nil, location: expression.location)
             else
                 expression
@@ -509,9 +510,17 @@ module Dragonstone
         end
 
         private def parse_optional_return_type : AST::TypeExpression?
-            return nil unless current_token.type == :THIN_ARROW
-            expect(:THIN_ARROW)
-            parse_type_expression
+            case current_token.type
+            when :THIN_ARROW
+                advance
+                parse_type_expression
+            when :COLON
+                # Allow Crystal/Ruby style return type syntax: def foo : Type
+                advance
+                parse_type_expression
+            else
+                nil
+            end
         end
 
         private def parse_exception_list(initial_token : Token? = nil) : Array(String)
@@ -1172,7 +1181,11 @@ module Dragonstone
 
             case left
             when AST::Variable
-                AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
+                if constant_name?(left.name) && operator.nil?
+                    AST::ConstantDeclaration.new(left.name, value, left.type_annotation, location: location)
+                else
+                    AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
+                end
             when AST::InstanceVariable
                 AST::InstanceVariableAssignment.new(left.name, value, operator: operator, location: location)
             when AST::IndexAccess
@@ -1188,6 +1201,12 @@ module Dragonstone
             else
                 error("Invalid assignment target", token)
             end
+        end
+
+        private def constant_name?(name : String) : Bool
+            return false if name.empty?
+            first = name[0]
+            first >= 'A' && first <= 'Z'
         end
 
         private def parse_modifier_condition : Tuple(AST::Node?, Symbol?)

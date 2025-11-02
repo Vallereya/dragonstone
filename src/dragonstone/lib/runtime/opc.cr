@@ -13,6 +13,8 @@ module Dragonstone
         SUB             = 11
         MUL             = 12
         DIV             = 13
+        NEG             = 14
+        POS             = 15
 
         # Comparisons
         EQ              = 20
@@ -21,6 +23,8 @@ module Dragonstone
         LE              = 23
         GT              = 24
         GE              = 25
+        NOT             = 26
+        BIT_NOT         = 27
 
         # Control Flow
         JMP             = 30    # [JMP,  target_index]

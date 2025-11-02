@@ -3,12 +3,27 @@
 
 # Ruby's puts
 result = ffi.call_ruby("puts", ["Hello from Ruby!"])
-puts result
+
+if result.nil?
+    puts "Ruby return value: nil"
+else
+    puts "Ruby return value: #{result}"
+end
 
 # Crystal's puts
 result = ffi.call_crystal("puts", ["Hello from Crystal!"])
-puts result
 
-# C's printf
-result = ffi.call_c("printf", ["Hello from C!"])
-puts result
+if result.nil?
+    puts "Crystal return value: nil"
+else
+    puts "Crystal return value: #{result}"
+end
+
+# C's printf (printf does not add a newline, so include one)
+result = ffi.call_c("printf", ["Hello from C!\n"])
+
+if result.nil?
+    puts "C return value: nil"
+else
+    puts "C return value: #{result}"
+end

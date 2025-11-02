@@ -12,48 +12,130 @@ require "../resolver/*"
 module Dragonstone
     class VM
         include OPC
-        
+
+        class Frame
+            property code : CompiledCode
+            property ip : Int32
+            property stack_base : Int32
+            property locals : Array(Bytecode::Value?)?
+            property locals_defined : Array(Bool)?
+
+            def initialize(@code : CompiledCode, @stack_base : Int32, use_locals : Bool = false)
+                @ip = 0
+                if use_locals
+                    size = @code.names.size
+                    @locals = Array(Bytecode::Value?).new(size) { nil }
+                    @locals_defined = Array(Bool).new(size) { false }
+                else
+                    @locals = nil
+                    @locals_defined = nil
+                end
+            end
+        end
+
         @bytecode : CompiledCode
-        @ip : Int32
         @stack : Array(Bytecode::Value)
         @globals : Hash(String, Bytecode::Value)
+        @stdout_io : IO
+        @log_to_stdout : Bool
+        @frames : Array(Frame)
+        @global_slots : Array(Bytecode::Value?)
+        @global_defined : Array(Bool)
+        @name_index_cache : Hash(String, Int32)
+        @globals_dirty : Bool
 
-        def initialize(@bytecode : CompiledCode)
-            @ip = 0
+        def initialize(@bytecode : CompiledCode, globals : Hash(String, Bytecode::Value)? = nil, *, stdout_io : IO = IO::Memory.new, log_to_stdout : Bool = false)
             @stack = [] of Bytecode::Value
-            @globals = {} of String => Bytecode::Value
+            @globals = globals ? globals.dup : {} of String => Bytecode::Value
+            @stdout_io = stdout_io
+            @log_to_stdout = log_to_stdout
+            @frames = [] of Frame
+            @global_slots = Array(Bytecode::Value?).new(@bytecode.names.size) { nil }
+            @global_defined = Array(Bool).new(@bytecode.names.size) { false }
+            @name_index_cache = {} of String => Int32
+            @bytecode.names.each_with_index do |name, idx|
+                @name_index_cache[name] = idx
+            end
+            @globals_dirty = false
 
             # Initialize FFI
             init_ffi_module
+            sync_globals_slots
         end
 
         private def init_ffi_module
-            @globals["ffi"] = FFIModule.new
+            @globals["ffi"] ||= FFIModule.new
+            if idx = @name_index_cache["ffi"]?
+                ensure_global_capacity(idx)
+                @global_slots[idx] = @globals["ffi"]
+                @global_defined[idx] = true
+            end
         end
-    
+
+        private def ensure_global_capacity(index : Int32)
+            if index >= @global_slots.size
+                new_size = index + 1
+                (@global_slots.size...new_size).each do
+                    @global_slots << nil
+                    @global_defined << false
+                end
+            end
+        end
+
+        private def rebuild_globals_map : Nil
+            fresh = {} of String => Bytecode::Value
+            @globals.each do |name, value|
+                fresh[name] = value if @name_index_cache[name]?.nil?
+            end
+
+            @name_index_cache.each do |name, idx|
+                next unless idx < @global_defined.size && @global_defined[idx]
+                value = @global_slots[idx]?
+                fresh[name] = value.nil? ? nil : value
+            end
+
+            @globals = fresh
+            @globals_dirty = false
+        end
+
+        private def sync_globals_slots
+            @globals.each do |name, value|
+                if idx = @name_index_cache[name]?
+                    ensure_global_capacity(idx)
+                    @global_slots[idx] = value
+                    @global_defined[idx] = true
+                end
+            end
+            @globals_dirty = false
+        end
+
+        def export_globals : Hash(String, Bytecode::Value)
+            rebuild_globals_map if @globals_dirty
+            @globals.dup
+        end
+
         def run : Bytecode::Value
+            reset_for_run
             loop do
                 opcode = fetch_byte
-                
+
                 case opcode
                 when OPC::HALT
-                    return pop
+                    return @stack.empty? ? nil : pop
                 when OPC::NOP
                     # nil
                 when OPC::CONST
                     idx = fetch_byte
-                    push(@bytecode.consts[idx])
+                    push(current_code.consts[idx])
                 when OPC::LOAD
                     name_idx = fetch_byte
-                    name = @bytecode.names[name_idx]
-                    value = @globals[name]?
-                    raise "Undefined variable: #{name}" unless value
-                    push(value)
+                    name = current_code.names[name_idx]
+                    push(resolve_variable(name_idx, name))
                 when OPC::STORE
                     name_idx = fetch_byte
-                    name = @bytecode.names[name_idx]
+                    name = current_code.names[name_idx]
                     value = peek
-                    @globals[name] = value
+                    store_variable(name_idx, name, value)
                 when OPC::POP
                     pop
                 when OPC::ADD
@@ -68,6 +150,12 @@ module Dragonstone
                 when OPC::DIV
                     b, a = pop, pop
                     push(div(a, b))
+                when OPC::NEG
+                    value = pop
+                    push(negate_value(value))
+                when OPC::POS
+                    value = pop
+                    push(unary_positive(value))
                 when OPC::EQ
                     b, a = pop, pop
                     push(a == b)
@@ -88,24 +176,31 @@ module Dragonstone
                     push(compare_ge(a, b))
                 when OPC::JMP
                     target = fetch_byte
-                    @ip = target
+                    current_frame.ip = target
                 when OPC::JMPF
                     target = fetch_byte
                     condition = pop
-                    @ip = target unless truthy?(condition)
+                    current_frame.ip = target unless truthy?(condition)
+                when OPC::NOT
+                    value = pop
+                    push(logical_not(value))
+                when OPC::BIT_NOT
+                    value = pop
+                    push(bitwise_not(value))
                 when OPC::PUTS
                     argc = fetch_byte
                     args = pop_values(argc)
-                    args.each { |arg| puts stringify(arg) }
+                    line = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    emit_output(line)
                     push(nil)
                 when OPC::TYPEOF
                     value = pop
                     push(type_of(value))
                 when OPC::DEBUG_PRINT
                     source_idx = fetch_byte
-                    source = @bytecode.consts[source_idx]
+                    source = current_code.consts[source_idx].to_s
                     value = pop
-                    puts "DEBUG: #{source} => #{stringify(value)}"
+                    emit_output("#{source} # => #{stringify(value)}")
                     push(value)
                 when OPC::CONCAT
                     b, a = pop, pop
@@ -125,35 +220,171 @@ module Dragonstone
                     argc = fetch_byte
                     args = pop_values(argc)
                     receiver = pop
-                    result = invoke_method(receiver, @bytecode.names[name_idx], args)
+                    result = invoke_method(receiver, current_code.names[name_idx], args)
                     push(result)
                 when OPC::CALL
                     argc = fetch_byte
                     name_idx = fetch_byte
                     args = pop_values(argc)
-                    result = call_function(@bytecode.names[name_idx], args)
-                    push(result)
+                    prepare_function_call(name_idx, args)
                 when OPC::MAKE_FUNCTION
                     name_idx = fetch_byte
                     params_idx = fetch_byte
                     code_idx = fetch_byte
-                    name = @bytecode.names[name_idx]
-                    params = @bytecode.consts[params_idx].as(Array(Bytecode::Value))
-                    code = @bytecode.consts[code_idx].as(CompiledCode)
+                    name = current_code.names[name_idx]
+                    params = current_code.consts[params_idx].as(Array(Bytecode::Value))
+                    code = current_code.consts[code_idx].as(CompiledCode)
                     func_value = {name: name, params: params, code: code}
                     push(func_value)
                 when OPC::RET
-                    return pop
+                    handle_return
                 else
                     raise "Unknown opcode: #{opcode}"
                 end
             end
         end
-    
+
         private def fetch_byte : Int32
-            byte = @bytecode.code[@ip]
-            @ip += 1
+            frame = current_frame
+            byte = frame.code.code[frame.ip]
+            frame.ip += 1
             byte
+        end
+
+        private def reset_for_run : Nil
+            @stack.clear
+            @frames.clear
+            push_frame(@bytecode, false)
+            init_ffi_module
+            sync_globals_slots
+        end
+
+        private def current_frame : Frame
+            @frames.last? || raise "VM frame stack is empty"
+        end
+
+        private def current_code : CompiledCode
+            current_frame.code
+        end
+
+        private def truncate_stack(size : Int32) : Nil
+            while @stack.size > size
+                @stack.pop
+            end
+        end
+
+        private def resolve_variable(name_idx : Int32, name : String) : Bytecode::Value
+            frame = current_frame
+            if locals = frame.locals
+                if defined = frame.locals_defined
+                    if name_idx < locals.size && defined[name_idx]
+                        slot = locals[name_idx]?
+                        return slot.nil? ? nil : slot
+                    end
+                end
+            end
+
+            if idx = @name_index_cache[name]?
+                ensure_global_capacity(idx)
+                if @global_defined[idx]
+                    slot = @global_slots[idx]?
+                    return slot.nil? ? nil : slot
+                end
+            end
+
+            if value = @globals[name]?
+                if idx = @name_index_cache[name]?
+                    ensure_global_capacity(idx)
+                    @global_slots[idx] = value
+                    @global_defined[idx] = true
+                end
+                return value
+            end
+            raise "Undefined variable: #{name}"
+        end
+
+        private def store_variable(name_idx : Int32, name : String, value : Bytecode::Value) : Nil
+            frame = current_frame
+            if frame.locals
+                assign_local(frame, name_idx, value)
+            else
+                if idx = @name_index_cache[name]?
+                    ensure_global_capacity(idx)
+                    @global_slots[idx] = value
+                    @global_defined[idx] = true
+                    @globals_dirty = true
+                else
+                    @globals[name] = value
+                end
+            end
+        end
+
+        private def prepare_function_call(name_idx : Int32, args : Array(Bytecode::Value)) : Nil
+            name = current_code.names[name_idx]
+            value = resolve_variable(name_idx, name)
+            unless value.is_a?(NamedTuple(name: String, params: Array(Bytecode::Value), code: CompiledCode))
+                raise "Undefined function: #{name}"
+            end
+
+            params = value[:params].as(Array(Bytecode::Value))
+            unless params.size == args.size
+                raise "Function #{name} expects #{params.size} arguments, got #{args.size}"
+            end
+
+            frame = push_frame(value[:code], true)
+            params.each_with_index do |param_value, index|
+                param_index = case param_value
+                    when Int32
+                        param_value
+                    when String
+                        idx = frame.code.names.index(param_value)
+                        raise "Parameter #{param_value} missing from function frame" unless idx
+                        idx
+                    else
+                        raise "Unsupported parameter metadata #{param_value.inspect}"
+                    end
+                assign_local(frame, param_index, args[index])
+            end
+        end
+
+        private def push_frame(code : CompiledCode, use_locals : Bool) : Frame
+            frame = Frame.new(code, @stack.size, use_locals)
+            @frames << frame
+            frame
+        end
+
+        private def ensure_local_capacity(frame : Frame, index : Int32) : Nil
+            return unless locals = frame.locals
+            return unless defined = frame.locals_defined
+
+            if index >= locals.size
+                new_size = index + 1
+                (locals.size...new_size).each do
+                    locals << nil
+                    defined << false
+                end
+            end
+        end
+
+        private def assign_local(frame : Frame, index : Int32, value : Bytecode::Value) : Nil
+            ensure_local_capacity(frame, index)
+            if locals = frame.locals
+                locals[index] = value
+            end
+            if defined = frame.locals_defined
+                defined[index] = true
+            end
+        end
+
+        private def handle_return : Nil
+            result = pop
+            frame = @frames.pop?
+            raise "Return from empty frame stack" unless frame
+            if @frames.empty?
+                raise "Return from top-level frame not supported"
+            end
+            truncate_stack(frame.stack_base)
+            push(result)
         end
         
         private def push(value : Bytecode::Value)
@@ -161,7 +392,8 @@ module Dragonstone
         end
         
         private def pop : Bytecode::Value
-            @stack.pop? || raise "Stack underflow"
+            raise "Stack underflow" if @stack.empty?
+            @stack.pop
         end
         
         private def peek : Bytecode::Value
@@ -173,6 +405,12 @@ module Dragonstone
             count.times { values << pop }
             values.reverse!
             values
+        end
+
+        private def emit_output(text : String) : Nil
+            @stdout_io << text
+            @stdout_io << "\n"
+            puts text if @log_to_stdout
         end
 
         private def add(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
@@ -278,6 +516,48 @@ module Dragonstone
 
             end
         end
+
+        private def coerce_unary_numeric(value : Bytecode::Value, op : String) : Int64 | Float64
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            when Float64
+                value
+            else
+                raise "Cannot apply #{op} to #{type_of(value)}"
+            end
+        end
+
+        private def coerce_unary_integer(value : Bytecode::Value, op : String) : Int64
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            else
+                raise "Cannot apply #{op} to #{type_of(value)}"
+            end
+        end
+
+        private def unary_positive(value : Bytecode::Value) : Bytecode::Value
+            coerce_unary_numeric(value, "unary +")
+        end
+
+        private def negate_value(value : Bytecode::Value) : Bytecode::Value
+            numeric = coerce_unary_numeric(value, "unary -")
+            numeric.is_a?(Float64) ? -numeric : -numeric.to_i64
+        end
+
+        private def logical_not(value : Bytecode::Value) : Bool
+            !truthy?(value)
+        end
+
+        private def bitwise_not(value : Bytecode::Value) : Bytecode::Value
+            integer = coerce_unary_integer(value, "unary ~")
+            ~integer
+        end
         
         private def truthy?(value : Bytecode::Value) : Bool
             case value
@@ -365,13 +645,6 @@ module Dragonstone
             else
                 raise "Cannot call method #{method} on #{type_of(receiver)}"
             end
-        end
-
-        private def call_function(name : String, args : Array(Bytecode::Value)) : Bytecode::Value
-            func = @globals[name]?
-
-            raise "Undefined function: #{name}" unless func
-            nil
         end
 
         #
@@ -491,7 +764,7 @@ module Dragonstone
             tokens = Lexer.new(src).tokenize
             ast = Parser.new(tokens).parse
             bytecode = Compiler.compile(ast)
-            vm = VM.new(bytecode)
+            vm = VM.new(bytecode, log_to_stdout: true)
             vm.run
             0
             

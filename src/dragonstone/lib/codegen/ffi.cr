@@ -272,14 +272,8 @@ module Dragonstone
             case function_name
 
             when "printf"
-                format_value = arguments[0]?
-
-                unless format_value.is_a?(String)
-                    raise "ffi.call_c('printf', ...) requires the first argument to be a format string"
-                end
-
-                LibC.printf(format_value.to_unsafe)
-                nil
+                format_value = expect_string(arguments, 0, function_name)
+                LibC.printf(format_value)
             else
                 raise "Unknown C function: #{function_name}"
             end

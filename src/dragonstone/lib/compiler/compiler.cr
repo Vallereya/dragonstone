@@ -160,6 +160,9 @@ module Dragonstone
             when AST::IndexAccess
                 compile_index_access(node)
 
+            when AST::UnaryOp
+                compile_unary(node)
+
             when AST::FunctionDef
                 compile_function_def(node)
 
@@ -177,16 +180,19 @@ module Dragonstone
         end
 
         BINARY_OPCODE = {
-            :+ => OPC::ADD,
-            :- => OPC::SUB,
-            :* => OPC::MUL,
-            :/ => OPC::DIV,
-            :== => OPC::EQ,
-            :!= => OPC::NE,
-            :< => OPC::LT,
-            :<= => OPC::LE,
-            :> => OPC::GT,
-            :>= => OPC::GE,
+            :+   => OPC::ADD,
+            :"&+" => OPC::ADD,
+            :-   => OPC::SUB,
+            :"&-" => OPC::SUB,
+            :*   => OPC::MUL,
+            :"&*" => OPC::MUL,
+            :/   => OPC::DIV,
+            :==  => OPC::EQ,
+            :!=  => OPC::NE,
+            :<   => OPC::LT,
+            :<=  => OPC::LE,
+            :>   => OPC::GT,
+            :>=  => OPC::GE,
         }
 
         private def compile_binary(node : AST::BinaryOp)
@@ -194,6 +200,22 @@ module Dragonstone
             compile_expression(node.right)
             opcode = BINARY_OPCODE[node.operator]?
             raise ArgumentError.new("Unknown operator #{node.operator}") unless opcode
+            emit(opcode)
+        end
+
+        UNARY_OPCODE = {
+            :+  => OPC::POS,
+            :"&+" => OPC::POS,
+            :-  => OPC::NEG,
+            :"&-" => OPC::NEG,
+            :!  => OPC::NOT,
+            :~  => OPC::BIT_NOT,
+        }
+
+        private def compile_unary(node : AST::UnaryOp)
+            compile_expression(node.operand)
+            opcode = UNARY_OPCODE[node.operator]?
+            raise ArgumentError.new("Unhandled unary operator #{node.operator}") unless opcode
             emit(opcode)
         end
 
@@ -357,7 +379,10 @@ module Dragonstone
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body)
             fn_const_idx = const_index(fn_chunk)
-            params_const = node.parameters.map { |p| p.as(Bytecode::Value) }
+            params_const = [] of Bytecode::Value
+            node.parameters.each do |param_name|
+                params_const << name_index(param_name)
+            end
             params_idx = const_index(params_const)
             name_idx = name_index(node.name)
 
@@ -459,6 +484,10 @@ module Dragonstone
 
             when OPC::INDEX
                 stack_pop(2)
+                stack_push
+
+            when OPC::NEG, OPC::POS, OPC::NOT, OPC::BIT_NOT
+                stack_pop
                 stack_push
 
             when OPC::CALL
