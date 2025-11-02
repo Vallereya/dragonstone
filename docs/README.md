@@ -8,7 +8,7 @@
 
 ## Welcome to The Dragonstone Language.
 
-Dragonstone is a language meant to provide programmers with happiness and choice. These materials help humans understand the language and its ecosystem.
+Dragonstone is a language meant to provide programmers with happiness and choice. These materials will help you understand the language and its features.
 
 ## Table of Contents
 
