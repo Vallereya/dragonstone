@@ -21,6 +21,20 @@ module Dragonstone
             end
         end
 
+        class GenericTypeExpression < TypeExpression
+            getter name : String
+            getter arguments : Array(TypeExpression)
+
+            def initialize(@name : String, @arguments : Array(TypeExpression), location : Location? = nil)
+                super(location: location)
+            end
+
+            def to_source : String
+                arg_source = @arguments.map(&.to_source).join(", ")
+                "#{@name}(#{arg_source})"
+            end
+        end
+
         class UnionTypeExpression < TypeExpression
             getter members : Array(TypeExpression)
 

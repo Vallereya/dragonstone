@@ -1,0 +1,21 @@
+def repeat(times)
+    index = 0
+    while index < times
+        yield index
+        index += 1
+    end
+end
+
+repeat(3) do |i|
+    puts "Iteration #{i}"
+end
+
+def around
+    puts "Before block"
+    yield
+    puts "After block"
+end
+
+around() do
+    puts "Inside block"
+end

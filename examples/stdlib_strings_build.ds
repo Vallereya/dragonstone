@@ -1,0 +1,22 @@
+use "strings_build"
+
+# Build a string by appending segments and characters (default capacity).
+greeting = strings.build do |builder|
+    builder.append("Hello")
+    builder.append_char(' ')
+    builder.append("Dragonstone")
+    builder.append_char('!')
+end
+
+puts greeting
+
+# Provide an explicit capacity and reuse builder helpers.
+path = strings.build_with_capacity(8) do |builder|
+    builder.append("usr")
+    builder.append_char('/')
+    builder.append("local")
+    builder.append_char('/')
+    builder.append("bin")
+end
+
+puts path

@@ -39,4 +39,35 @@ DS
 
     Dragonstone.run(source, typed: false).output.should eq ""
   end
+
+  it "supports generic type aliases" do
+    success_source = <<-DS
+#! typed
+alias Data = Array(str) | map(str, int)
+
+def process(data: Data)
+  data
+end
+
+process(["first", "second"])
+process({ "age" -> 32 })
+DS
+
+    Dragonstone.run(success_source, typed: true).output.should eq ""
+
+    failure_source = <<-DS
+#! typed
+alias Names = Array(str)
+
+def handle(names: Names)
+  names
+end
+
+handle([1, 2, 3])
+DS
+
+    expect_raises(Dragonstone::TypeError) do
+      Dragonstone.run(failure_source, typed: true)
+    end
+  end
 end

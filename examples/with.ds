@@ -1,0 +1,14 @@
+struct Point
+    property x: int
+    property y: int
+
+    def initialize(@x: int, @y: int)
+    end
+end
+
+point = Point.new(1, 2)
+
+with point
+    puts x  # Outputs: 1
+    puts y  # Outputs: 2
+end

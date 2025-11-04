@@ -8,6 +8,8 @@ iconv-2.dll
 pcre2-8.dll
 NUL
 version.h
+.crystal
+.crystal_cache
 
 # Annoying IDE ignores.
 .fake

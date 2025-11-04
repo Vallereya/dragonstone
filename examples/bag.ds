@@ -1,0 +1,36 @@
+# Example One
+my_bag = bag(str).new
+
+my_bag.add("apple")
+my_bag.add("banana")
+my_bag.add("apple") # duplicate ignored
+
+puts my_bag.size    # Outputs: 2
+puts my_bag.includes?("banana") # Outputs: true
+puts my_bag.includes?("cherry") # Outputs: false
+
+my_bag.each do |item|
+    puts item
+end
+
+uppercased = my_bag.map do |item|
+    item.upcase
+end
+
+p! uppercased
+
+p! my_bag.to_a
+
+# Example Two
+numbers = bag(int).new
+
+numbers.add(1)
+numbers.add(2)
+numbers.add(3)
+numbers.add(4)
+puts numbers.includes?(2)  # Outputs: true
+puts numbers.size          # Outputs: 4
+
+numbers.each do |num|
+    puts num
+end

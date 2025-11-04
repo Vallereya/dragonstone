@@ -27,7 +27,7 @@ module Dragonstone
     end
 
     alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue
     alias MapValue = Hash(RuntimeValue, RuntimeValue)
     alias ScopeValue = RuntimeValue | ConstantBinding
     alias Scope = Hash(String, ScopeValue)
@@ -46,6 +46,42 @@ module Dragonstone
 
         def initialize(entries : Hash(SymbolValue, RuntimeValue))
             @entries = entries
+        end
+    end
+
+    class BagConstructor
+        getter element_descriptor : Typing::Descriptor
+        getter element_type : AST::TypeExpression
+
+        def initialize(@element_descriptor : Typing::Descriptor, @element_type : AST::TypeExpression)
+        end
+
+        def to_s : String
+            "bag(#{element_descriptor.to_s})"
+        end
+    end
+
+    class BagValue
+        getter element_descriptor : Typing::Descriptor?
+        getter elements : Array(RuntimeValue)
+
+        def initialize(@element_descriptor : Typing::Descriptor?)
+            @elements = [] of RuntimeValue
+        end
+
+        def size : Int64
+            @elements.size.to_i64
+        end
+
+        def includes?(value : RuntimeValue) : Bool
+            @elements.any? { |existing| existing == value }
+        end
+
+        def add(value : RuntimeValue)
+            unless includes?(value)
+                @elements << value
+            end
+            self
         end
     end
 
@@ -294,6 +330,7 @@ module Dragonstone
             @container_definition_depth = 0
             @type_aliases = {} of String => AST::TypeExpression
             @alias_descriptor_cache = {} of String => Typing::Descriptor
+            @block_stack = [] of Function?
             set_variable("ffi", FFIModule.new)
         end
 
@@ -451,7 +488,21 @@ module Dragonstone
         end
 
         def visit_variable(node : AST::Variable) : RuntimeValue?
-            get_variable(node.name, location: node.location)
+            if binding_info = find_binding_with_scope(node.name)
+                return unwrap_binding(binding_info[:value])
+            end
+
+            constant_info = lookup_container_constant(node.name)
+            return constant_info[:value] if constant_info[:found]
+
+            if self_value = current_scope["self"]?
+                if method_defined_for_implicit_self?(self_value, node.name)
+                    method_call = AST::MethodCall.new(node.name, [] of AST::Node, nil, location: node.location)
+                    return call_receiver_method(self_value, method_call, [] of AST::Node, nil, implicit_self: true)
+                end
+            end
+
+            runtime_error(NameError, "Undefined variable or constant: #{node.name}", node)
         end
 
         def visit_constant_path(node : AST::ConstantPath) : RuntimeValue?
@@ -822,6 +873,43 @@ module Dragonstone
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
             Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup, node.rescue_clauses, node.return_type)
+        end
+
+        def visit_para_literal(node : AST::ParaLiteral) : RuntimeValue?
+            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup, node.rescue_clauses, node.return_type)
+        end
+
+        def visit_with_expression(node : AST::WithExpression) : RuntimeValue?
+            receiver = node.receiver.accept(self)
+            scope = current_scope
+            type_scope = current_type_scope
+            had_self = scope.has_key?("self")
+            previous_self = scope["self"]?
+            had_type_self = type_scope.has_key?("self")
+            previous_type_descriptor : Typing::Descriptor? = had_type_self ? type_scope["self"]? : nil
+            scope["self"] = receiver.as(RuntimeValue)
+            assign_type_to_scope(@scopes.size - 1, "self", nil)
+            result = execute_block(node.body)
+            if had_self
+                scope["self"] = previous_self
+                assign_type_to_scope(@scopes.size - 1, "self", previous_type_descriptor)
+            else
+                scope.delete("self")
+                assign_type_to_scope(@scopes.size - 1, "self", nil)
+            end
+            result
+        end
+
+        def visit_yield_expression(node : AST::YieldExpression) : RuntimeValue?
+            block = current_block
+            runtime_error(InterpreterError, "No block given", node) unless block
+            args = node.arguments.map { |argument| argument.accept(self).as(RuntimeValue) }
+            invoke_block(block.not_nil!, args, node.location)
+        end
+
+        def visit_bag_constructor(node : AST::BagConstructor) : RuntimeValue?
+            descriptor = descriptor_for(node.element_type)
+            BagConstructor.new(descriptor, node.element_type)
         end
 
         def visit_return_statement(node : AST::ReturnStatement) : RuntimeValue?
@@ -1603,6 +1691,12 @@ module Dragonstone
             when MapValue
                 call_map_method(receiver, node.name, args, block_value, node)
 
+            when BagConstructor
+                call_bag_constructor_method(receiver, node.name, args, block_value, node)
+
+            when BagValue
+                call_bag_method(receiver, node.name, args, block_value, node)
+
             when String
                 call_string_method(receiver, node.name, args, block_value, node)
 
@@ -1939,6 +2033,25 @@ module Dragonstone
             end
         end
 
+        private def method_defined_for_implicit_self?(receiver, name : String) : Bool
+            case receiver
+            when DragonInstance
+                !!receiver.klass.lookup_method(name)
+            when DragonClass
+                !!receiver.lookup_method(name)
+            when DragonModule
+                !!receiver.lookup_method(name)
+            when DragonEnum
+                !!receiver.lookup_method(name)
+            when DragonEnumMember
+                name == "name" || name == "enum" || name == "value" || name == receiver.enum.value_method_name
+            when Function
+                name == "call"
+            else
+                false
+            end
+        end
+
         private def call_named_tuple_method(tuple : NamedTupleValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
             case name
 
@@ -1974,6 +2087,20 @@ module Dragonstone
                     invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
                 end
                 tuple
+
+            when "map"
+                unless block_value
+                    runtime_error(InterpreterError, "NamedTuple##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                tuple.entries.each do |key, value|
+                    mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                    result << normalize_runtime_value(mapped, node)
+                end
+                result
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for NamedTuple", node)
@@ -2020,6 +2147,20 @@ module Dragonstone
                     invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
                 end
                 array
+
+            when "map"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                array.each do |element|
+                    mapped = invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
+                    result << normalize_runtime_value(mapped, node)
+                end
+                result
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Array", node)
@@ -2077,16 +2218,58 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
                 end
-                map.each_value do |value|
-                    invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
-                end
-                map
+            map.each_value do |value|
+                invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
+            end
+            map
 
-            when "has_key?", "includes_key?", "key?"
-                reject_block(block_value, "Map##{name}", node)
-                unless args.size == 1
-                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
-                end
+        when "map"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            result = [] of RuntimeValue
+            map.each do |key, value|
+                mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                result << normalize_runtime_value(mapped, node)
+            end
+            result
+
+        when "map_keys"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            result = [] of RuntimeValue
+            map.each_key do |key|
+                mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue)], node.location)
+                result << normalize_runtime_value(mapped, node)
+            end
+            result
+
+        when "map_values"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            result = [] of RuntimeValue
+            map.each_value do |value|
+                mapped = invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
+                result << normalize_runtime_value(mapped, node)
+            end
+            result
+
+        when "has_key?", "includes_key?", "key?"
+            reject_block(block_value, "Map##{name}", node)
+            unless args.size == 1
+                runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+            end
                 map.has_key?(args.first)
 
             when "has_value?", "value?"
@@ -2105,6 +2288,96 @@ module Dragonstone
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Map", node)
+
+            end
+        end
+
+        private def call_bag_constructor_method(constructor : BagConstructor, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "new"
+                reject_block(block_value, "bag(#{constructor.element_descriptor.to_s})##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "bag(#{constructor.element_descriptor.to_s})::new does not take arguments", node)
+                end
+                BagValue.new(constructor.element_descriptor)
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Bag constructor", node)
+
+            end
+        end
+
+        private def call_bag_method(bag : BagValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "length", "size"
+                reject_block(block_value, "Bag##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                bag.size
+
+            when "empty"
+                reject_block(block_value, "Bag##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                bag.elements.empty?
+
+            when "add"
+                reject_block(block_value, "Bag##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Bag##{name} expects 1 argument, got #{args.size}", node)
+                end
+                value = args.first
+                ensure_descriptor_match!(bag.element_descriptor, value, node)
+                bag.add(value)
+
+            when "includes?", "member?", "contains?"
+                reject_block(block_value, "Bag##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Bag##{name} expects 1 argument, got #{args.size}", node)
+                end
+                value = args.first
+                ensure_descriptor_match!(bag.element_descriptor, value, node)
+                bag.includes?(value)
+
+            when "each"
+                unless block_value
+                    runtime_error(InterpreterError, "Bag##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                bag.elements.each do |value|
+                    invoke_block(block_value.not_nil!, [value], node.location)
+                end
+                bag
+
+            when "map"
+                unless block_value
+                    runtime_error(InterpreterError, "Bag##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                bag.elements.each do |value|
+                    mapped = invoke_block(block_value.not_nil!, [value], node.location)
+                    result << normalize_runtime_value(mapped, node)
+                end
+                result
+
+            when "to_a"
+                reject_block(block_value, "Bag##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                bag.elements.dup
+
+            else
+                runtime_error(InterpreterError, "Unknown method '#{name}' for Bag", node)
 
             end
         end
@@ -2250,82 +2523,100 @@ module Dragonstone
         end
 
         private def call_function(func : Function, arg_nodes : Array(AST::Node), block_value : Function?, call_location : Location? = nil)
-            args = arg_nodes.map { |arg| arg.accept(self) }
+            evaluated_args = arg_nodes.map { |arg| arg.accept(self) }
+            final_args = evaluated_args.dup
+            expected_params = func.parameters.size
+
             if block_value
-                args << block_value.as(RuntimeValue)
-            end
-            if args.size != func.parameters.size
-                runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{func.parameters.size} arguments, got #{args.size}", call_location)
-            end
-
-            push_scope(func.closure.dup, func.type_closure.dup)
-            scope_index = @scopes.size - 1
-            func.typed_parameters.each_with_index do |param, index|
-                value = args[index]
-                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
-                ensure_type!(descriptor, value, call_location) if descriptor
-                current_scope[param.name] = value
-                assign_type_to_scope(scope_index, param.name, descriptor)
+                if final_args.size == expected_params
+                    # Block passed implicitly for yield support.
+                elsif final_args.size + 1 == expected_params
+                    final_args << block_value.as(RuntimeValue)
+                else
+                    runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{expected_params} arguments, got #{evaluated_args.size}", call_location)
+                end
+            elsif final_args.size != expected_params
+                runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{expected_params} arguments, got #{evaluated_args.size}", call_location)
             end
 
-            result = nil
-            begin
-                result = execute_block_with_rescue(func.body, func.rescue_clauses)
-            rescue e : ReturnValue
-                result = e.value
-            ensure
-                pop_scope
-            end
+            with_block(block_value) do
+                push_scope(func.closure.dup, func.type_closure.dup)
+                scope_index = @scopes.size - 1
+                func.typed_parameters.each_with_index do |param, index|
+                    value = final_args[index]
+                    descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                    ensure_type!(descriptor, value, call_location) if descriptor
+                    current_scope[param.name] = value
+                    assign_type_to_scope(scope_index, param.name, descriptor)
+                end
 
-            if typing_enabled? && func.return_type
-                descriptor = descriptor_for(func.return_type.not_nil!)
-                ensure_type!(descriptor, result, call_location)
+                result = nil
+                begin
+                    result = execute_block_with_rescue(func.body, func.rescue_clauses)
+                rescue e : ReturnValue
+                    result = e.value
+                ensure
+                    pop_scope
+                end
+
+                if typing_enabled? && func.return_type
+                    descriptor = descriptor_for(func.return_type.not_nil!)
+                    ensure_type!(descriptor, result, call_location)
+                end
+                result
             end
-            result
         end
 
         private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), block_value : Function?, call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
             final_args = args.dup
+            expected_params = method_def.parameters.size
+
             if block_value
-                final_args << block_value.as(RuntimeValue)
-            end
-
-            if final_args.size != method_def.parameters.size
-                runtime_error(TypeError, "Method #{method_def.name} expects #{method_def.parameters.size} arguments, got #{final_args.size}", call_location)
-            end
-
-            push_scope(method_def.closure.dup, method_def.type_closure.dup)
-            current_scope["self"] = self_object || receiver
-            scope_index = @scopes.size - 1
-            method_def.typed_parameters.each_with_index do |param, index|
-                value = final_args[index]
-                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
-                ensure_type!(descriptor, value, call_location) if descriptor
-                current_scope[param.name] = value
-                assign_type_to_scope(scope_index, param.name, descriptor)
-                if param.assigns_instance_variable?
-                    instance = self_object
-                    unless instance && instance.is_a?(DragonInstance)
-                        runtime_error(InterpreterError, "Instance variable parameters require an instance context", call_location)
-                    end
-                    set_instance_variable(instance.as(DragonInstance), param.instance_var_name.not_nil!, value, call_location)
+                if final_args.size == expected_params
+                    # yield-only block
+                elsif final_args.size + 1 == expected_params
+                    final_args << block_value.as(RuntimeValue)
+                else
+                    runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
                 end
+            elsif final_args.size != expected_params
+                runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
             end
 
-            result = nil
-            begin
-                result = execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
-            rescue e : ReturnValue
-                result = e.value
-            ensure
-                pop_scope
-            end
+            with_block(block_value) do
+                push_scope(method_def.closure.dup, method_def.type_closure.dup)
+                current_scope["self"] = self_object || receiver
+                scope_index = @scopes.size - 1
+                method_def.typed_parameters.each_with_index do |param, index|
+                    value = final_args[index]
+                    descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                    ensure_type!(descriptor, value, call_location) if descriptor
+                    current_scope[param.name] = value
+                    assign_type_to_scope(scope_index, param.name, descriptor)
+                    if param.assigns_instance_variable?
+                        instance = self_object
+                        unless instance && instance.is_a?(DragonInstance)
+                            runtime_error(InterpreterError, "Instance variable parameters require an instance context", call_location)
+                        end
+                        set_instance_variable(instance.as(DragonInstance), param.instance_var_name.not_nil!, value, call_location)
+                    end
+                end
 
-            if typing_enabled? && method_def.return_type
-                descriptor = descriptor_for(method_def.return_type.not_nil!)
-                ensure_type!(descriptor, result, call_location)
+                result = nil
+                begin
+                    result = execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
+                rescue e : ReturnValue
+                    result = e.value
+                ensure
+                    pop_scope
+                end
+
+                if typing_enabled? && method_def.return_type
+                    descriptor = descriptor_for(method_def.return_type.not_nil!)
+                    ensure_type!(descriptor, result, call_location)
+                end
+                result
             end
-            result
         end
 
         private def invoke_block(block : Function, args : Array(RuntimeValue), call_location : Location? = nil)
@@ -2333,32 +2624,34 @@ module Dragonstone
                 runtime_error(TypeError, "Block expects #{block.parameters.size} arguments, got #{args.size}", call_location)
             end
 
-            push_scope(block.closure.dup, block.type_closure.dup)
-            scope_index = @scopes.size - 1
-            block.typed_parameters.each_with_index do |param, index|
-                value = args[index]
-                descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
-                ensure_type!(descriptor, value, call_location) if descriptor
-                current_scope[param.name] = value
-                assign_type_to_scope(scope_index, param.name, descriptor)
-            end
-
-            result = nil
-            begin
-                loop do
-                    begin
-                        result = execute_block(block.body)
-                        break
-                    rescue e : RedoSignal
-                        next
-                    end
+            with_block(nil) do
+                push_scope(block.closure.dup, block.type_closure.dup)
+                scope_index = @scopes.size - 1
+                block.typed_parameters.each_with_index do |param, index|
+                    value = args[index]
+                    descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                    ensure_type!(descriptor, value, call_location) if descriptor
+                    current_scope[param.name] = value
+                    assign_type_to_scope(scope_index, param.name, descriptor)
                 end
-            rescue e : ReturnValue
-                result = e.value
-            ensure
-                pop_scope
+
+                result = nil
+                begin
+                    loop do
+                        begin
+                            result = execute_block(block.body)
+                            break
+                        rescue e : RedoSignal
+                            next
+                        end
+                    end
+                rescue e : ReturnValue
+                    result = e.value
+                ensure
+                    pop_scope
+                end
+                result
             end
-            result
         end
 
         private def reject_block(block_value : Function?, feature : String, node : AST::MethodCall)
@@ -2377,7 +2670,7 @@ module Dragonstone
 
         private def normalize_runtime_value(value, node : AST::Node) : RuntimeValue
             case value
-            when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException, TupleValue, NamedTupleValue
+            when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException, TupleValue, NamedTupleValue, BagConstructor, BagValue
                 value
             when Array(RuntimeValue)
                 value
@@ -2525,8 +2818,8 @@ module Dragonstone
             binding_info = find_binding_with_scope(name)
             return unwrap_binding(binding_info[:value]) if binding_info
 
-            container_value = lookup_container_constant(name)
-            return container_value unless container_value.nil?
+            constant_info = lookup_container_constant(name)
+            return constant_info[:value] if constant_info[:found]
 
             runtime_error(NameError, "Undefined variable or constant: #{name}", location)
         end
@@ -2578,20 +2871,23 @@ module Dragonstone
         end
 
         private def lookup_constant_value(name : String)
-            if container_value = lookup_container_constant(name)
-                return container_value
-            end
+            constant_info = lookup_container_constant(name)
+            return constant_info[:value] if constant_info[:found]
 
             binding = find_binding(name)
             unwrap_binding(binding) if binding
         end
 
-        private def lookup_container_constant(name : String)
+        private def lookup_container_constant(name : String) : NamedTuple(found: Bool, value: RuntimeValue?)
             @container_stack.reverse_each do |container|
-                return container if name == "self"
-                return container.fetch_constant(name) if container.constant?(name)
+                if name == "self"
+                    return {found: true, value: container}
+                end
+                if container.constant?(name)
+                    return {found: true, value: container.fetch_constant(name)}
+                end
             end
-            nil
+            {found: false, value: nil}
         end
 
         private def find_binding_with_scope(name : String)
@@ -2644,12 +2940,40 @@ module Dragonstone
             @container_stack.pop
         end
 
+        private def with_block(block : Function?, &block_proc)
+            @block_stack << block
+            begin
+                yield
+            ensure
+                @block_stack.pop
+            end
+        end
+
+        private def current_block : Function?
+            @block_stack.last?
+        end
+
         private def descriptor_for(expr : AST::TypeExpression) : Typing::Descriptor
             @descriptor_cache.fetch(expr)
         end
 
         private def ensure_type!(descriptor : Typing::Descriptor?, value, node_or_location = nil)
             return unless typing_enabled?
+            return unless descriptor
+
+            context = typing_context
+            begin
+                return if descriptor.satisfied_by?(value, context)
+            rescue e : Typing::UnknownTypeError
+                runtime_error(NameError, "Unknown type '#{e.type_name}'", node_or_location)
+            rescue e : Typing::RecursiveAliasError
+                runtime_error(TypeError, "Recursive alias '#{e.alias_name}' detected during type checking", node_or_location)
+            end
+
+            runtime_error(TypeError, "Expected #{descriptor.to_s}, got #{describe_runtime_value(value)}", node_or_location)
+        end
+
+        private def ensure_descriptor_match!(descriptor : Typing::Descriptor?, value, node_or_location = nil)
             return unless descriptor
 
             context = typing_context
@@ -2830,6 +3154,10 @@ module Dragonstone
                 "NamedTuple"
             when SymbolValue
                 "Symbol"
+            when BagConstructor
+                value.to_s
+            when BagValue
+                "Bag"
             else
                 value.class.name
             end

@@ -219,6 +219,8 @@ module Dragonstone
                 parse_unless_statement
             when :WHILE
                 parse_while_statement
+            when :WITH
+                parse_with_expression
             when :DEF
                 parse_function_def
             when :MODULE
@@ -777,6 +779,8 @@ module Dragonstone
                 parse_raise_expression
             when :BIT_NOT
                 parse_unary(token, :~)
+            when :WITH
+                parse_with_expression
             else
                 parse_primary
             end
@@ -866,6 +870,8 @@ module Dragonstone
             when :SYMBOL
                 advance
                 AST::Literal.new(token.value.as(SymbolValue), location: token.location)
+            when :YIELD
+                parse_yield_expression
             when :IDENTIFIER
                 parse_identifier_expression
             when :INSTANCE_VAR
@@ -884,6 +890,10 @@ module Dragonstone
                 expr
             when :FUN
                 parse_function_literal
+            when :THIN_ARROW
+                parse_para_literal
+            when :BAG
+                parse_bag_constructor
             else
                 error("Unexpected token #{token.type}", token)
             end
@@ -1078,6 +1088,64 @@ module Dragonstone
             expect(:THIN_ARROW)
             value = parse_expression
             {key, value}
+        end
+
+        private def parse_with_expression : AST::Node
+            with_token = expect(:WITH)
+            receiver = parse_expression
+            advance if current_token.type == :DO
+            body = parse_block([:END])
+            expect(:END)
+            AST::WithExpression.new(receiver, body, location: with_token.location)
+        end
+
+        private def parse_yield_expression : AST::Node
+            yield_token = expect(:YIELD)
+            arguments = [] of AST::Node
+            if current_token.type == :LPAREN
+                arguments = parse_argument_list
+            elsif !argument_terminator?(current_token)
+                arguments << parse_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_expression
+                end
+            end
+            AST::YieldExpression.new(arguments, location: yield_token.location)
+        end
+
+        private def parse_para_literal : AST::Node
+            arrow_token = expect(:THIN_ARROW)
+            parameters = [] of AST::TypedParameter
+            if current_token.type == :LPAREN
+                parameters = parse_parameter_list(required: true)
+            end
+            return_type = parse_optional_return_type
+            body = [] of AST::Node
+            rescue_clauses = [] of AST::RescueClause
+            if current_token.type == :DO
+                expect(:DO)
+                body = parse_block([:END, :RESCUE])
+                while current_token.type == :RESCUE
+                    rescue_clauses << parse_rescue_clause
+                end
+                expect(:END)
+            elsif current_token.type == :LBRACE
+                expect(:LBRACE)
+                body = parse_block([:RBRACE])
+                expect(:RBRACE)
+            else
+                error("Expected 'do' or '{' to start para body", current_token)
+            end
+            AST::ParaLiteral.new(parameters, body, rescue_clauses, return_type, location: arrow_token.location)
+        end
+
+        private def parse_bag_constructor : AST::Node
+            bag_token = expect(:BAG)
+            expect(:LPAREN)
+            element_type = parse_type_expression
+            expect(:RPAREN)
+            AST::BagConstructor.new(element_type, location: bag_token.location)
         end
 
         private def parse_do_block_literal : AST::BlockLiteral
@@ -1381,7 +1449,13 @@ module Dragonstone
             case token.type
             when :IDENTIFIER
                 identifier_token = expect(:IDENTIFIER)
-                AST::SimpleTypeExpression.new(identifier_token.value.as(String), location: identifier_token.location)
+                name = identifier_token.value.as(String)
+                if current_token.type == :LPAREN
+                    args = parse_type_argument_list
+                    AST::GenericTypeExpression.new(name, args, location: identifier_token.location)
+                else
+                    AST::SimpleTypeExpression.new(name, location: identifier_token.location)
+                end
             when :NIL
                 nil_token = expect(:NIL)
                 AST::SimpleTypeExpression.new("nil", location: nil_token.location)
@@ -1393,6 +1467,20 @@ module Dragonstone
             else
                 error("Expected type name", token)
             end
+        end
+
+        private def parse_type_argument_list : Array(AST::TypeExpression)
+            expect(:LPAREN)
+            arguments = [] of AST::TypeExpression
+            unless current_token.type == :RPAREN
+                arguments << parse_type_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_type_expression
+                end
+            end
+            expect(:RPAREN)
+            arguments
         end
     end
 end

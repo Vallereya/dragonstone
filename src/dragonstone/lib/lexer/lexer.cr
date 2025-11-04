@@ -82,11 +82,14 @@ module Dragonstone
             protected
             getter
             setter
+            bag
             property
             enum
             struct
             alias
             extend
+            with
+            yield
         ]
 
         getter source_name : String
@@ -586,11 +589,14 @@ module Dragonstone
                     when "protected" then :PROTECTED
                     when "getter" then :GETTER
                     when "setter" then :SETTER
+                    when "bag" then :BAG
                     when "property" then :PROPERTY
                     when "enum" then :ENUM
                     when "struct" then :STRUCT
                     when "alias" then :ALIAS
                     when "extend" then :EXTEND
+                    when "with" then :WITH
+                    when "yield" then :YIELD
                     else
                         :IDENTIFIER
                     end
