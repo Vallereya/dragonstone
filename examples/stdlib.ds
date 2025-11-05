@@ -1,3 +1,0 @@
-use "strings_length"
-
-puts strings.length("Test")

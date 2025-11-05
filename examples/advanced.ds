@@ -13,13 +13,13 @@ end
 
 numbers = [1, 2, 3, 4, 5]
 total = sum_array(numbers)
-p! total
+e! total
 
 # Function with string interpolation
 def describe_array(arr)
     msg = "Array has #{arr.length} elements"
-    puts msg
-    puts "First: #{arr.first}, Last: #{arr.last}"
+    echo msg
+    echo "First: #{arr.first}, Last: #{arr.last}"
 end
 
 describe_array(numbers)
@@ -33,8 +33,8 @@ def factorial(n)
     end
 end
 
-p! factorial(5)
-p! factorial(10)
+e! factorial(5)
+e! factorial(10)
 
 # Find maximum in array
 def find_max(arr)
@@ -55,4 +55,4 @@ end
 
 values = [3, 7, 2, 9, 1, 5]
 maximum = find_max(values)
-puts "Maximum value: #{maximum}"
+echo "Maximum value: #{maximum}"

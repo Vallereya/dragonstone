@@ -1,0 +1,19 @@
+# This is a random testing file.
+
+#[ 
+    I dup junk here to do quick tests for 
+    dragonstone and if you happen to come
+    across something here, there's a 
+    99% chance it's not going to work.
+
+    Because it is either not working, 
+    looking at code that I might get working
+    or just junk in general.
+]#
+
+echo "----------------------------"
+echo "------- Testing File -------"
+echo "----------------------------"
+
+# Testing File Begin.
+echo "Testing..."

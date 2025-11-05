@@ -2,15 +2,15 @@ attempts = 0
 
 begin
     attempts += 1
-    puts "Attempt #{attempts}"
+    echo "Attempt #{attempts}"
     if attempts < 3
         raise "Something went wrong!"
     end
 rescue
-    puts "Caught an exception. Retrying..."
+    echo "Caught an exception. Retrying..."
     if attempts < 5 # Limit retries to 5 attempts
         retry
     end
 end
 
-puts "Operation completed or maximum retries reached."
+echo "Operation completed or maximum retries reached."

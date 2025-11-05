@@ -4,6 +4,7 @@
 require "../lexer/*"
 require "../codegen/ast"
 require "../resolver/*"
+require "../runtime/symbol"
 
 module Dragonstone
     class Parser
@@ -37,6 +38,7 @@ module Dragonstone
             :UNLESS, 
             :WHILE, 
             :PUTS, 
+            :ECHO,
             :DEBUG_PRINT
         ]
 
@@ -208,7 +210,7 @@ module Dragonstone
                 else
                     parse_expression_statement
                 end
-            when :PUTS
+            when :ECHO
                 parse_keyword_method_call
             when :DEBUG_PRINT
                 parse_debug_print
@@ -218,6 +220,8 @@ module Dragonstone
                 parse_unless_statement
             when :WHILE
                 parse_while_statement
+            when :WITH
+                parse_with_expression
             when :DEF
                 parse_function_def
             when :MODULE
@@ -268,6 +272,7 @@ module Dragonstone
         private def parse_expression_statement : AST::Node
             expression = parse_expression
             if expression.is_a?(AST::Variable)
+                return expression if expression.name == "self"
                 AST::MethodCall.new(expression.name, [] of AST::Node, nil, location: expression.location)
             else
                 expression
@@ -508,9 +513,17 @@ module Dragonstone
         end
 
         private def parse_optional_return_type : AST::TypeExpression?
-            return nil unless current_token.type == :THIN_ARROW
-            expect(:THIN_ARROW)
-            parse_type_expression
+            case current_token.type
+            when :THIN_ARROW
+                advance
+                parse_type_expression
+            when :COLON
+                # Allow Crystal/Ruby style return type syntax: def foo : Type
+                advance
+                parse_type_expression
+            else
+                nil
+            end
         end
 
         private def parse_exception_list(initial_token : Token? = nil) : Array(String)
@@ -767,6 +780,8 @@ module Dragonstone
                 parse_raise_expression
             when :BIT_NOT
                 parse_unary(token, :~)
+            when :WITH
+                parse_with_expression
             else
                 parse_primary
             end
@@ -853,6 +868,11 @@ module Dragonstone
             when :NIL
                 advance
                 AST::Literal.new(nil, location: token.location)
+            when :SYMBOL
+                advance
+                AST::Literal.new(token.value.as(SymbolValue), location: token.location)
+            when :YIELD
+                parse_yield_expression
             when :IDENTIFIER
                 parse_identifier_expression
             when :INSTANCE_VAR
@@ -863,7 +883,7 @@ module Dragonstone
             when :LBRACKET
                 parse_array_literal
             when :LBRACE
-                parse_map_literal
+                parse_braced_literal
             when :LPAREN
                 advance
                 expr = parse_expression
@@ -871,6 +891,10 @@ module Dragonstone
                 expr
             when :FUN
                 parse_function_literal
+            when :THIN_ARROW
+                parse_para_literal
+            when :BAG
+                parse_bag_constructor
             else
                 error("Unexpected token #{token.type}", token)
             end
@@ -954,21 +978,175 @@ module Dragonstone
             AST::ArrayLiteral.new(elements, location: start_token.location)
         end
 
-        private def parse_map_literal : AST::Node
+        private def parse_braced_literal : AST::Node
             start_token = expect(:LBRACE)
-            entries = [] of Tuple(AST::Node, AST::Node)
-            unless current_token.type == :RBRACE
-                loop do
-                    key = parse_expression
-                    expect(:THIN_ARROW)
-                    value = parse_expression
-                    entries << {key, value}
-                    break unless current_token.type == :COMMA
-                    advance
-                end
+
+            if current_token.type == :RBRACE
+                advance
+                return AST::TupleLiteral.new([] of AST::Node, location: start_token.location)
+            end
+
+            if named_tuple_entry_start?
+                entries = parse_named_tuple_entries
+                expect(:RBRACE)
+                return AST::NamedTupleLiteral.new(entries, location: start_token.location)
+            end
+
+            first_element = parse_expression
+
+            if current_token.type == :THIN_ARROW
+                return parse_map_literal(start_token, first_element)
+            end
+
+            elements = [] of AST::Node
+            elements << first_element
+            while current_token.type == :COMMA
+                advance
+                break if current_token.type == :RBRACE
+                elements << parse_expression
             end
             expect(:RBRACE)
+            AST::TupleLiteral.new(elements, location: start_token.location)
+        end
+
+        private def parse_named_tuple_entries : Array(AST::NamedTupleEntry)
+            entries = [] of AST::NamedTupleEntry
+            loop do
+                name_token = expect(:IDENTIFIER)
+                expect(:COLON)
+
+                type_annotation = nil
+                value_node = nil
+
+                if named_tuple_type_annotation_ahead?
+                    type_annotation = parse_type_expression
+                    expect(:ASSIGN)
+                    value_node = parse_expression
+                else
+                    value_node = parse_expression
+                end
+
+                entries << AST::NamedTupleEntry.new(
+                    name_token.value.as(String),
+                    value_node,
+                    type_annotation,
+                    name_token.location
+                )
+
+                break unless current_token.type == :COMMA
+                advance
+                break if current_token.type == :RBRACE
+            end
+            entries
+        end
+
+        private def named_tuple_entry_start? : Bool
+            return false unless current_token.type == :IDENTIFIER
+            next_token = peek_token
+            !!(next_token && next_token.type == :COLON)
+        end
+
+        private def named_tuple_type_annotation_ahead? : Bool
+            offset = 0
+            loop do
+                token = peek_token(offset)
+                return false unless token
+                case token.type
+                when :ASSIGN
+                    return true
+                when :COMMA, :RBRACE
+                    return false
+                end
+                offset += 1
+            end
+        end
+
+        private def parse_map_literal(start_token : Token, first_key : AST::Node? = nil) : AST::Node
+            entries = [] of Tuple(AST::Node, AST::Node)
+
+            if first_key
+                entries << parse_map_entry(first_key)
+                while current_token.type == :COMMA
+                    advance
+                    break if current_token.type == :RBRACE
+                    entries << parse_map_entry
+                end
+            elsif current_token.type != :RBRACE
+                entries << parse_map_entry
+                while current_token.type == :COMMA
+                    advance
+                    break if current_token.type == :RBRACE
+                    entries << parse_map_entry
+                end
+            end
+
+            expect(:RBRACE)
             AST::MapLiteral.new(entries, location: start_token.location)
+        end
+
+        private def parse_map_entry(existing_key : AST::Node? = nil) : Tuple(AST::Node, AST::Node)
+            key = existing_key || parse_expression
+            expect(:THIN_ARROW)
+            value = parse_expression
+            {key, value}
+        end
+
+        private def parse_with_expression : AST::Node
+            with_token = expect(:WITH)
+            receiver = parse_expression
+            advance if current_token.type == :DO
+            body = parse_block([:END])
+            expect(:END)
+            AST::WithExpression.new(receiver, body, location: with_token.location)
+        end
+
+        private def parse_yield_expression : AST::Node
+            yield_token = expect(:YIELD)
+            arguments = [] of AST::Node
+            if current_token.type == :LPAREN
+                arguments = parse_argument_list
+            elsif !argument_terminator?(current_token)
+                arguments << parse_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_expression
+                end
+            end
+            AST::YieldExpression.new(arguments, location: yield_token.location)
+        end
+
+        private def parse_para_literal : AST::Node
+            arrow_token = expect(:THIN_ARROW)
+            parameters = [] of AST::TypedParameter
+            if current_token.type == :LPAREN
+                parameters = parse_parameter_list(required: true)
+            end
+            return_type = parse_optional_return_type
+            body = [] of AST::Node
+            rescue_clauses = [] of AST::RescueClause
+            if current_token.type == :DO
+                expect(:DO)
+                body = parse_block([:END, :RESCUE])
+                while current_token.type == :RESCUE
+                    rescue_clauses << parse_rescue_clause
+                end
+                expect(:END)
+            elsif current_token.type == :LBRACE
+                expect(:LBRACE)
+                body = parse_block([:RBRACE])
+                expect(:RBRACE)
+            else
+                error("Expected 'do' or '{' to start para body", current_token)
+            end
+            AST::ParaLiteral.new(parameters, body, rescue_clauses, return_type, location: arrow_token.location)
+        end
+
+        private def parse_bag_constructor : AST::Node
+            bag_token = expect(:BAG)
+            expect(:LPAREN)
+            element_type = parse_type_expression
+            expect(:RPAREN)
+            AST::BagConstructor.new(element_type, location: bag_token.location)
         end
 
         private def parse_do_block_literal : AST::BlockLiteral
@@ -1072,7 +1250,11 @@ module Dragonstone
 
             case left
             when AST::Variable
-                AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
+                if constant_name?(left.name) && operator.nil?
+                    AST::ConstantDeclaration.new(left.name, value, left.type_annotation, location: location)
+                else
+                    AST::Assignment.new(left.name, value, operator: operator, type_annotation: left.type_annotation, location: location)
+                end
             when AST::InstanceVariable
                 AST::InstanceVariableAssignment.new(left.name, value, operator: operator, location: location)
             when AST::IndexAccess
@@ -1088,6 +1270,12 @@ module Dragonstone
             else
                 error("Invalid assignment target", token)
             end
+        end
+
+        private def constant_name?(name : String) : Bool
+            return false if name.empty?
+            first = name[0]
+            first >= 'A' && first <= 'Z'
         end
 
         private def parse_modifier_condition : Tuple(AST::Node?, Symbol?)
@@ -1262,7 +1450,13 @@ module Dragonstone
             case token.type
             when :IDENTIFIER
                 identifier_token = expect(:IDENTIFIER)
-                AST::SimpleTypeExpression.new(identifier_token.value.as(String), location: identifier_token.location)
+                name = identifier_token.value.as(String)
+                if current_token.type == :LPAREN
+                    args = parse_type_argument_list
+                    AST::GenericTypeExpression.new(name, args, location: identifier_token.location)
+                else
+                    AST::SimpleTypeExpression.new(name, location: identifier_token.location)
+                end
             when :NIL
                 nil_token = expect(:NIL)
                 AST::SimpleTypeExpression.new("nil", location: nil_token.location)
@@ -1274,6 +1468,20 @@ module Dragonstone
             else
                 error("Expected type name", token)
             end
+        end
+
+        private def parse_type_argument_list : Array(AST::TypeExpression)
+            expect(:LPAREN)
+            arguments = [] of AST::TypeExpression
+            unless current_token.type == :RPAREN
+                arguments << parse_type_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_type_expression
+                end
+            end
+            expect(:RPAREN)
+            arguments
         end
     end
 end

@@ -7,7 +7,7 @@ while i < 10
         break
     end
 
-    puts i
+    echo i
 end
 
-puts "Loop ended at i = #{i}"
+echo "Loop ended at i = #{i}"

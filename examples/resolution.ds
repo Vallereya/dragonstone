@@ -9,17 +9,17 @@ module MyModule
 end
 
 # Access the constant via the module scope
-puts MyModule::Test  # Outputs: 100
+echo MyModule::Test  # Outecho: 100
 
 # Access the class method via the module and class scope
-puts MyModule::MyClass.greet  # Outputs: Hello from MyClass
+echo MyModule::MyClass.greet  # Outecho: Hello from MyClass
 
 
 module Outer
     module Inner
         class MyNestedClass
             def say_hi
-                puts "Hi from a nested class!"
+                echo "Hi from a nested class!"
             end
         end
     end

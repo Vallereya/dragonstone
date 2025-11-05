@@ -4,9 +4,10 @@
 require "unicode"
 require "string/grapheme"
 require "../resolver/*"
+require "../runtime/symbol"
 
 module Dragonstone
-    alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | Array(Tuple(Symbol, String))
+    alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | SymbolValue | Array(Tuple(Symbol, String))
 
     class Token
         getter type : Symbol
@@ -44,6 +45,7 @@ module Dragonstone
 
     class Lexer
         KEYWORDS = %w[
+            echo
             puts 
             if 
             else 
@@ -81,11 +83,14 @@ module Dragonstone
             protected
             getter
             setter
+            bag
             property
             enum
             struct
             alias
             extend
+            with
+            yield
         ]
 
         getter source_name : String
@@ -115,6 +120,9 @@ module Dragonstone
                     scan_string
                 elsif char == '\''
                     scan_char
+                elsif char == 'e' && peek_char == '!'
+                    add_token(:DEBUG_PRINT, "e!", @line, @column, 2)
+                    advance(2)
                 elsif char == 'p' && peek_char == '!'
                     add_token(:DEBUG_PRINT, "p!", @line, @column, 2)
                     advance(2)
@@ -356,6 +364,8 @@ module Dragonstone
                     if peek_char == ':'
                         add_token(:DOUBLE_COLON, "::", @line, @column, 2)
                         advance(2)
+                    elsif symbol_literal_start?
+                        scan_symbol
                     else
                         add_token(:COLON, ":", @line, @column, 1)
                         advance
@@ -550,7 +560,7 @@ module Dragonstone
                     when "false" then :FALSE
                     when "nil" then :NIL
                     when "elseif" then :ELSIF
-                    when "puts" then :PUTS
+                    when "echo", "puts" then :ECHO
                     when "if" then :IF
                     when "else" then :ELSE
                     when "elsif" then :ELSIF
@@ -583,11 +593,14 @@ module Dragonstone
                     when "protected" then :PROTECTED
                     when "getter" then :GETTER
                     when "setter" then :SETTER
+                    when "bag" then :BAG
                     when "property" then :PROPERTY
                     when "enum" then :ENUM
                     when "struct" then :STRUCT
                     when "alias" then :ALIAS
                     when "extend" then :EXTEND
+                    when "with" then :WITH
+                    when "yield" then :YIELD
                     else
                         :IDENTIFIER
                     end
@@ -680,6 +693,41 @@ module Dragonstone
 
             advance
             add_token(:CHAR, value, start_line, start_col, 3)
+        end
+
+        private def scan_symbol
+            start_line = @line
+            start_col = @column
+            advance
+
+            char = current_char
+            unless char && identifier_start?(char)
+                raise error_at(start_line, start_col, "Invalid symbol literal", length: 1)
+            end
+
+            identifier = String::Builder.new
+            identifier << char
+            advance
+
+            while (char = current_char) && identifier_part?(char)
+                identifier << char
+                advance
+            end
+
+            name = identifier.to_s
+            length = @column - start_col
+            add_token(:SYMBOL, SymbolValue.new(name), start_line, start_col, length)
+        end
+
+        private def symbol_literal_start? : Bool
+            next_char = peek_char
+            return false unless next_char && identifier_start?(next_char)
+
+            return true if @pos.zero?
+            previous_index = @pos - 1
+            previous_char = @source[previous_index]?
+            return true unless previous_char && identifier_part?(previous_char)
+            false
         end
 
         private def identifier_start?(char : Char) : Bool

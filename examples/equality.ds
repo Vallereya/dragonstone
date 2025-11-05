@@ -1,5 +1,5 @@
 result = 1 == 2
-puts result
+echo result
 
 noresult = 1 != 2
-puts noresult
+echo noresult

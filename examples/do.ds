@@ -6,14 +6,14 @@ end
 
 # Using do...end for a multi-line block (zero-arg call needs empty parentheses)
 twice() do
-    puts "Hello!"
+    echo "Hello!"
 end
 
 # Using {} for a single-line block (same parentheses requirement)
-twice() { puts("Hello!") }
+twice() { echo("Hello!") }
 
 # Blocks can declare parameters with | |, matching Array#each
 numbers = [1, 2, 3]
 numbers.each do |number|
-    puts "Number: #{number}"
+    echo "Number: #{number}"
 end

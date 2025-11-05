@@ -13,6 +13,8 @@ module Dragonstone
         SUB             = 11
         MUL             = 12
         DIV             = 13
+        NEG             = 14
+        POS             = 15
 
         # Comparisons
         EQ              = 20
@@ -21,13 +23,15 @@ module Dragonstone
         LE              = 23
         GT              = 24
         GE              = 25
+        NOT             = 26
+        BIT_NOT         = 27
 
         # Control Flow
         JMP             = 30    # [JMP,  target_index]
         JMPF            = 31    # [JMPF, target_index]                                      -> if pop is falsey, jump
 
         # IO / Misc
-        PUTS            = 40    # [PUTS, argc]                                              -> consume argc items, emit line, push nil
+        ECHO            = 40    # [ECHO, argc]                                              -> consume argc items, emit line, push nil
         DEBUG_PRINT     = 52    # [DEBUG_PRINT, const_index]                                -> format top of stack with const string
         TYPEOF          = 53    # TYPEOF                                                    -> replace top of stack with its type name string
 

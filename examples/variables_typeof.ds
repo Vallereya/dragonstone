@@ -1,7 +1,7 @@
 message = "Hello!"
 
-puts typeof(message)
+echo typeof(message)
 
 message = "Hello!"
 
-p! typeof(message)
+e! typeof(message)

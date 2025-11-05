@@ -1,7 +1,7 @@
 username = "guest"
 
 unless username == "admin"
-    puts "Not an admin"
+    echo "Not an admin"
 else
-    puts "Welcome, admin!"
+    echo "Welcome, admin!"
 end

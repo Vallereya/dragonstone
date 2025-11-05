@@ -1,8 +1,8 @@
 x = 1 & 2
-puts x
+echo x
 
 z = 1 | 2
-puts z
+echo z
 
 c = 1 ^ 2
-puts c
+echo c

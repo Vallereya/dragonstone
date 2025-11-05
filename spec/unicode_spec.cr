@@ -5,7 +5,7 @@ require "../src/dragonstone/lib/resolver/encoding"
 describe "Dragonstone Unicode support" do
     it "reads UTF-8 sources that include emoji identifiers" do
         File.tempfile("dragonstone-unicode", suffix: ".ds") do |file|
-            file.print("🔥 = \"fire\"\nputs 🔥\n")
+            file.print("🔥 = \"fire\"\necho 🔥\n")
             file.flush
 
             source = Dragonstone::Encoding.read(file.path)

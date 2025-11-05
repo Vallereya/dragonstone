@@ -1,0 +1,15 @@
+# Example One
+my_tuple = {1, "Hey", 'x'}
+echo my_tuple[0]    # => 1
+echo my_tuple[1]    # => Hey
+echo my_tuple[2]    # => x
+
+# Example Two
+person = {name: "V", age: 30}
+echo person[:name]  # => V
+echo person[:age]   # => 30
+
+# Example Three
+person = {name: str = "V", age: int = 30}
+echo person[:name]  # => V
+echo person[:age]   # => 30

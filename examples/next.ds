@@ -7,5 +7,5 @@ while i < 5
         next # Skip printing 3
     end
 
-    puts i
+    echo i
 end

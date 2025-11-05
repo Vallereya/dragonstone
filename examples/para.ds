@@ -1,0 +1,9 @@
+# Example One
+greet = ->(name: str) { "Hello, #{name}!" }
+
+echo greet.call("Alice")  # Outecho: Hello, Alice!
+
+# Example Two
+square: para(int, int) = ->(x: int) { x * x }
+echo square.call(6)  # Outecho: 36
+

@@ -1,0 +1,21 @@
+def repeat(times)
+    index = 0
+    while index < times
+        yield index
+        index += 1
+    end
+end
+
+repeat(3) do |i|
+    echo "Iteration #{i}"
+end
+
+def around
+    echo "Before block"
+    yield
+    echo "After block"
+end
+
+around() do
+    echo "Inside block"
+end

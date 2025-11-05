@@ -3,11 +3,11 @@ day = "Monday"
 case day
 
 when "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
-    puts "It's a weekday"
+    echo "It's a weekday"
     
 when "Saturday", "Sunday"
-    puts "It's the weekend"
+    echo "It's the weekend"
 
 else
-    puts "Not a valid day"
+    echo "Not a valid day"
 end

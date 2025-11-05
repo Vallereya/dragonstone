@@ -13,7 +13,7 @@ class Person
   
     def greet
         if happy
-            puts "Hello!"
+            echo "Hello!"
         end
     end
 end

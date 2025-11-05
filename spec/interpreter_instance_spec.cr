@@ -33,9 +33,9 @@ describe "Case and select control flow" do
             end
         end
 
-        puts classify(2)
-        puts classify(Dog.new)
-        puts classify("x")
+        echo classify(2)
+        echo classify(Dog.new)
+        echo classify("x")
         DS
 
         run_program(source).should eq("small\nanimal\nunknown\n")
@@ -45,11 +45,11 @@ describe "Case and select control flow" do
         source = <<-DS
         select
         when false
-            puts "first"
+            echo "first"
         when true
-            puts "second"
+            echo "second"
         else
-            puts "fallback"
+            echo "fallback"
         end
         DS
 
@@ -93,7 +93,7 @@ describe "Module extension" do
             extend Shared
         end
 
-        puts Greeter.hello
+        echo Greeter.hello
         DS
 
         run_program(source).should eq("hi\n")
@@ -118,9 +118,9 @@ describe "Constant path resolution" do
             end
         end
 
-        puts Outer::Inner::VALUE
+        echo Outer::Inner::VALUE
         thing = Outer::Inner::Thing.new
-        puts thing.greet
+        echo thing.greet
         DS
 
         run_program(source).should eq("99\nhello\n")
@@ -133,7 +133,7 @@ describe "Constant path resolution" do
             Green
         end
 
-        puts Color::Green
+        echo Color::Green
         DS
 
         run_program(source).should eq("Green\n")
@@ -151,7 +151,7 @@ describe "Interpreter instance variable support" do
         end
 
         person = Person.new("Alice")
-        puts person.name
+        echo person.name
         DS
 
         run_program(source).should eq("Alice\n")
@@ -172,7 +172,7 @@ describe "Interpreter instance variable support" do
 
         counter = Counter.new(5)
         counter.bump(3)
-        puts counter.value
+        echo counter.value
         DS
 
         run_program(source, typing: true).should eq("8\n")
@@ -213,7 +213,7 @@ describe "Interpreter instance variable support" do
         end
 
         account = BankAccount.new(50)
-        puts account.reveal
+        echo account.reveal
         account.balance
         DS
 

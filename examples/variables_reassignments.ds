@@ -1,7 +1,7 @@
 message = "Hello!"
 
-puts message
+echo message
 
 message = "Hello from Dragonstone!"
 
-puts message
+echo message

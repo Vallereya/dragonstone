@@ -1,5 +1,5 @@
 begin
     number = 10 / 0
 rescue ex
-    puts "An error occurred: #{ex.message}"
+    echo "An error occurred: #{ex.message}"
 end

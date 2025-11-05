@@ -5,7 +5,7 @@ require "file_utils"
 # ---------------------------------
 
 # Was running into issues using calling ruby so
-# all of this basically only allows puts/print 
+# all of this basically only allows echo/print 
 # methods to be called so far.
 {% if env("DRAGONSTONE_RUBY_LIB") %}
     @[Link({{ env("DRAGONSTONE_RUBY_LIB") }})]
@@ -125,7 +125,7 @@ module Dragonstone
         def self.call_crystal(function_name : String, arguments : Array(InteropValue)) : InteropValue
             case function_name
 
-            when "puts"
+            when "echo", "puts"
                 arguments.each { |argument| puts format_value(argument) }
                 nil
 
@@ -272,14 +272,8 @@ module Dragonstone
             case function_name
 
             when "printf"
-                format_value = arguments[0]?
-
-                unless format_value.is_a?(String)
-                    raise "ffi.call_c('printf', ...) requires the first argument to be a format string"
-                end
-
-                LibC.printf(format_value.to_unsafe)
-                nil
+                format_value = expect_string(arguments, 0, function_name)
+                LibC.printf(format_value)
             else
                 raise "Unknown C function: #{function_name}"
             end

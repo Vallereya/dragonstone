@@ -159,7 +159,9 @@ static VALUE sym_elements, sym_object, sym_index;
 static VALUE sym_body, sym_parameters, sym_block, sym_parts;
 static VALUE sym_expression;
 
-static ID id_puts;
+static ID id_echo;
+static ID id_legacy_puts;
+static ID id_kernel_puts;
 static ID id_typeof;
 static ID id_length, id_size, id_upcase, id_downcase, id_reverse;
 static ID id_empty, id_empty_q, id_to_f, id_dup;
@@ -225,7 +227,7 @@ static void ds_append_output(ds_interp_t *st, VALUE text) {
     rb_str_cat2(st->output, "\n");
 
     if (st->log_to_stdout == Qtrue) {
-        rb_funcall(rb_mKernel, id_puts, 1, str);
+        rb_funcall(rb_mKernel, id_kernel_puts, 1, str);
     }
 }
 
@@ -732,7 +734,7 @@ static VALUE ds_visit_method_call(ds_interp_t *st, VALUE node) {
         rb_raise(cInterpreterError, "Receiver-method dispatch not supported on %s", ds_classname(receiver));
     }
 
-    if (name_id == id_puts) {
+    if (name_id == id_echo || name_id == id_legacy_puts) {
         long argc = RARRAY_LEN(args);
 
         VALUE parts = rb_ary_new2(argc);
@@ -915,7 +917,9 @@ void Init_dragonstone_Core_interpreter(void) {
     sym_parts        = ID2SYM(rb_intern("parts"));
     sym_expression   = ID2SYM(rb_intern("expression"));
 
-    id_puts   = rb_intern("puts");
+    id_echo         = rb_intern("echo");
+    id_legacy_puts  = rb_intern("puts");
+    id_kernel_puts  = rb_intern("puts");
     id_typeof = rb_intern("typeof");
     id_length = rb_intern("length");
     id_size   = rb_intern("size");

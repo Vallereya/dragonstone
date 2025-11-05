@@ -142,6 +142,99 @@ module Dragonstone
             end
         end
 
+        class ArrayDescriptor < Descriptor
+            getter element : Descriptor
+
+            def initialize(@element : Descriptor)
+            end
+
+            def satisfied_by?(value, context : Context) : Bool
+                return false unless value.is_a?(Array)
+                value.each do |element|
+                    return false unless @element.satisfied_by?(element, context)
+                end
+                true
+            end
+
+            def to_s : String
+                "Array(#{@element.to_s})"
+            end
+        end
+
+        class HashDescriptor < Descriptor
+            getter key_descriptor : Descriptor
+            getter value_descriptor : Descriptor
+
+            def initialize(@key_descriptor : Descriptor, @value_descriptor : Descriptor)
+            end
+
+            def satisfied_by?(value, context : Context) : Bool
+                return false unless value.is_a?(Hash)
+                value.each do |key, val|
+                    return false unless @key_descriptor.satisfied_by?(key, context)
+                    return false unless @value_descriptor.satisfied_by?(val, context)
+                end
+                true
+            end
+
+            def to_s : String
+                "Hash(#{@key_descriptor.to_s}, #{@value_descriptor.to_s})"
+            end
+        end
+
+        class RangeDescriptor < Descriptor
+            getter begin_descriptor : Descriptor
+            getter end_descriptor : Descriptor
+
+            def initialize(@begin_descriptor : Descriptor, @end_descriptor : Descriptor)
+            end
+
+            def satisfied_by?(value, context : Context) : Bool
+                return false unless value.is_a?(Range)
+                @begin_descriptor.satisfied_by?(value.begin, context) &&
+                    @end_descriptor.satisfied_by?(value.end, context)
+            end
+
+            def to_s : String
+                "Range(#{@begin_descriptor.to_s}, #{@end_descriptor.to_s})"
+            end
+        end
+
+        class BagDescriptor < Descriptor
+            getter element : Descriptor
+
+            def initialize(@element : Descriptor)
+            end
+
+            def satisfied_by?(value, context : Context) : Bool
+                return false unless value.is_a?(BagValue)
+                value.elements.all? { |element| @element.satisfied_by?(element, context) }
+            end
+
+            def to_s : String
+                "bag(#{@element.to_s})"
+            end
+        end
+
+        class ParaDescriptor < Descriptor
+            getter parameter_descriptors : Array(Descriptor)
+            getter return_descriptor : Descriptor
+
+            def initialize(@parameter_descriptors : Array(Descriptor), @return_descriptor : Descriptor)
+            end
+
+            def satisfied_by?(value, context : Context) : Bool
+                return false unless value.is_a?(Function)
+                value.parameters.size == @parameter_descriptors.size
+            end
+
+            def to_s : String
+                parts = @parameter_descriptors.map(&.to_s)
+                parts << @return_descriptor.to_s
+                "para(#{parts.join(", ")})"
+            end
+        end
+
         class DescriptorCache
             def initialize
                 @cache = {} of UInt64 => Descriptor
@@ -167,8 +260,40 @@ module Dragonstone
                 UnionDescriptor.new(members)
             when AST::OptionalTypeExpression
                 OptionalDescriptor.new(build_descriptor(expr.inner))
+            when AST::GenericTypeExpression
+                build_generic_descriptor(expr)
             else
                 raise ArgumentError.new("Unknown type expression #{expr.class}")
+            end
+        end
+
+        private def self.build_generic_descriptor(expr : AST::GenericTypeExpression) : Descriptor
+            name = expr.name.downcase
+            args = expr.arguments
+            case name
+            when "array"
+                raise ArgumentError.new("Array expects 1 type argument") unless args.size == 1
+                ArrayDescriptor.new(build_descriptor(args.first))
+            when "hash", "map"
+                raise ArgumentError.new("Hash expects 2 type arguments") unless args.size == 2
+                key_descriptor = build_descriptor(args[0])
+                value_descriptor = build_descriptor(args[1])
+                HashDescriptor.new(key_descriptor, value_descriptor)
+            when "range"
+                raise ArgumentError.new("Range expects 2 type arguments") unless args.size == 2
+                begin_descriptor = build_descriptor(args[0])
+                end_descriptor = build_descriptor(args[1])
+                RangeDescriptor.new(begin_descriptor, end_descriptor)
+            when "bag"
+                raise ArgumentError.new("bag expects 1 type argument") unless args.size == 1
+                BagDescriptor.new(build_descriptor(args.first))
+            when "para"
+                raise ArgumentError.new("para expects at least 1 type argument") if args.empty?
+                params = args[0...-1].map { |arg| build_descriptor(arg) }
+                return_descriptor = build_descriptor(args.last)
+                ParaDescriptor.new(params, return_descriptor)
+            else
+                raise UnknownTypeError.new(expr.name)
             end
         end
     end

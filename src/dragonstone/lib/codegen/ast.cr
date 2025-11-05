@@ -2,13 +2,14 @@
 # -------------- AST --------------
 # ---------------------------------
 require "../resolver/*"
+require "../runtime/symbol"
 
 module Dragonstone
     module AST
         alias NodeArray = Array(Node)
         alias RescueArray = Array(RescueClause)
         alias StringParts = Array(Tuple(Symbol, String))
-        alias LiteralValue = Nil | Bool | Int64 | Float64 | String | Char
+        alias LiteralValue = Nil | Bool | Int64 | Float64 | String | Char | SymbolValue
 
         abstract class Node
             getter location : Location?

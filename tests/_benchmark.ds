@@ -1,17 +1,58 @@
-#[
-    benchmark test.
+# This is the dragonstone benchmark testing file.
 
-    5 passes with an average of 3.43s
-    so thats about ~60mins for 1 billion iterations
-    fucking sucks
+#[ 
+    In here is a testing benchmark file I've
+    been using to make sure new implementations,
+    updates or changes don't drastically slow
+    down the language.
 ]#
 
-iterations = 1000000
-sum = 0
+#[
+    Tested on 04-11-2025:
+        Iterations Tested of 1,000,000 (1 Million)
+        5 Passes with an Average of 242-246ms.
 
-while iterations > 0
-    sum = sum + iterations
-    iterations = iterations - 1
+        If we were going to 1,000,000,000 (1 Billion),
+        this would take about ~4 Minutes.
+]#
+
+#[
+    Tested on 03-11-2025:
+        Iterations Tested of 1,000,000 (1 Million)
+        5 Passes with an Average of 2.27ms.
+
+        If we were going to 1,000,000,000 (1 Billion),
+        this would take about ~37 Minutes.
+]#
+
+#[
+    Tested on 01-11-2025:
+        Iterations Tested of 1,000,000 (1 Million)
+        5 Passes with an Average of 2.29ms.
+
+        If we were going to 1,000,000,000 (1 Billion),
+        this would take about ~38 Minutes.
+]#
+
+#[
+    Tested on 25-10-2025:
+        Iterations Tested of 1,000,000 (1 Million)
+        5 Passes with an Average of 3.43ms.
+
+        If we were going to 1,000,000,000 (1 Billion),
+        this would take about ~57 Minutes.
+]#
+
+# THE BENCHMARK TEST
+# i = iterations
+# s = sum
+
+i = 1000000
+s = 0
+
+while i > 0
+    s = s + i
+    i = i - 1
 end
 
-puts sum
+echo s

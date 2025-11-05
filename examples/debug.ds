@@ -1,33 +1,33 @@
 message = "Hello!"
-p! message
+e! message
 
 name = "Jules"
-p! name
+e! name
 
 # Using typeof
-p! typeof(message)
+e! typeof(message)
 
 x = 42
-p! typeof(x)
+e! typeof(x)
 
 y = 3.14
-p! typeof(y)
+e! typeof(y)
 
 flag = true
-p! typeof(flag)
+e! typeof(flag)
 
 # Complex expressions
 a = 10
 b = 5
-p! a + b
+e! a + b
 
-p! a + b * 2
+e! a + b * 2
 
 # typeof with expressions
-p! typeof(a + b)
-p! typeof("test")
+e! typeof(a + b)
+e! typeof("test")
 
 # Combining typeof with variables
 result = a * b
-p! result
-p! typeof(result)
+e! result
+e! typeof(result)

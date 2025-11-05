@@ -36,7 +36,7 @@ module Dragonstone
         unit = runtime.compile_or_eval(ast, entry_path)
         runtime.unit_cache[entry_path] = unit
 
-        RunResult.new(tokens, ast, unit.interpreter.output)
+        RunResult.new(tokens, ast, unit.output)
     end
 
     def self.run(

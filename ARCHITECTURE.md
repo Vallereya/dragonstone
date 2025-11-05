@@ -8,10 +8,38 @@
 
 #### This document serves as a critical, living template designed to provide a quick, rapid and comprehensive understanding of the codebase's architecture. This document will update as the project evolves.
 
-## 1. Misc. Information
+## 1. Project Structure
+
+```md
+[root]/
+    ├── .git/                           
+    ├── docs/                           -> documentation
+    ├── examples/                       -> example .ds files
+    ├── scripts/                        -> auto scripts
+    ├── spec/                           -> testing files
+    ├── tests/                          -> unimportant test .ds files
+    ├── bin/
+    │   ├── dragonstone                 -> main entry
+    │   ├── dragonstone.ps1             -> .ps1 script for env
+    │   └── dragonstone.bat             -> add to path and handoff to .ps1
+    ├── src/
+    │   ├── dragonstone/                -> main source
+    │   ├── version.cr                  -> version control
+    │   └── dragonstone.cr              -> orchestrator
+    ├── shard.yml                       
+    ├── LICENSE
+    ├── ROADMAP.md
+    ├── ARCHITECTURE.md                 -> *you are here*
+    ├── CONTRIBUTING.md
+    ├── README.md
+    ├── .editorconfig
+    ├── .gitattributes
+    └── .gitignore
+```
+
+## 2. Misc. Project Information
 
 ```css
-
     Dragonstone Colors Scheme:
         --DS-Primary:             oklch(0.4793 0.2774 285.03);     /* #5E06EE */
 
@@ -43,33 +71,4 @@
         --State-Negative          oklch(0.9062 0.1927 105.48);     /* #BC002D */
         --State-Focus             oklch(0.5625 0.2405 270.2);      /* #455CFF */
         --State-Signal            oklch(0.5028 0.2021 20.72);      /* #F3E600 */
-
-```
-
-## 2. Project Structure
-
-```md
-[root]/
-    ├── .git/                           
-    ├── docs/                           -> documentation
-    ├── scripts/                        -> auto scripts
-    ├── examples/                       -> example .ds files
-    ├── tests/                          -> unimportant test .ds files
-    ├── spec/                           -> testing files
-    ├── bin/
-    │   ├── dragonstone                 -> main entry
-    │   ├── dragonstone.ps1             -> .ps1 script for env
-    │   └── dragonstone.bat             -> add to path and handoff to .ps1
-    ├── src/
-    │   ├── dragonstone/                -> main source
-    │   ├── version.cr                  -> version control
-    │   └── dragonstone.cr              -> orchestrator
-    ├── shard.yml                       
-    ├── LICENSE
-    ├── ARCHITECTURE.md                 -> *you are here*
-    ├── CONTRIBUTING.md
-    ├── README.md
-    ├── .editorconfig
-    ├── .gitattributes
-    └── .gitignore
 ```

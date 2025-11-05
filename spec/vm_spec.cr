@@ -1,0 +1,63 @@
+require "spec"
+require "../src/dragonstone/lib/lexer/*"
+require "../src/dragonstone/lib/parser/*"
+require "../src/dragonstone/lib/compiler/*"
+require "../src/dragonstone/lib/vm/vm"
+
+private def compile_bytecode(source : String) : Dragonstone::CompiledCode
+    tokens = Dragonstone::Lexer.new(source).tokenize
+    ast = Dragonstone::Parser.new(tokens).parse
+    Dragonstone::Compiler.compile(ast)
+end
+
+describe Dragonstone::VM do
+
+    it "executes function calls and returns values" do
+        source = <<-'DS'
+        def add(a, b)
+            return a + b
+        end
+
+        puts add(2, 3)
+        DS
+
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("5\n")
+    end
+
+    it "supports nested calls and interpolation expressions" do
+        source = <<-'DS'
+        def shout(name)
+            msg = "Hello, #{name}"
+            puts msg
+            return msg
+        end
+
+        puts shout("VM")
+        DS
+
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("Hello, VM\nHello, VM\n")
+    end
+
+    it "prints empty line for nil puts" do
+        source = "puts nil\n"
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("\n")
+    end
+end

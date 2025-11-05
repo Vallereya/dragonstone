@@ -1,5 +1,6 @@
 require "spec"
-require "../src/dragonstone/cli"
+require "../src/dragonstone/cli/cli"
+
 describe Dragonstone::CLI do
     it "returns an error when the file is missing" do
         stdout = IO::Memory.new
@@ -8,6 +9,7 @@ describe Dragonstone::CLI do
         status.should eq(1)
         stderr.to_s.should contain("not found")
     end
+
     it "prints version information" do
         stdout = IO::Memory.new
         stderr = IO::Memory.new
@@ -15,23 +17,24 @@ describe Dragonstone::CLI do
         status.should eq(0)
         stdout.to_s.should contain("Dragonstone #{Dragonstone::VERSION}")
     end
+    
     it "lexes a program" do
         File.tempfile("dragonstone", suffix: ".ds") do |file|
-            file.print("puts 1\n")
+            file.print("echo 1\n")
             file.flush
             stdout = IO::Memory.new
             stderr = IO::Memory.new
             status = Dragonstone::CLI.run(["lex", file.path], stdout, stderr)
             status.should eq(0)
             stdout.to_s.should contain("=== Tokens for #{file.path}")
-            stdout.to_s.should contain("Token(PUTS")
+            stdout.to_s.should contain("Token(ECHO")
             stderr.to_s.should be_empty
         end
     end
 
     it "parses a program and prints function definitions" do
         File.tempfile("dragonstone", suffix: ".ds") do |file|
-            file.print("def greet(name)\n  puts name\nend\n")
+            file.print("def greet(name)\n  echo name\nend\n")
             file.flush
 
             stdout = IO::Memory.new
@@ -46,7 +49,7 @@ describe Dragonstone::CLI do
 
     it "runs a program and streams interpreter output" do
         File.tempfile("dragonstone", suffix: ".ds") do |file|
-            file.print("puts \"Hello, Dragonstone!\"")
+            file.print("echo \"Hello, Dragonstone!\"")
             file.flush
 
             stdout = IO::Memory.new

@@ -1,32 +1,32 @@
-puts "Hello World!"
+echo "Hello World!"
 
-puts "Hello from Dragonstone!"
+echo "Hello from Dragonstone!"
 
 # String interpolation
 name = "Jules"
 age = 25
 message = "My name is #{name} and I am #{age} years old"
-puts message
+echo message
 
 # Interpolation with expressions
 x = 10
 y = 5
 result = "#{x} + #{y} = #{x + y}"
-puts result
+echo result
 
 # String methods
 text = "hello world"
-p! text.upcase
-p! text.downcase
-p! text.length
+e! text.upcase
+e! text.downcase
+e! text.length
 
 # Nested interpolation
 a = 3
 b = 4
 output = "The sum of #{a} and #{b} is #{a + b}, and the product is #{a * b}"
-puts output
+echo output
 
 # Complex expressions in interpolation
 items = ["apple", "banana", "cherry"]
-p! "First item: #{items[0]}"
-p! "Array length: #{items.length}"
+e! "First item: #{items[0]}"
+e! "Array length: #{items.length}"
