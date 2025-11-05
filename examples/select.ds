@@ -3,9 +3,9 @@ y = 20
 
 select
 when x > y
-    puts "#{x} is greater"
+    echo "#{x} is greater"
 when y > x
-    puts "#{y} is greater"
+    echo "#{y} is greater"
 else
-    puts "They are equal"
+    echo "They are equal"
 end

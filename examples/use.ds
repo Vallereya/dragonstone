@@ -1,20 +1,3 @@
 use "test_use.ds"
 
-puts add(magic, 8)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-use "test_use.ds"
-
 echo add(magic, 8)

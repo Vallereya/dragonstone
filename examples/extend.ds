@@ -10,4 +10,4 @@ class Greeter
     extend Logger
 end
 
-puts Greeter.hello("world")
+echo Greeter.hello("world")

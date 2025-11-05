@@ -5,7 +5,7 @@ require "file_utils"
 # ---------------------------------
 
 # Was running into issues using calling ruby so
-# all of this basically only allows puts/print 
+# all of this basically only allows echo/print 
 # methods to be called so far.
 {% if env("DRAGONSTONE_RUBY_LIB") %}
     @[Link({{ env("DRAGONSTONE_RUBY_LIB") }})]
@@ -125,7 +125,7 @@ module Dragonstone
         def self.call_crystal(function_name : String, arguments : Array(InteropValue)) : InteropValue
             case function_name
 
-            when "puts"
+            when "echo", "puts"
                 arguments.each { |argument| puts format_value(argument) }
                 nil
 

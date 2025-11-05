@@ -7,15 +7,15 @@ def repeat(times)
 end
 
 repeat(3) do |i|
-    puts "Iteration #{i}"
+    echo "Iteration #{i}"
 end
 
 def around
-    puts "Before block"
+    echo "Before block"
     yield
-    puts "After block"
+    echo "After block"
 end
 
 around() do
-    puts "Inside block"
+    echo "Inside block"
 end

@@ -1,3 +1,0 @@
-# Placeholder so devs can create their own "use",
-# with "$:" so path of "./some/folder/modules" can become
-# "$:Modules/something".

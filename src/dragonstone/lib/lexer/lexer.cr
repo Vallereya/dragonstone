@@ -45,6 +45,7 @@ module Dragonstone
 
     class Lexer
         KEYWORDS = %w[
+            echo
             puts 
             if 
             else 
@@ -119,6 +120,9 @@ module Dragonstone
                     scan_string
                 elsif char == '\''
                     scan_char
+                elsif char == 'e' && peek_char == '!'
+                    add_token(:DEBUG_PRINT, "e!", @line, @column, 2)
+                    advance(2)
                 elsif char == 'p' && peek_char == '!'
                     add_token(:DEBUG_PRINT, "p!", @line, @column, 2)
                     advance(2)
@@ -556,7 +560,7 @@ module Dragonstone
                     when "false" then :FALSE
                     when "nil" then :NIL
                     when "elseif" then :ELSIF
-                    when "puts" then :PUTS
+                    when "echo", "puts" then :ECHO
                     when "if" then :IF
                     when "else" then :ELSE
                     when "elsif" then :ELSIF

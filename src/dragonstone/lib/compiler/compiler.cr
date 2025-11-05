@@ -237,9 +237,9 @@ module Dragonstone
             end
 
             case node.name
-            when "puts"
+            when "echo", "puts"
                 node.arguments.each { |arg| compile_expression(arg) }
-                emit(OPC::PUTS, node.arguments.size)
+                emit(OPC::ECHO, node.arguments.size)
 
             when "typeof"
                 node.arguments.each { |arg| compile_expression(arg) }
@@ -464,7 +464,7 @@ module Dragonstone
                 stack_pop(2)
                 stack_push
 
-            when OPC::PUTS
+            when OPC::ECHO
                 argc = operands[0]? || 0
                 stack_pop(argc)
                 stack_push

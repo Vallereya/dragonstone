@@ -17,30 +17,30 @@
 
 # untyped variable, dynamic typing
 name = "Ringo"
-puts name
+echo name
 
 # typed variable, with optional strict typing
 name: str = "Jules"
-puts name
+echo name
 
 # method with typed parameters and return type
 def 😱(name: str) -> str
-    puts "Hello, #{name}!"
+    echo "Hello, #{name}!"
 end
 😱("Peet")
 
 # method with dynamic parameters and return type
 def greet(name)
-    puts "Hello, #{name}!"
+    echo "Hello, #{name}!"
 end
 greet("V")
 
 # Union type example (an argument can be a String or Nil)
 def greet(country: str | nil) -> str
     if country.nil?
-        puts "Ahhh, I don't know where I'm from!"
+        echo "Ahhh, I don't know where I'm from!"
     else
-        puts "Hello, I'm from #{country}!"
+        echo "Hello, I'm from #{country}!"
     end
 end
 

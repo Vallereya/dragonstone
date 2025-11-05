@@ -1,13 +1,13 @@
 x = 10
 
 if x == 10
-    puts "x is ten"
+    echo "x is ten"
 end
 
 if x > 5
-    puts "x is greater than 5"
+    echo "x is greater than 5"
 
 else
-    puts "x is not greater than 5" 
+    echo "x is not greater than 5" 
      
 end

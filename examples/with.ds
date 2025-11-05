@@ -9,6 +9,6 @@ end
 point = Point.new(1, 2)
 
 with point
-    puts x  # Outputs: 1
-    puts y  # Outputs: 2
+    echo x  # Outecho: 1
+    echo y  # Outecho: 2
 end

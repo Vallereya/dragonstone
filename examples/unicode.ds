@@ -5,10 +5,10 @@
 ]#
 
 message = "❤️"
-puts message
+echo message
 
 ❤️ = "あ"
-puts ❤️
+echo ❤️
 
 
 class 🔥
@@ -16,7 +16,7 @@ class 🔥
   
     def 道
         if あ
-            puts "Hello!"
+            echo "Hello!"
         end
     end
 end
@@ -24,7 +24,7 @@ end
 🔥.道
 
 def Saudação(اسم, อายุ)
-    puts "Hello, #{اسم}! You are #{อายุ}."
+    echo "Hello, #{اسم}! You are #{อายุ}."
 end
 
 Saudação("Jules", 25)

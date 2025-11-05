@@ -1,7 +1,7 @@
 # ---------------------------------
 # ------------ ENTRY --------------
 # ---------------------------------
-require "../src/dragonstone/cli"
+require "../src/dragonstone/cli/cli"
 
 # This is the main entry, which just pushes 
 # to cli, this is a crystal file despite

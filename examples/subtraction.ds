@@ -1,5 +1,5 @@
 a = 1 - 2
-puts a
+echo a
 
 b = 10 &- 2
-puts b
+echo b

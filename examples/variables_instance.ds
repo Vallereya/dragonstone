@@ -28,8 +28,8 @@ class Person
 end
 
 person = Person.new("Jules", 30)
-puts person.name
-puts person.age
+echo person.name
+echo person.age
 
 # Example Three:
 class BankAccount
@@ -45,7 +45,7 @@ class BankAccount
         if sufficient_funds?(amount)
             @balance -= amount
         else
-            puts "Insufficient funds."
+            echo "Insufficient funds."
         end
     end
 
@@ -75,21 +75,21 @@ class BankAccount
     def deposit(amount: int)
         if amount > 0
             @balance += amount
-            puts "Deposited #{amount}. New balance: #{@balance}"
+            echo "Deposited #{amount}. New balance: #{@balance}"
         else
-            puts "Deposit amount must be positive."
+            echo "Deposit amount must be positive."
         end
     end
 
     # Another public method with our built-in validation logic.
     def withdraw(amount: int)
         if amount > @balance
-            puts "Insufficient funds."
+            echo "Insufficient funds."
         elsif amount > 0
             @balance -= amount
-            puts "Withdrew #{amount}. New balance: #{@balance}"
+            echo "Withdrew #{amount}. New balance: #{@balance}"
         else
-            puts "Withdrawal amount must be positive."
+            echo "Withdrawal amount must be positive."
         end
     end
 end

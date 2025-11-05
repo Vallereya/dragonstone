@@ -5,21 +5,21 @@ my_bag.add("apple")
 my_bag.add("banana")
 my_bag.add("apple") # duplicate ignored
 
-puts my_bag.size    # Outputs: 2
-puts my_bag.includes?("banana") # Outputs: true
-puts my_bag.includes?("cherry") # Outputs: false
+echo my_bag.size    # Outecho: 2
+echo my_bag.includes?("banana") # Outecho: true
+echo my_bag.includes?("cherry") # Outecho: false
 
 my_bag.each do |item|
-    puts item
+    echo item
 end
 
 uppercased = my_bag.map do |item|
     item.upcase
 end
 
-p! uppercased
+e! uppercased
 
-p! my_bag.to_a
+e! my_bag.to_a
 
 # Example Two
 numbers = bag(int).new
@@ -28,9 +28,9 @@ numbers.add(1)
 numbers.add(2)
 numbers.add(3)
 numbers.add(4)
-puts numbers.includes?(2)  # Outputs: true
-puts numbers.size          # Outputs: 4
+echo numbers.includes?(2)  # Outecho: true
+echo numbers.size          # Outecho: 4
 
 numbers.each do |num|
-    puts num
+    echo num
 end

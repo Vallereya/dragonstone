@@ -1,11 +1,11 @@
 # Boolean Test
-puts true
+echo true
 
 # Integer Test
-puts 42
+echo 42
 
 # Float Test
-puts 3.14
+echo 3.14
 
 # Nil Test
-puts nil
+echo nil

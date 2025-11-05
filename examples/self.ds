@@ -6,7 +6,7 @@ class Person
     end
 
     def greet
-        puts "Hello, my name is #{self.name}"  # Using self to access the property
+        echo "Hello, my name is #{self.name}"  # Using self to access the property
     end
 end
 

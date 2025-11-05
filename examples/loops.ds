@@ -1,8 +1,8 @@
 counter = 1
 
 while counter <= 5
-    puts counter
+    echo counter
     counter = counter + 1
 end
 
-puts "Done!"
+echo "Done!"

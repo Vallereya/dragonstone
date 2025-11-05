@@ -8,8 +8,8 @@ end
 Color::Green            # You can access an enum member directly using EnumName::MemberName.
 Color::Green.value      # => 1 (.value to get the underlying integer value of an enum member.)
 
-puts Color::Green       # => Green
-puts Color::Green.value
+echo Color::Green       # => Green
+echo Color::Green.value
 
 # Example 2
 enum Direction
@@ -21,7 +21,7 @@ end
 
 # (.each iterates over all defined members of the enum.)
 Direction.each do |direction|
-    puts "Direction: #{direction}"
+    echo "Direction: #{direction}"
 end
 
 # Example 3
@@ -33,5 +33,5 @@ enum StatusCodes(code: int)
 end
 
 code = StatusCodes.new(404)
-puts code
-puts code.value
+echo code
+echo code.value

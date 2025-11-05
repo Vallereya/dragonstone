@@ -1,29 +1,29 @@
 # Example using Dragonstone ffi to call
 # methods from C, Ruby and Crystal.
 
-# Ruby's puts
-result = ffi.call_ruby("puts", ["Hello from Ruby!"])
+# Ruby's echo
+result = ffi.call_ruby("echo", ["Hello from Ruby!"])
 
 if result.nil?
-    puts "Ruby return value: nil"
+    echo "Ruby return value: nil"
 else
-    puts "Ruby return value: #{result}"
+    echo "Ruby return value: #{result}"
 end
 
-# Crystal's puts
-result = ffi.call_crystal("puts", ["Hello from Crystal!"])
+# Crystal's echo
+result = ffi.call_crystal("echo", ["Hello from Crystal!"])
 
 if result.nil?
-    puts "Crystal return value: nil"
+    echo "Crystal return value: nil"
 else
-    puts "Crystal return value: #{result}"
+    echo "Crystal return value: #{result}"
 end
 
 # C's printf (printf does not add a newline, so include one)
 result = ffi.call_c("printf", ["Hello from C!\n"])
 
 if result.nil?
-    puts "C return value: nil"
+    echo "C return value: nil"
 else
-    puts "C return value: #{result}"
+    echo "C return value: #{result}"
 end

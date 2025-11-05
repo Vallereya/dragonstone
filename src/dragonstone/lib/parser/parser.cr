@@ -38,6 +38,7 @@ module Dragonstone
             :UNLESS, 
             :WHILE, 
             :PUTS, 
+            :ECHO,
             :DEBUG_PRINT
         ]
 
@@ -209,7 +210,7 @@ module Dragonstone
                 else
                     parse_expression_statement
                 end
-            when :PUTS
+            when :ECHO
                 parse_keyword_method_call
             when :DEBUG_PRINT
                 parse_debug_print

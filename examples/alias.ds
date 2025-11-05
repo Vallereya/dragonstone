@@ -2,7 +2,7 @@
 alias Name = str
 
 def greet(name: str)
-    puts "Hello, #{name}!"
+    echo "Hello, #{name}!"
 end
 
 greet("Alice")
@@ -11,11 +11,11 @@ greet("Alice")
 alias Data = str | int
 
 def greet(name: str)
-    puts "Hello, #{name}!"
+    echo "Hello, #{name}!"
 end
 
 def date(year: int)
-    puts "This year is: #{year}"
+    echo "This year is: #{year}"
 end
 
 greet("Alice")

@@ -187,7 +187,7 @@ module Dragonstone
                 when OPC::BIT_NOT
                     value = pop
                     push(bitwise_not(value))
-                when OPC::PUTS
+                when OPC::ECHO
                     argc = fetch_byte
                     args = pop_values(argc)
                     line = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")

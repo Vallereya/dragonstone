@@ -10,6 +10,7 @@ private def with_tmpdir(&block : String ->)
         FileUtils.rm_rf(base)
     end
 end
+
 require "../src/dragonstone"
 
 describe "Dragonstone standard library" do
@@ -18,9 +19,8 @@ describe "Dragonstone standard library" do
             script = File.join(dir, "main.ds")
             File.write(script, <<-DS)
 use "strings/strings_length"
-puts strings.length("Dragonstone")
+echo strings.length("Dragonstone")
 DS
-
             result = Dragonstone.run_file(script)
             result.output.should contain("11")
         end
@@ -37,18 +37,16 @@ DS
             File.write(shim, <<-DS)
 module strings
     def length(str)
-        puts "custom"
+        echo "custom"
         str.size
     end
 end
 DS
-
             script = File.join(dir, "main.ds")
             File.write(script, <<-DS)
 use "strings/strings_length"
-puts strings.length("Dragonstone")
+echo strings.length("Dragonstone")
 DS
-
             previous = ENV["DS_PATH"]?
             begin
                 ENV["DS_PATH"] = lib_dir

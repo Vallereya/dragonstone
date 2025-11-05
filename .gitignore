@@ -1,15 +1,37 @@
-# So it ignores my build files.
+# 
+# Here I'm putting in files and folders
+# to be ignored from git.
+#
 
-# Output
+# Ignore any Output/Build Files.
 dragonstone.exe
 dragonstone.pdb
+dragonstone.res
+dragonstone.o
 gc.dll
 iconv-2.dll
 pcre2-8.dll
-NUL
 version.h
+NUL
+
+# Ignore any Cache that's created.
+.cache
+.c
+.c_cache
+.ruby
+.ruby_cache
 .crystal
 .crystal_cache
+
+# Ignore any IDE folders.
+.vscode
+.idea
+.vim
+
+# Other ignores.
+.dragonstone
+install-dragonstone.iss
+installer
 
 # Annoying IDE ignores.
 .fake

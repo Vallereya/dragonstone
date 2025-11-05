@@ -1,5 +1,5 @@
 message = "Hello!"
 
-puts message
-puts message
-puts message
+echo message
+echo message
+echo message

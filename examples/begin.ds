@@ -1,5 +1,5 @@
 begin
-    puts "Inside begin block"
+    echo "Inside begin block"
 ensure
-    puts "This always runs"
+    echo "This always runs"
 end

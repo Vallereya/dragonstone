@@ -5,10 +5,10 @@ def divide(a: int, b: int)
     a / b
 end
 
-puts divide(10, 2)  # Outputs: 5
+echo divide(10, 2)  # Outecho: 5
 
 begin
-    puts divide(10, 0)
+    echo divide(10, 0)
 rescue ex
-    puts "Caught an exception: #{ex.message}"
+    echo "Caught an exception: #{ex.message}"
 end

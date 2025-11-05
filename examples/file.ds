@@ -19,18 +19,18 @@ path_utils = utilities.path()
 path_utils.create(tmp_dir)
 
 create_result = file_utils.create(target, "hello", true)
-puts "create => #{create_result}"
-puts "read   => #{file_utils.read(target)}"
+echo "create => #{create_result}"
+echo "read   => #{file_utils.read(target)}"
 
 write_bytes = file_utils.write(target, "world", true)
-puts "write  => bytes=#{write_bytes}"
+echo "write  => bytes=#{write_bytes}"
 
 append_bytes = file_utils.append(target, "!", true)
-puts "append => bytes=#{append_bytes}"
-puts "read   => #{file_utils.read(target)}"
+echo "append => bytes=#{append_bytes}"
+echo "read   => #{file_utils.read(target)}"
 
 open_info = file_utils.open(target, "r", false)
-puts "open   => #{open_info}"
+echo "open   => #{open_info}"
 
-puts "delete => #{file_utils.delete(target)}"
+echo "delete => #{file_utils.delete(target)}"
 file_utils.delete(tmp_dir)

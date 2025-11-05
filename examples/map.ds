@@ -2,17 +2,17 @@
 ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
 
 # Access existing entries
-puts ages["Jules"]
+echo ages["Jules"]
 
 # Update values via index assignment
 ages["Ringo"] = 30
-puts ages["Ringo"]
+echo ages["Ringo"]
 
 # Iterate with block parameters
 ages.each do |name, age|
-    puts "#{name} is #{age}"
+    echo "#{name} is #{age}"
 end
 
 # Built-in helpers
-p! ages.keys
-p! ages.values
+e! ages.keys
+e! ages.values

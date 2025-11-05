@@ -1,31 +1,31 @@
 # Array literals
 numbers = [1, 2, 3, 4, 5]
-p! numbers
+e! numbers
 
 # Array indexing
 first = numbers[0]
-p! first
+e! first
 
 last = numbers[4]
-p! last
+e! last
 
 # Array methods
-p! numbers.length
-p! numbers.first
-p! numbers.last
+e! numbers.length
+e! numbers.first
+e! numbers.last
 
 # Modifying arrays
 numbers.push(6)
-p! numbers
+e! numbers
 
 popped = numbers.pop
-p! popped
-p! numbers
+e! popped
+e! numbers
 
 # Empty array
 empty = []
-p! empty.empty
+e! empty.empty
 
 # Mixed types
 mixed = [1, "hello", 3.14, true]
-p! mixed
+e! mixed

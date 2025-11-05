@@ -1626,9 +1626,9 @@ module Dragonstone
         private def call_function_name(node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?)
             case node.name
 
-            when "puts"
+            when "echo", "puts"
                 if block_value
-                    runtime_error(InterpreterError, "puts does not accept a block", node)
+                    runtime_error(InterpreterError, "echo does not accept a block", node)
                 end
                 values = arg_nodes.map { |arg| arg.accept(self) }
                 append_output(values.map { |v| v.nil? ? "" : v.to_s }.join(" "))

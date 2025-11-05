@@ -27,22 +27,42 @@
 ## What is Dragonstone?
 Dragonstone is a general purpose, high-level, object-oriented programming language. In its current form it is an interpreted language, inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
 
-*This language is a work in progress.*
+*<span style="color: #5E06EE;">This language is a work in progress. At this stage, must can still be changed.*
 
-**P.S.** Just a heads up, it was built with windows and is stable so you can download/clone and get up and running easy; However, I have not tested the build process on Linux or MacOS yet. 
+<!-- 
+The biggest goal is to be able to have a language that can be both compiled and interpreted, easy to read like Ruby/Crystal and interop with C, Ruby and Crystal. Ruby, and by extension Crystal, is a beautiful language and Crystal, bringing that inspiration, was made to improve upon Ruby but integration was not its goal. And that's okay. For Dragonstone what I want is to bring that original inspiration from ruby, the performance and C interop from Crystal, and with Dragonstone expand the interop to both Crystal and Ruby but with a new modern facelift, cross-platform capabilities, and most importantly aim to bring choice, the choice of using or not using things like dynamic vs static, compiled vs interpreted, implicit vs explicit, garbage collected vs none, hell even an ownership model.
+-->
 
-<!-- And, this language is a work in progress. There are a ton of things already done but some of the more interesting core features are either are not yet implemented or are only partially implemented. However, these will be ironed out and the `Great Refactor` will come before v0.1.0 so don't worry. It's my first time making a language sorry, Thank you. -->
+**P.S.** Just a heads up, it was built with windows and is stable so you can download/clone and get up and running easy; However, I have not tested the build process on Linux or MacOS yet.
+
+## 1 Billion Iteration Benchmark (Interpreter)
+```
+    ~4.47 million iterations per second
+    ~0.224 microseconds per iteration
+
+    1B iterations:  223,712ms
+    Actual Time:    223.71 seconds (3.73 minutes)
+```
 
 ## Project Setup
 
+### Building from Source using Bash (All Platforms)
 1. Clone this repository.
-2. Run `shards build` to build the binary which gets placed in `./bin`.
-3. Run `dragonstone.bat` inside `./bin` to add it to user env path and handoff to `dragonstone.ps1`.
-4. If it doesn't handoff to .ps1 you can run it, or just load up your terminal and cd to ./bin
+2. Change directory to this project.
+3. Run the command `shards build` to build *(this gets placed in `./bin`)*.
+
+### Building from Source using Terminal or Powershell (Windows Only)
+1. Clone this repository.
+2. Change directory to this project.
+3. Run the command `shards build` to build *(this gets placed in `./bin`)*.
+4. Run the command `.\bin\dragonstone.bat --rebuild-exe` *(this builds the project with the custom icon embedded)*.
+5. <span style="color: #5E06EE;">(Optional)</span> Run the command `.\bin\dragonstone.bat` to add `.\bin` to your user PATH environment variable, allowing you to run `dragonstone` from anywhere. Restart your terminal after this step.
+
+**Note**: You can also just use `shards build` on Windows for a standard build without the custom icon added.
 
 ## Usage
 
-#### Run Files
+#### Run Files via Interpreter. 
 
 ```bash
     dragonstone run examples/hello_world.ds
@@ -50,19 +70,28 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     ./bin/dragonstone.exe run examples/hello_world.ds
 ```
 
-#### Run Tests
+#### Build and Run Files via Compiler. 
+
+```bash
+    dragonstone build examples/hello_world.ds
+
+    ./bin/dragonstone.exe build examples/hello_world.ds
+```
+
+#### Run Test/Spec.
 ```bash
     crystal spec
 ```
 
 ## Examples
 
-#### Example of Print, Comments and Requiring Files.
-```crystal
-    puts "Hello World!"
+#### Example of print/puts; Dragonstone uses `echo`:
+```bash
+    echo "Hello World!"
 ```
 
-```
+#### Example of comments/block comments; Dragonstone uses `#` and `#[ ]#`:
+```dragonstone
     # This is a Single Line Comment.
 
     #[
@@ -74,41 +103,44 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     #[ Multi-Line Comment on same line. ]#     numbers = 10    #[ Inside or outside. ]#
 ```
 
-```crystal
+#### Example of requiring/importing other files.
+```dragonstone
 (from examples/test_use.ds)
     con magic = 42
 
     def add(a, b)
         a + b
     end
+```
 
+```dragonstone
 (from examples/use.ds)
     use "test_use.ds"
 
-    puts add(magic, 8)
+    echo add(magic, 8)
 ```
 
 #### Some More Examples!
-```crystal
+```dragonstone
     name = "Ringo"
-    puts name
+    echo name
 ```
 
-```crystal
+```dragonstone
     def greet(name)
-        puts "Hello, #{name}!"
+        echo "Hello, #{name}!"
     end
 
     greet("Jules")
 ```
 
-```crystal
+```dragonstone
     class 🔥
     あ = true
   
         def 道
             if あ
-                puts "Hello!"
+                echo "Hello!"
             end
         end
     end
@@ -116,12 +148,12 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     🔥.道
 ```
 
-```crystal
+```dragonstone
     ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
-    puts ages["Jules"]
+    echo ages["Jules"]
 ```
 
-```crystal
+```dragonstone
     module MyModule
         con Test = 100
 
@@ -132,32 +164,32 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
         end
     end
 
-    puts MyModule::Test
-    puts MyModule::MyClass.greet
+    echo MyModule::Test
+    echo MyModule::MyClass.greet
 ```
 
 #### Some More Examples with Optional Types!
-```crystal
+```dragonstone
     name: str = "Peet"
-    puts name
+    echo name
 ```
 
-```crystal
+```dragonstone
     a: int = 10
     b: int = 10
     numbers = a + b
-    puts numbers
+    echo numbers
 ```
 
-```crystal
+```dragonstone
     def 😱(name: str) -> str
-        puts "Hello, #{name}!"
+        echo "Hello, #{name}!"
     end
 
     😱("V")
 ```
 
-```crystal
+```dragonstone
     class Person
         property name: str
 
@@ -166,7 +198,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
         end
 
         def greet
-            puts "Hello, my name is #{self.name}"
+            echo "Hello, my name is #{self.name}"
         end
     end
 
@@ -174,7 +206,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     person.greet
 ```
 
-```crystal
+```dragonstone
     struct Point
         property x: int
         property y: int
@@ -184,7 +216,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     end
 
     point = Point.new(10, 20)
-    puts "x: #{point.x}, y: #{point.y}"
+    echo "x: #{point.x}, y: #{point.y}"
 ```
 
 See the `examples/` directory for more sample `.ds` files.

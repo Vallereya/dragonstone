@@ -7,4 +7,4 @@ struct Point
 end
 
 point = Point.new(10, 20)
-puts "x: #{point.x}, y: #{point.y}"
+echo "x: #{point.x}, y: #{point.y}"
