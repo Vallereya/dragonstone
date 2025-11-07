@@ -1,14 +1,17 @@
-echo "Hello World!"
+#[
+    Strings Example
+]#
 
+echo "Hello World!"
 echo "Hello from Dragonstone!"
 
-# String interpolation
+# String interpolation.
 name = "Jules"
 age = 25
 message = "My name is #{name} and I am #{age} years old"
 echo message
 
-# Interpolation with expressions
+# Interpolation with expressions.
 x = 10
 y = 5
 result = "#{x} + #{y} = #{x + y}"
@@ -20,13 +23,13 @@ e! text.upcase
 e! text.downcase
 e! text.length
 
-# Nested interpolation
+# Nested interpolation.
 a = 3
 b = 4
 output = "The sum of #{a} and #{b} is #{a + b}, and the product is #{a * b}"
 echo output
 
-# Complex expressions in interpolation
+# Complex expressions in interpolation.
 items = ["apple", "banana", "cherry"]
 e! "First item: #{items[0]}"
 e! "Array length: #{items.length}"

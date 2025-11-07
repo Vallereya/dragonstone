@@ -1,3 +1,11 @@
+#[
+    Resolution Example
+]#
+
+#[
+    Also has an example of con = constant.
+]#
+
 module MyModule
     con Test = 100
 
@@ -8,22 +16,22 @@ module MyModule
     end
 end
 
-# Access the constant via the module scope
-echo MyModule::Test  # Outecho: 100
+# Access the constant via the module scope.
+echo MyModule::Test
 
-# Access the class method via the module and class scope
-echo MyModule::MyClass.greet  # Outecho: Hello from MyClass
+# Access the class method via the module and class scope.
+echo MyModule::MyClass.greet
 
 
 module Outer
     module Inner
         class MyNestedClass
-            def say_hi
+            def hi
                 echo "Hi from a nested class!"
             end
         end
     end
 end
 
-nested_instance = Outer::Inner::MyNestedClass.new
-nested_instance.say_hi
+nested = Outer::Inner::MyNestedClass.new
+nested.hi

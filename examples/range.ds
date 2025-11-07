@@ -1,15 +1,21 @@
-# Inclusive range includes both endpoints
+#[
+    Range Example
+]#
+
+# Inclusive range includes both endpoints.
 inclusive = 1..3
+
 echo inclusive.first
 echo inclusive.last
 echo inclusive.includes?(2)
 
-# Exclusive range skips the end value
+# Exclusive range skips the end value.
 exclusive = 1...4
-echo exclusive.last
-echo exclusive.includes?(4) # => false
 
-# Ranges support iteration with blocks
+echo exclusive.last
+echo exclusive.includes?(4)
+
+# Ranges support iteration with blocks.
 ('a'..'c').each do |letter|
     echo "Letter: #{letter}"
 end

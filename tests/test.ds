@@ -17,3 +17,7 @@ echo "----------------------------"
 
 # Testing File Begin.
 echo "Testing..."
+
+# TODO: Uppercase isn't enforced. Should it and snake case be?
+# Message = "Hello!"
+# echo Message

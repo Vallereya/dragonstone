@@ -1,3 +1,7 @@
+#[
+    Loops Example
+]#
+
 counter = 1
 
 while counter <= 5

@@ -14,7 +14,7 @@ Dragonstone is a language meant to provide programmers with happiness and choice
 
 0. Index
     - These are where we store various assets used throughout this project.
-    - Icons and Logos; If you're using VS Code and know how to enable extensions recognition, these can be used so dragonstone file extensions can be recognized. 
+    - Icons and Logos; If you're using VS Code and know how to enable extensions recognition, these can be used so dragonstone file extensions can be recognized, if needed. 
 
 1. Getting Started
     - Index: Provides a brief overview of what is listed throughout the documentation.
@@ -24,7 +24,7 @@ Dragonstone is a language meant to provide programmers with happiness and choice
     - Extensions: (Coming Soon) How to get and install IDE extensions.
 
 2. Introduction
-    - These guides provide an overview of the various capabilities Dragonstone has to offer, including some examples of how they work, for more code examples visit the `./examples` directory.
+    - These guides provide an quick overview of some of the various capabilities Dragonstone has to offer, including some examples of how they work, for more code examples visit the `./examples` directory.
 
 3. Basic Dragonstone
     - (Coming Soon)

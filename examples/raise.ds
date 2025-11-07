@@ -1,11 +1,17 @@
+#[
+    Raise Example
+]#
+
 def divide(a: int, b: int)
     if b == 0
         raise "Cannot divide by zero"
     end
+
     a / b
+
 end
 
-echo divide(10, 2)  # Outecho: 5
+echo divide(10, 2)
 
 begin
     echo divide(10, 0)

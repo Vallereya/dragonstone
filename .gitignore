@@ -32,6 +32,14 @@ NUL
 .dragonstone
 install-dragonstone.iss
 installer
+release
 
 # Annoying IDE ignores.
 .fake
+
+# Temporarily Ignoring the bootstrap conversion files.
+version.ds
+main.ds
+cli.ds
+run_proc.ds
+dragonstone.ds

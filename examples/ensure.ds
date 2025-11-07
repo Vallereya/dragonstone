@@ -1,14 +1,18 @@
+#[
+    Ensure Example
+]#
+
 begin
-    # Code that might raise an exception
+    # Code that might raise an exception.
     echo "Performing a potentially dangerous operation..."
     raise "An error occurred!"
 rescue
-    # Code to handle exceptions
+    # Code to handle exceptions.
     echo "Caught an exception!"
 else
-    # Code to execute if no exception was raised
+    # Code to execute if no exception was raised.
     echo "Operation completed successfully."
 ensure
-    # This code will always be executed
+    # This code will always be executed.
     echo "Cleanup actions are being performed."
 end

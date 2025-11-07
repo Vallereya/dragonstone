@@ -1,7 +1,9 @@
-message = "Hello!"
+#[ 
+    Reassignment Variable Example
+]#
 
+message = "Hello!"
 echo message
 
 message = "Hello from Dragonstone!"
-
 echo message

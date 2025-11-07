@@ -1,36 +1,40 @@
 #[
-    doesnt need to be this complicated
+    File Example
+]#
+
+#[
+    It doesn't need to be this complicated
     just took me several days to figure
     out the ffi -> dragonstone for 
     io file handling through crystal
-    so i didnt have to create the whole 
+    so i didn't have to create the whole 
     system.
 ]#
 
 use "file_utilities"
 use "path_utilities"
 
-tmp_dir = "./tmp_examples"
-target = "#{tmp_dir}/demo.txt"
-
 file_utils = utilities.file()
 path_utils = utilities.path()
+
+tmp_dir = "./tmp_examples"
+target = "#{tmp_dir}/demo.txt"
 
 path_utils.create(tmp_dir)
 
 create_result = file_utils.create(target, "hello", true)
-echo "create => #{create_result}"
-echo "read   => #{file_utils.read(target)}"
+echo "create -> #{create_result}"
+echo "read   -> #{file_utils.read(target)}"
 
 write_bytes = file_utils.write(target, "world", true)
-echo "write  => bytes=#{write_bytes}"
+echo "write  -> bytes=#{write_bytes}"
 
 append_bytes = file_utils.append(target, "!", true)
-echo "append => bytes=#{append_bytes}"
-echo "read   => #{file_utils.read(target)}"
+echo "append -> bytes=#{append_bytes}"
+echo "read   -> #{file_utils.read(target)}"
 
 open_info = file_utils.open(target, "r", false)
-echo "open   => #{open_info}"
+echo "open   -> #{open_info}"
 
-echo "delete => #{file_utils.delete(target)}"
+echo "delete -> #{file_utils.delete(target)}"
 file_utils.delete(tmp_dir)

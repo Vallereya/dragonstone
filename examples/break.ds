@@ -1,3 +1,12 @@
+#[
+    Break Example
+]#
+
+#[
+    So you can use break to break out 
+    of a while loop.
+]#
+
 i = 0
 
 while i < 10

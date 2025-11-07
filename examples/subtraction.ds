@@ -1,5 +1,14 @@
-a = 1 - 2
-echo a
+#[ 
+    Operator Subtraction Example
+]#
 
-b = 10 &- 2
-echo b
+#[
+    -   subtraction
+    &-  wrapping subtraction
+]#
+
+alpha = 1 - 2
+echo alpha
+
+bravo = 10 &- 2
+echo bravo

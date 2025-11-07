@@ -1,10 +1,17 @@
-message = "Hello!"
-e! message
+#[
+    Debug Example
+]#
 
+#[
+    Testing some debug features.
+]#
+
+# Using e!
 name = "Jules"
 e! name
 
 # Using typeof
+message = "Hello!"
 e! typeof(message)
 
 x = 42
@@ -16,7 +23,7 @@ e! typeof(y)
 flag = true
 e! typeof(flag)
 
-# Complex expressions
+# Other more complex expressions
 a = 10
 b = 5
 e! a + b

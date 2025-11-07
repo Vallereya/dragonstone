@@ -1,12 +1,18 @@
+#[
+    Self Example
+]#
+
 class Person
     property name: str
 
     def initialize(name: str)
-        self.name = name  # Using self to access the setter method
+        # Using self to access the setter method.
+        self.name = name
     end
 
     def greet
-        echo "Hello, my name is #{self.name}"  # Using self to access the property
+        # Using self to access the property
+        echo "Hello, my name is #{self.name}"
     end
 end
 

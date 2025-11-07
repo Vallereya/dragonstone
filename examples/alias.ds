@@ -1,3 +1,11 @@
+#[ 
+    Alias Example
+]#
+
+#[
+    So you can give a type a different name.
+]#
+
 # Example One
 alias Name = str
 

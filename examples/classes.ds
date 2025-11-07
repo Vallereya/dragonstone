@@ -1,4 +1,11 @@
 #[
+    Class Example
+]#
+
+#[
+    A Class to create and define objects.
+
+    Others:
     module      = grouping methods/constants, namespaces.
     class       = defining classes. 
     def         = defining methods.

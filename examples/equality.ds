@@ -1,5 +1,9 @@
-result = 1 == 2
-echo result
+#[
+    Equality Example
+]#
 
-noresult = 1 != 2
-echo noresult
+alpha = 1 == 2
+echo alpha
+
+bravo = 1 != 2
+echo bravo

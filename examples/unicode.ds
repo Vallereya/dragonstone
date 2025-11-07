@@ -1,7 +1,15 @@
+#[ 
+    Unicode Example
+]#
+
 #[
     Example of a various unicode
-    passed as a string and 
-    with args/params.
+    passed as a string and with
+    args/params. It's grabbing
+    the unicode from stdlib from 
+    Crystal temporarily until I 
+    create my own, or might just 
+    keep the ffi for it; Undecided. 
 ]#
 
 message = "❤️"

@@ -1,3 +1,22 @@
+#[ 
+    Datatypes Example
+]#
+
+#[ 
+    nil
+    bool
+    int
+    float
+    char
+    str
+    sym
+    arr
+    map
+    range
+    tuple
+    para
+]#
+
 # Boolean Test
 echo true
 
@@ -7,5 +26,5 @@ echo 42
 # Float Test
 echo 3.14
 
-# Nil Test
+# Nil Test, will be blank.
 echo nil

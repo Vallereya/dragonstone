@@ -1,0 +1,12 @@
+o = 1000
+s = 0
+
+while o > 0
+    i = 1000
+    while i > 0
+        s = s + 1
+        i = i - 1
+    end
+    o = o - 1
+end
+echo s

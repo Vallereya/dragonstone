@@ -1,4 +1,9 @@
-# Simple function
+#[
+    Functions Example
+]#
+
+# Example One
+# A simple function.
 def greet(name)
     echo "Hello, #{name}!"
 end
@@ -6,7 +11,8 @@ end
 greet("Jules")
 greet("Ringo")
 
-# Function with return value
+# Example Two
+# A function with return value.
 def add(a, b)
     return a + b
 end
@@ -17,7 +23,8 @@ e! result
 sum = add(10, 20)
 echo sum
 
-# Function with multiple statements
+# Example Three
+# A function with multiple statements.
 def calculate(x, y)
     sum = x + y
     product = x * y
@@ -29,7 +36,8 @@ end
 final = calculate(4, 7)
 e! final
 
-# Nested function calls
+# Example Four
+# A function with nested function calls.
 def double(n)
     return n * 2
 end
@@ -38,16 +46,21 @@ def triple(n)
     return n * 3
 end
 
+# Example Five
+# Combining some functions.
 x = 5
+
 doubled = double(x)
 tripled = triple(x)
+
 e! doubled
 e! tripled
 
 combined = add(double(3), triple(2))
 e! combined
 
-# Function without explicit return
+# Example Six
+# A function without explicit return.
 def print_twice(msg)
     echo msg
     echo msg

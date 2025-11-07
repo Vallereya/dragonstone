@@ -1,5 +1,16 @@
-a = -1 + 2
-echo a
+#[ 
+    Operator Addition Example
+]#
 
-b = 1 &+ 2
-echo b
+#[
+    +   addition
+    &+  wrapping addition
+]#
+
+# Example One: 
+alpha = -1 + 2
+echo alpha
+
+# Example One:
+bravo = 1 &+ 2
+echo bravo

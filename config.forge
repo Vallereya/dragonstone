@@ -1,0 +1,20 @@
+# Work in progress for the Dragonstone: Forge Package Manager.
+# DON'T TRY AND RUN .forge FILES YET.
+# 
+# 
+# 
+# 
+# 
+# [MODULES]
+# Placeholder so devs can create their own `use` alias,
+# with "$:" so path of "./some/folder/modules" can become
+# "$:Modules/something".
+
+# [KEYWORDS]
+# Placeholder so devs can create they own keyword list
+# by default it's in english, but someone who may not
+# know english can change something like `echo` to
+# something like `eco` which is a portuguese
+# translation. This should also be able to convert
+# a file using the keywords in this list to something
+# else. Might try this but idk yet.

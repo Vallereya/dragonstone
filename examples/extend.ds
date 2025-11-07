@@ -1,11 +1,15 @@
-# Module with helper methods to extend into other types
+#[
+    Extend Example
+]#
+
+# Module with a helper to extend into other types.
 module Logger
     def hello(name: str)
         "Hello, #{name}!"
     end
 end
 
-# Classes can copy module methods into their eigenclass with extend
+# Classes can copy module methods into their class with extend.
 class Greeter
     extend Logger
 end

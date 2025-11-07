@@ -1,3 +1,13 @@
+#[ 
+    Use Example
+]#
+
+#[
+    The file that's actually 
+    with the logic, taking from
+    the ./test_use.ds example.
+]#
+
 use "test_use.ds"
 
 echo add(magic, 8)

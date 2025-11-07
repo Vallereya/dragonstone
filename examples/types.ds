@@ -1,41 +1,48 @@
 #[
-    To force types use this pragma at the top:
+    # TODO: Pragma might be broken. With or without the pragma the types work, but throw error as unknown if using. Spec works and the --typed flag works, investigate.
 
+    To force types use this pragma at the top:
     #! typed
 ]#
 
 #[
+    nil     = null/nil
+    bool    = Boolean
+    int     = Integer                           # TODO: add support for different signed/unsigned, right now just catch all.
+    float   = float                             # TODO: same here as int but for float 32/64. (could just expand through ffi without me needing too?)
     char    = Character
     str     = String
-    int     = Integer 
-    float   = float
-    bool    = Boolean
-    nil     = null/nil
+    sym     = Symbol
+    arr     = Array (both arr and array work)   # DONE: Named Array fixed.
+    map     = Map (map aka a hash)              # DONE: Named Map fixed.
+    range   = Range                             # TODO: Named Range might be broken.
+    tuple   = Tuple                             # TODO: Named Tuple might be broken.
+    para    = Para (my Proc)
 ]#
 
 #! typed
 
-# untyped variable, dynamic typing
+# Untyped variable, dynamic typing.
 name = "Ringo"
 echo name
 
-# typed variable, with optional strict typing
+# Typed variable, with optional strict typing.
 name: str = "Jules"
 echo name
 
-# method with typed parameters and return type
+# Method with typed parameters and return type.
 def 😱(name: str) -> str
     echo "Hello, #{name}!"
 end
 😱("Peet")
 
-# method with dynamic parameters and return type
+# Method with dynamic parameters and return type.
 def greet(name)
     echo "Hello, #{name}!"
 end
 greet("V")
 
-# Union type example (an argument can be a String or Nil)
+# Union type example (an argument can be a String or Nil).
 def greet(country: str | nil) -> str
     if country.nil?
         echo "Ahhh, I don't know where I'm from!"
@@ -47,7 +54,7 @@ end
 greet(nil)
 greet("Portugal")
 
-# Nullable shorthand with ?
+# A nullable shorthand with ?
 def find_user(id: int) -> User?
-    # returns User or nil
+    # Would return user or nil.
 end

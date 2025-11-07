@@ -1,8 +1,18 @@
-x = 1 & 2
-echo x
+#[
+    Operator Binaries Example
+]#
 
-z = 1 | 2
-echo z
+#[
+    &   binary AND
+    | 	binary OR
+    ^ 	binary XOR
+]#
 
-c = 1 ^ 2
-echo c
+alpha = 1 & 2
+echo alpha
+
+bravo = 1 | 2
+echo bravo
+
+charlie = 1 ^ 2
+echo charlie

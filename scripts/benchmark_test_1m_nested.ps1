@@ -1,0 +1,1 @@
+Measure-Command { .\bin\dragonstone.exe run tests\_benchmark_1m_nested.ds | Out-Null } | Select-Object TotalSeconds, TotalMilliseconds

@@ -1,7 +1,9 @@
-message = "Hello!"
+#[ 
+    Typeof Variable Example
+]#
 
+message = "Hello!"
 echo typeof(message)
 
 message = "Hello!"
-
 e! typeof(message)

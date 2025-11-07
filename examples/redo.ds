@@ -1,11 +1,23 @@
+#[
+    Redo Example
+]#
+
 redone_iteration_two = false
+
 i = 0
+
 while i < 5
     echo "Current iteration: #{i}"
+
     if i == 2 && !redone_iteration_two
         echo "Redoing iteration 2..."
+
         redone_iteration_two = true
-        redo # Repeat the current iteration (i=2) once
+
+        # Repeats the current iteration once.
+        redo
     end
+    
     i += 1
+
 end
