@@ -263,6 +263,10 @@ module Dragonstone
                 parent_str = parent.to_s.gsub("\\", "/")
                 parent_str.empty? ? "." : (parent_str == "." ? "./" : parent_str)
 
+            when "env_get"
+                key = expect_string(arguments, 0, function_name)
+                ENV[key]?
+
             else
                 raise "Unknown Crystal function: #{function_name}"
             end

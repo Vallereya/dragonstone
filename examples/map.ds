@@ -1,18 +1,22 @@
-# Map literal with key -> value pairs
+#[
+    Maps Example
+]#
+
+# Map literal with key -> value pairs.
 ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
 
-# Access existing entries
+# Access existing entries.
 echo ages["Jules"]
 
-# Update values via index assignment
+# Update values via index assignment.
 ages["Ringo"] = 30
 echo ages["Ringo"]
 
-# Iterate with block parameters
+# Iterate with block parameters.
 ages.each do |name, age|
     echo "#{name} is #{age}"
 end
 
-# Built-in helpers
+# Some builtin helpers.
 e! ages.keys
 e! ages.values

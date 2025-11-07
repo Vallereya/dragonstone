@@ -1,14 +1,19 @@
+#[ 
+    With Example
+]#
+
 struct Point
     property x: int
     property y: int
 
     def initialize(@x: int, @y: int)
+    
     end
 end
 
 point = Point.new(1, 2)
 
 with point
-    echo x  # Outecho: 1
-    echo y  # Outecho: 2
+    echo x
+    echo y
 end

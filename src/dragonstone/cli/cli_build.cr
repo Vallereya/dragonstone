@@ -11,6 +11,7 @@ module Dragonstone
             end
 
             filename = args[0]
+            
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
 

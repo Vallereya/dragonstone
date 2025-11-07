@@ -1,3 +1,12 @@
-echo "Hello World!"
+#[
+    Hello World! Example
+]#
 
-e! "Hello World!"
+#[
+    ahh the beginning, and first thing
+    I made this language do.
+    
+    Hello to the World!
+]#
+
+echo "Hello World!"

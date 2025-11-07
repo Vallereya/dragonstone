@@ -1,3 +1,7 @@
+#[
+    Rescue Example
+]#
+
 begin
     number = 10 / 0
 rescue ex

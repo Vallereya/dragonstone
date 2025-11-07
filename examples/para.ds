@@ -1,9 +1,24 @@
-# Example One
-greet = ->(name: str) { "Hello, #{name}!" }
+#[
+    Para Example
+]#
 
-echo greet.call("Alice")  # Outecho: Hello, Alice!
+#[
+    My version of Proc.
+
+    As usual the {} can always be on the same 
+    line or broken to multiple.
+]#
+
+# Example One
+greet = ->(name: str) {
+    "Hello, #{name}!" 
+}
+
+echo greet.call("Alice")
 
 # Example Two
-square: para(int, int) = ->(x: int) { x * x }
-echo square.call(6)  # Outecho: 36
+square: para(int, int) = ->(x: int) {
+    x * x 
+}
 
+echo square.call(6)

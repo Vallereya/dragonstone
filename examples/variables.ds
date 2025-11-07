@@ -1,3 +1,7 @@
+#[ 
+    Variable Example
+]#
+
 message = "Hello!"
 
 echo message

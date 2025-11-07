@@ -1,18 +1,31 @@
-# Simple helper that runs the provided block twice
+#[
+    Do Example
+]#
+
+# Example of a helper that runs the provided block twice.
 def twice(action)
     action.call
     action.call
 end
 
-# Using do...end for a multi-line block (zero-arg call needs empty parentheses)
+# Using do...end for a multi-line block
+# but unfortunately we need to have a empty 
+# parentheses for zero-arg call rn.
+# TODO: Allow no parentheses for zero-arg calls.
 twice() do
     echo "Hello!"
 end
 
-# Using {} for a single-line block (same parentheses requirement)
-twice() { echo("Hello!") }
+# And using {} for a single-line block, the {}
+# can be on the same line or split.
+twice() {echo("Hey!")}
 
-# Blocks can declare parameters with | |, matching Array#each
+twice() {
+    echo("Hello!") 
+}
+
+# Also blocks can declare parameters 
+# with | | to match the Array .each.
 numbers = [1, 2, 3]
 numbers.each do |number|
     echo "Number: #{number}"

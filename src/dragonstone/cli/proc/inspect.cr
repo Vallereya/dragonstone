@@ -24,7 +24,7 @@ module Dragonstone
             source = ProcFileOps.read_source(filename)
             lexer  = Dragonstone::Lexer.new(source, source_name: filename)
             tokens = lexer.tokenize
-            stdout.puts "=== Tokens for #{filename} ==="
+            stdout.puts "------- Tokens for #{filename} -------"
             tokens.each { |t| stdout.puts t.to_s }
             return 0
         end
@@ -35,7 +35,7 @@ module Dragonstone
             tokens = lexer.tokenize
             parser = Dragonstone::Parser.new(tokens)
             ast    = parser.parse
-            stdout.puts "=== AST for #{filename} ==="
+            stdout.puts "------- AST for #{filename} -------"
             print_ast(ast, 0, stdout)
             return 0
         end

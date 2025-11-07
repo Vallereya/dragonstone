@@ -1,7 +1,12 @@
+#[
+    Select Example
+]#
+
 x = 10
 y = 20
 
 select
+
 when x > y
     echo "#{x} is greater"
 when y > x

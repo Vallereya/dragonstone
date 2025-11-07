@@ -1,11 +1,11 @@
 name: dragonstone
-version: 0.0.5
+version: 0.0.6
 
 authors:
   - Vallereya <v@vallereya.com>
 
 description: |
-  The Dragonstone Programming Language
+  The Dragonstone Programming Language and its Standard Library
 
 # dependencies:
 #   [NAME]:

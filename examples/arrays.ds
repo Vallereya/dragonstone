@@ -1,20 +1,24 @@
-# Array literals
+#[
+    Array Example
+]#
+
+# Array literals.
 numbers = [1, 2, 3, 4, 5]
 e! numbers
 
-# Array indexing
+# Array indexing.
 first = numbers[0]
 e! first
 
 last = numbers[4]
 e! last
 
-# Array methods
+# Array methods.
 e! numbers.length
 e! numbers.first
 e! numbers.last
 
-# Modifying arrays
+# Modifying arrays.
 numbers.push(6)
 e! numbers
 
@@ -22,10 +26,10 @@ popped = numbers.pop
 e! popped
 e! numbers
 
-# Empty array
+# Empty array.
 empty = []
 e! empty.empty
 
-# Mixed types
+# Mixed types.
 mixed = [1, "hello", 3.14, true]
 e! mixed

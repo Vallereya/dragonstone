@@ -1,3 +1,7 @@
+#[
+    Begin Example
+]#
+
 begin
     echo "Inside begin block"
 ensure

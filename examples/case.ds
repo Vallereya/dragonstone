@@ -1,3 +1,12 @@
+#[
+    Case Example
+]#
+
+#[
+    This is a control expression so you can
+    do a chain of if/when.
+]#
+
 day = "Monday"
 
 case day
@@ -7,7 +16,8 @@ when "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
     
 when "Saturday", "Sunday"
     echo "It's the weekend"
-
+    
 else
     echo "Not a valid day"
+    
 end

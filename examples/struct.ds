@@ -1,3 +1,8 @@
+#[
+    Struct Example
+]#
+
+
 struct Point
     property x: int
     property y: int
@@ -7,4 +12,5 @@ struct Point
 end
 
 point = Point.new(10, 20)
+
 echo "x: #{point.x}, y: #{point.y}"

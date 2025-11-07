@@ -1,12 +1,18 @@
-# A private instance variable stores the account balance.
-# The '@' prefix denotes it as an instance variable.
-# By convention and best practice, instance variables are
-# considered part of the class's internal, private state.
-# The initializer method sets up the initial state.
-# The `initialize` method can access the private instance variable.
-# This is a public method that acts as a controlled interface.
+#[ 
+    Instance Variable Example
+]#
 
-# Example One:
+#[
+    The '@' prefix denotes it as an instance variable.
+    By convention and best practice, instance variables 
+    are considered part of the class's internal, private 
+    state. The initializer method sets up the initial 
+    state. The `initialize` method can access the 
+    private instance variable. And a public method can
+    act as a controlled interface.
+]#
+
+# Example One
 def name
     @name
 end
@@ -15,7 +21,7 @@ def age
     @age
 end
 
-# Example Two:
+# Example Two
 class Person
     @name: str
     @age: int
@@ -31,7 +37,7 @@ person = Person.new("Jules", 30)
 echo person.name
 echo person.age
 
-# Example Three:
+# Example Three
 class BankAccount
     def initialize(balance)
         @balance = balance
@@ -61,10 +67,7 @@ account = BankAccount.new(1000)
 account.deposit(500)
 account.withdraw(200)
 
-# This would raise a NoMethodError
-# account.sufficient_funds?(100)
-
-
+# Example Four
 class BankAccount
     private getter balance: int
 
@@ -81,7 +84,7 @@ class BankAccount
         end
     end
 
-    # Another public method with our built-in validation logic.
+    # Another public method with the built-in validation logic.
     def withdraw(amount: int)
         if amount > @balance
             echo "Insufficient funds."
@@ -100,11 +103,4 @@ account = BankAccount.new(100)
 # Interact with the public interface.
 account.deposit(50)
 account.withdraw(75)
-
-# Attempting to directly access the internal state will cause a compile-time error.
-# account.balance  # => Error: can't call private method 'balance'
-# account.@balance # => Error: can't access instance variable `@balance` directly from outside
-
-# Calling the public method with invalid data is handled safely.
-# Output: Insufficient funds.
 account.withdraw(200)

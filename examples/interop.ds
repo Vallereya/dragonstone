@@ -1,29 +1,19 @@
-# Example using Dragonstone ffi to call
-# methods from C, Ruby and Crystal.
+#[
+    Interop Example
+]#
 
-# Ruby's echo
-result = ffi.call_ruby("echo", ["Hello from Ruby!"])
+#[
+    Example using Dragonstone ffi to call
+    methods from C, Ruby and Crystal.
+]#
 
-if result.nil?
-    echo "Ruby return value: nil"
-else
-    echo "Ruby return value: #{result}"
-end
+# TODO: They like to print extra lines, was C now its Crystal, ffi is fucked anyways rn so fix it, and also expand feature set.
 
-# Crystal's echo
-result = ffi.call_crystal("echo", ["Hello from Crystal!"])
+# Ruby's puts
+ffi.call_ruby("puts", ["Hello from Ruby!"])
 
-if result.nil?
-    echo "Crystal return value: nil"
-else
-    echo "Crystal return value: #{result}"
-end
+# Crystal's puts
+ffi.call_crystal("puts", ["Hello from Crystal!"])
 
-# C's printf (printf does not add a newline, so include one)
-result = ffi.call_c("printf", ["Hello from C!\n"])
-
-if result.nil?
-    echo "C return value: nil"
-else
-    echo "C return value: #{result}"
-end
+# C's printf
+ffi.call_c("printf", ["Hello from C!"])

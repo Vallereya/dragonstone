@@ -1,10 +1,15 @@
+#[
+    Next Example
+]#
+
 i = 0
 
 while i < 5
     i += 1
 
     if i == 3
-        next # Skip printing 3
+        # So it will skip printing 3.
+        next
     end
 
     echo i

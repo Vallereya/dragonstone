@@ -1,3 +1,14 @@
+#[
+    Standard Library Example
+]#
+
+#[
+    Only have a few right now, but can call any
+    globally by `use` and then the stdlib you 
+    want to use. 
+]#
+
 use "strings_length"
 
 echo strings.length("Test")
+e! strings.length("Test")

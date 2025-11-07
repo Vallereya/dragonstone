@@ -1,25 +1,39 @@
+#[
+    Bag Example
+]#
+
+#[
+    The Bag type allows you to store unique elements. You 
+    can use things like .add to add an element, .includes? 
+    to check membership, and .size to get the number 
+    of elements. The each method lets you iterate 
+    through all elements in the bag.
+]#
+
 # Example One
 my_bag = bag(str).new
 
 my_bag.add("apple")
 my_bag.add("banana")
-my_bag.add("apple") # duplicate ignored
 
-echo my_bag.size    # Outecho: 2
-echo my_bag.includes?("banana") # Outecho: true
-echo my_bag.includes?("cherry") # Outecho: false
+# duplicates will be ignored.
+my_bag.add("apple")
+
+echo my_bag.size
+echo my_bag.includes?("banana")
+echo my_bag.includes?("cherry")
 
 my_bag.each do |item|
     echo item
 end
 
-uppercased = my_bag.map do |item|
+upper = my_bag.map do |item|
     item.upcase
 end
 
-e! uppercased
-
+e! upper
 e! my_bag.to_a
+
 
 # Example Two
 numbers = bag(int).new
@@ -28,8 +42,9 @@ numbers.add(1)
 numbers.add(2)
 numbers.add(3)
 numbers.add(4)
-echo numbers.includes?(2)  # Outecho: true
-echo numbers.size          # Outecho: 4
+
+echo numbers.includes?(2)
+echo numbers.size
 
 numbers.each do |num|
     echo num

@@ -1,0 +1,18 @@
+# THE BENCHMARK TEST
+# For 1 Billion Nested
+# 
+# o = outer iteration
+# i = inner iteration
+# s = sum
+o = 31623
+s = 0
+
+while o > 0
+    i = 31623
+    while i > 0
+        s = s + 1
+        i = i - 1
+    end
+    o = o - 1
+end
+echo s
