@@ -1,11 +1,26 @@
 #[
-    # TODO: Pragma might be broken. With or without the pragma the types work, but throw error as unknown if using. Spec works and the --typed flag works, investigate.
+    Typed Example (optional)
 
-    To force types use this pragma at the top:
-    #! typed
+    Dragonstone stays dynamically typed by default, but you can opt 
+    into stricter checks when you need them:
+
+    Pass `--typed` to the CLI 
+    (`dragonstone run --typed examples/types.ds`) 
+    to enable type checking for that run.
+
+    Or add `#! typed` 
+    at the top of a file to force typed mode for 
+    that module, no flags then are required.
+
+    Typed code lets you annotate variables, function 
+    parameters, and return values 
+    (`name: str`, `def greet(user: User?) -> str`, unions like `str | nil`, etc.)
 ]#
 
 #[
+    # TODO: Pragma might be broken? With or without the pragma the types work, 
+    # TODO: but throws error as unknown if using. Spec works and the --typed flag works, investigate.
+
     nil     = null/nil
     bool    = Boolean
     int     = Integer                           # TODO: add support for different signed/unsigned, right now just catch all.
@@ -15,8 +30,8 @@
     sym     = Symbol
     arr     = Array (both arr and array work)   # DONE: Named Array fixed.
     map     = Map (map aka a hash)              # DONE: Named Map fixed.
-    range   = Range                             # TODO: Named Range might be broken.
-    tuple   = Tuple                             # TODO: Named Tuple might be broken.
+    range   = Range                             # TODO: Named Range might be broken, investigate.
+    tuple   = Tuple                             # TODO: Named Tuple might be broken, investigate.
     para    = Para (my Proc)
 ]#
 

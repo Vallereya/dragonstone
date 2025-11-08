@@ -1740,8 +1740,12 @@ module Dragonstone
                         runtime_error(InterpreterError, "#{receiver.name}.#{node.name} does not take arguments", node)
                     end
                     if block_value
-                        receiver.members.each do |member|
-                            invoke_block(block_value, [member.as(RuntimeValue)], node.location)
+                        block = block_value.not_nil!
+                        run_enumeration_loop do
+                            receiver.members.each do |member|
+                                outcome = execute_loop_iteration(block, [member.as(RuntimeValue)], node)
+                                next if outcome[:state] == :next
+                            end
                         end
                         receiver
                     else
@@ -2074,8 +2078,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Tuple##{name} does not take arguments", node)
                 end
-                tuple.elements.each do |element|
-                    invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    tuple.elements.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 tuple
 
@@ -2142,8 +2150,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
                 end
-                tuple.entries.each do |key, value|
-                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    tuple.entries.each do |key, value|
+                        outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 tuple
 
@@ -2154,10 +2166,14 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
                 end
+                block = block_value.not_nil!
                 result = [] of RuntimeValue
-                tuple.entries.each do |key, value|
-                    mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
-                    result << normalize_runtime_value(mapped, node)
+                run_enumeration_loop do
+                    tuple.entries.each do |key, value|
+                        outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        result << normalize_runtime_value(outcome[:value], node)
+                    end
                 end
                 result
 
@@ -2202,8 +2218,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
                 end
-                array.each do |element|
-                    invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 array
 
@@ -2214,10 +2234,14 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
                 end
+                block = block_value.not_nil!
                 result = [] of RuntimeValue
-                array.each do |element|
-                    mapped = invoke_block(block_value.not_nil!, [element.as(RuntimeValue)], node.location)
-                    result << normalize_runtime_value(mapped, node)
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        result << normalize_runtime_value(outcome[:value], node)
+                    end
                 end
                 result
 
@@ -2253,8 +2277,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
                 end
-                map.each do |key, value|
-                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    map.each do |key, value|
+                        outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 map
 
@@ -2265,8 +2293,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
                 end
-                map.each_key do |key|
-                    invoke_block(block_value.not_nil!, [key.as(RuntimeValue)], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    map.each_key do |key|
+                        outcome = execute_loop_iteration(block, [key.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 map
 
@@ -2277,10 +2309,14 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
                 end
-            map.each_value do |value|
-                invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
-            end
-            map
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    map.each_value do |value|
+                        outcome = execute_loop_iteration(block, [value.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
+                end
+                map
 
         when "map"
             unless block_value
@@ -2289,10 +2325,14 @@ module Dragonstone
             unless args.empty?
                 runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
             end
+            block = block_value.not_nil!
             result = [] of RuntimeValue
-            map.each do |key, value|
-                mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue), value.as(RuntimeValue)], node.location)
-                result << normalize_runtime_value(mapped, node)
+            run_enumeration_loop do
+                map.each do |key, value|
+                    outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    result << normalize_runtime_value(outcome[:value], node)
+                end
             end
             result
 
@@ -2303,10 +2343,14 @@ module Dragonstone
             unless args.empty?
                 runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
             end
+            block = block_value.not_nil!
             result = [] of RuntimeValue
-            map.each_key do |key|
-                mapped = invoke_block(block_value.not_nil!, [key.as(RuntimeValue)], node.location)
-                result << normalize_runtime_value(mapped, node)
+            run_enumeration_loop do
+                map.each_key do |key|
+                    outcome = execute_loop_iteration(block, [key.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    result << normalize_runtime_value(outcome[:value], node)
+                end
             end
             result
 
@@ -2317,10 +2361,14 @@ module Dragonstone
             unless args.empty?
                 runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
             end
+            block = block_value.not_nil!
             result = [] of RuntimeValue
-            map.each_value do |value|
-                mapped = invoke_block(block_value.not_nil!, [value.as(RuntimeValue)], node.location)
-                result << normalize_runtime_value(mapped, node)
+            run_enumeration_loop do
+                map.each_value do |value|
+                    outcome = execute_loop_iteration(block, [value.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    result << normalize_runtime_value(outcome[:value], node)
+                end
             end
             result
 
@@ -2409,8 +2457,12 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
                 end
-                bag.elements.each do |value|
-                    invoke_block(block_value.not_nil!, [value], node.location)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_loop_iteration(block, [value], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 bag
 
@@ -2421,10 +2473,14 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
                 end
+                block = block_value.not_nil!
                 result = [] of RuntimeValue
-                bag.elements.each do |value|
-                    mapped = invoke_block(block_value.not_nil!, [value], node.location)
-                    result << normalize_runtime_value(mapped, node)
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_loop_iteration(block, [value], node)
+                        next if outcome[:state] == :next
+                        result << normalize_runtime_value(outcome[:value], node)
+                    end
                 end
                 result
 
@@ -2563,12 +2619,13 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "Range##{name} does not take arguments", node)
                 end
-                range.each do |element|
-                    invoke_block(
-                        block_value.not_nil!,
-                        [coerce_range_element(element)],
-                        node.location
-                    )
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    range.each do |element|
+                        runtime_element = coerce_range_element(element).as(RuntimeValue)
+                        outcome = execute_loop_iteration(block, [runtime_element], node)
+                        next if outcome[:state] == :next
+                    end
                 end
                 range
 
@@ -2830,6 +2887,31 @@ module Dragonstone
                 end
                 result
             end
+        end
+
+        private def execute_loop_iteration(block : Function, args : Array(RuntimeValue), node : AST::MethodCall) : NamedTuple(state: Symbol, value: RuntimeValue?)
+            begin
+                value = invoke_block(block, args, node.location)
+                {state: :yielded, value: value}
+            rescue e : NextSignal
+                {state: :next, value: nil}
+            end
+        end
+
+        private def run_enumeration_loop(&block)
+            with_loop_context do
+                begin
+                    yield
+                rescue e : BreakSignal
+                end
+            end
+        end
+
+        private def with_loop_context(&block)
+            @loop_depth += 1
+            yield
+        ensure
+            @loop_depth -= 1
         end
 
         private def reject_block(block_value : Function?, feature : String, node : AST::MethodCall)
