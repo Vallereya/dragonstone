@@ -109,7 +109,6 @@
 + Proper up-values/closed-over locals.
 + typeof, swap puts -> echo, p! -> e!, refactor cli and ast (make them modular).
 + Start Standard Library with something basic (String Length).
-+ Advanced Values: Para (proc), Sym/Symbol (Symbol), and Object*
 + REPL needs to be wired to the CLI.
 ```
 
@@ -123,21 +122,19 @@
 + Add support for .slice and .display/.inspect (my version of to_s/inspect).
 + Truthiness rules (nil/false, rest truthy, falsey).
 + Escapes are implemented but needs extended to each, map and bag. 
-- (Started) COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks.
-- Intermediate Values: Lambda values, Array/NamedArray, Map/NamedMap (hash), Range/NamedRange, and Tuple/NamedTuple.
++ Advanced Values: Para (proc), Lambda values, Sym/Symbol (Symbol), and Object* 
 ```
 
 ###     <h2 align="center">         Phase Eight
 #####   <h6 align="center">         `v0.0.7 -> v0.0.8`
 
 ```diff
-- Implement optional Garbage Collection (c-like or crystal-like).
-- Implement optional Borrow Checker/Ownership (rust-like).
-- Make string builder in stdlib for the runtime.
-- Add support for concurrency, singleton methods, method tables.
+- (Started) COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
+- (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
+- Implement optional Garbage Collection (c-like or crystal-like) and Borrow Checker/Ownership (rust-like).
+- Add support for concurrency, singleton methods, method tables, and make a string builder in stdlib for the runtime.
 - Allow the use (import/require) to support for urls.
-- Freeze current grammar subset if needed on C side.
-- Fix FFI and make sure to do some boilerplate code avoidance.
+- Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
 - Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
 ```
 

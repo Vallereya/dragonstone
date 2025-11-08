@@ -19,3 +19,6 @@ echo exclusive.includes?(4)
 ('a'..'c').each do |letter|
     echo "Letter: #{letter}"
 end
+
+range = 1..5
+echo range.to_a

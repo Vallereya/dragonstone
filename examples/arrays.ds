@@ -2,10 +2,12 @@
     Array Example
 ]#
 
+# Example One
 # Array literals.
 numbers = [1, 2, 3, 4, 5]
 e! numbers
 
+# Example Two
 # Array indexing.
 first = numbers[0]
 e! first
@@ -13,11 +15,13 @@ e! first
 last = numbers[4]
 e! last
 
+# Example Three
 # Array methods.
 e! numbers.length
 e! numbers.first
 e! numbers.last
 
+# Example Four
 # Modifying arrays.
 numbers.push(6)
 e! numbers
@@ -26,10 +30,16 @@ popped = numbers.pop
 e! popped
 e! numbers
 
+# Example Five
 # Empty array.
 empty = []
 e! empty.empty
 
+# Example Six
 # Mixed types.
 mixed = [1, "hello", 3.14, true]
 e! mixed
+
+# Example Seven (Named Array)
+numbers = [1, 2, 3, 4, 5]
+e! numbers

@@ -1,0 +1,19 @@
+#[
+    Lambda Example
+]#
+
+#[
+    Lambdas come from Para, they are 
+    anonymous functions by nature.
+]#
+
+# Example One:
+add = ->(a, b) { a + b }
+echo add.call(2, 3)
+
+# Example Two:
+add = ->(a: int, b: int) { 
+    a + b 
+}
+
+echo add.call(2, 3)
