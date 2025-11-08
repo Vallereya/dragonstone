@@ -26,7 +26,7 @@ describe Dragonstone::CLI do
             stderr = IO::Memory.new
             status = Dragonstone::CLI.run(["lex", file.path], stdout, stderr)
             status.should eq(0)
-            stdout.to_s.should contain("=== Tokens for #{file.path}")
+            stdout.to_s.should contain("------- Tokens for #{file.path}")
             stdout.to_s.should contain("Token(ECHO")
             stderr.to_s.should be_empty
         end

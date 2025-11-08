@@ -1009,6 +1009,34 @@ module Dragonstone
             AST::TupleLiteral.new(elements, location: start_token.location)
         end
 
+        private def parse_inline_named_tuple_literal : AST::NamedTupleLiteral
+            entries = [] of AST::NamedTupleEntry
+            loop do
+                name_token = expect(:IDENTIFIER)
+                expect(:COLON)
+                value_node = parse_expression
+
+                entries << AST::NamedTupleEntry.new(
+                    name_token.value.as(String),
+                    value_node,
+                    nil,
+                    name_token.location
+                )
+
+                break unless inline_named_argument_continuation?
+                advance
+            end
+            AST::NamedTupleLiteral.new(entries, location: entries.first.location)
+        end
+
+        private def inline_named_argument_continuation? : Bool
+            return false unless current_token.type == :COMMA
+            next_token = peek_token
+            return false unless next_token && next_token.type == :IDENTIFIER
+            following = peek_token(2)
+            !!(following && following.type == :COLON)
+        end
+
         private def parse_named_tuple_entries : Array(AST::NamedTupleEntry)
             entries = [] of AST::NamedTupleEntry
             loop do
@@ -1212,10 +1240,15 @@ module Dragonstone
             expect(:LPAREN)
             arguments = [] of AST::Node
             unless current_token.type == :RPAREN
-                arguments << parse_expression
-                while current_token.type == :COMMA
+                loop do
+                    if named_tuple_entry_start?
+                        arguments << parse_inline_named_tuple_literal
+                    else
+                        arguments << parse_expression
+                    end
+                    break unless current_token.type == :COMMA
                     advance
-                    arguments << parse_expression
+                    break if current_token.type == :RPAREN
                 end
             end
             expect(:RPAREN)

@@ -17,8 +17,6 @@ greet = ->(name: str) {
 echo greet.call("Alice")
 
 # Example Two
-square: para(int, int) = ->(x: int) {
-    x * x 
-}
+square: para(int, int) = ->(x: int) { x * x }
 
 echo square.call(6)

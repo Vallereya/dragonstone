@@ -6,7 +6,7 @@ describe "language features" do
         source = <<-DS
 #! typed
 square: para(int, int) = ->(x: int) { x * x }
-puts square.call(5)
+echo square.call(5)
 DS
         result = Dragonstone.run(source, typed: true)
         result.output.should eq "25\n"
@@ -22,8 +22,8 @@ end
 point = Point.new(x: 1, y: 2)
 
 with point
-    puts x
-    puts y
+    echo x
+    echo y
 end
 DS
         result = Dragonstone.run(source)
@@ -41,7 +41,7 @@ def repeat(times)
 end
 
 repeat(3) do |i|
-    puts i
+    echo i
 end
 DS
         result = Dragonstone.run(source)
@@ -56,16 +56,141 @@ numbers.add(1)
 numbers.add(1)
 numbers.add(3)
 
-puts numbers.size
-puts numbers.includes?(3)
+echo numbers.size
+echo numbers.includes?(3)
 
 doubled = numbers.map do |value|
     value * 2
 end
 
-puts doubled.length
+echo doubled.length
 DS
         result = Dragonstone.run(source, typed: true)
         result.output.should eq "2\ntrue\n2\n"
+    end
+
+    it "supports loop escapes inside array enumerators" do
+        source = <<-DS
+numbers = [1, 2, 3, 4]
+sum = 0
+
+numbers.each do |n|
+    next if n == 2
+    sum += n
+    break if n == 3
+end
+
+echo sum
+
+mapped = numbers.map do |n|
+    next if n <= 1
+    break if n == 4
+    n * 10
+end
+
+echo mapped.length
+echo mapped.first
+echo mapped.last
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "4\n2\n20\n30\n"
+    end
+
+    it "supports loop escapes inside bag enumerators" do
+        source = <<-DS
+#! typed
+numbers = bag(int).new
+numbers.add(1)
+numbers.add(2)
+numbers.add(3)
+
+sum = 0
+numbers.each do |value|
+    next if value == 1
+    sum += value
+    break if value == 3
+end
+
+echo sum
+
+values = numbers.map do |value|
+    next if value == 1
+    break if value == 3
+    value * 5
+end
+
+echo values.length
+values.each do |value|
+    echo value
+end
+DS
+        result = Dragonstone.run(source, typed: true)
+        result.output.should eq "5\n1\n10\n"
+    end
+
+    it "converts runtime values with display and inspect" do
+        source = <<-'DS'
+class Person
+    def initialize(@name)
+    end
+
+    def display
+        "Person(#{@name})"
+    end
+
+    def inspect
+        "<Person #{@name}>"
+    end
+end
+
+person = Person.new("Arya")
+numbers = [1, 2]
+text = "hi"
+nil_value = nil
+
+echo "nil-display:" + nil_value.display
+echo "nil-inspect:" + nil_value.inspect
+echo "int-display:" + 25.display
+echo "int-inspect:" + 25.inspect
+echo "text-display:" + text.display
+echo "text-inspect:" + text.inspect
+echo "array-display:" + numbers.display
+echo "array-inspect:" + numbers.inspect
+echo "person-display:" + person.display
+echo "person-inspect:" + person.inspect
+DS
+        result = Dragonstone.run(source)
+        expected_output = <<-OUT
+nil-display:
+nil-inspect:nil
+int-display:25
+int-inspect:25
+text-display:hi
+text-inspect:"hi"
+array-display:[1, 2]
+array-inspect:[1, 2]
+person-display:Person(Arya)
+person-inspect:<Person Arya>
+OUT
+        result.output.should eq expected_output + "\n"
+    end
+
+    it "slices strings by codepoint and enforces bounds" do
+        source = <<-DS
+s = "🔥dragon🪄"
+echo s.slice(0, 2)
+echo s.slice(2..4)
+echo s.slice(6, 2)
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "🔥d\nrag\nn🪄\n"
+
+        bad_source = <<-DS
+s = "🔥dragon🪄"
+s.slice(100, 1)
+DS
+        expect_raises(Dragonstone::OutOfBounds) do
+            Dragonstone.run(bad_source)
+        end
     end
 end

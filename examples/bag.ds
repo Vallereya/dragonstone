@@ -19,6 +19,7 @@ my_bag.add("banana")
 # duplicates will be ignored.
 my_bag.add("apple")
 
+# Example Two
 echo my_bag.size
 echo my_bag.includes?("banana")
 echo my_bag.includes?("cherry")
@@ -35,7 +36,7 @@ e! upper
 e! my_bag.to_a
 
 
-# Example Two
+# Example Three
 numbers = bag(int).new
 
 numbers.add(1)
@@ -49,3 +50,9 @@ echo numbers.size
 numbers.each do |num|
     echo num
 end
+
+# Example Four (Named Bag)
+# fruits = bag("apple", "banana", "cherry").new
+
+# echo fruits.includes?("banana")
+# echo fruits.includes?("grape")

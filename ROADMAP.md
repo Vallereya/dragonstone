@@ -5,8 +5,9 @@
 </p>
 
 <h1 align="center">                     Development Roadmap             </h1>
-<h5 align="center">                       0.0.1 -> v0.1.0               </h2>
-<h5 align="center">                          ☑️ ❌ ⭕                  </h2>
+<h5 align="center">                          Pre-Alpha                  </h5>
+<h5 align="center">                      v0.0.1 -> v0.1.0               </h5>
+<h5 align="center">                          ☑️ ❌ ⭕                  </h5>
 
 <h3> Overall Goals:                                                     </h3>
 
@@ -29,7 +30,7 @@
     - ❌ Dragonstone v4 had Ruby, Crystal and C, Wasn't ready to switch and Ruby removed.
     - Dragonstone v5 (This Version & Last Rewrite) has Crystal and C.
 - Crystal and Ruby inspired but with a modern refresh (*for now just temporarily use their keywords then swap but then keep legacy compatibility?*)
-- Bindings to C at minimum, expose a blank ffi to C++? (*cool? or nah?*), and MAYBE with Crystal and Ruby too (*smh went from making a ruby gem to use crystal to making a shard to use ruby, to just saying fuck it and making a whole language...do I even bother and just make a language thats both of them but better? and maintain the ability to use them within it? or nah?*).
+- Bindings to C at minimum, expose a blank ffi to C++? (*maybe?*), and MAYBE with Crystal and Ruby too.
 
 ---
 
@@ -108,40 +109,41 @@
 + Proper up-values/closed-over locals.
 + typeof, swap puts -> echo, p! -> e!, refactor cli and ast (make them modular).
 + Start Standard Library with something basic (String Length).
-+ Advanced Values: Para (proc), Sym/Symbol (Symbol), and Object*
++ REPL needs to be wired to the CLI.
 ```
 
 ###     <h2 align="center">         Phase Seven
 #####   <h6 align="center">         `v0.0.6 -> v0.0.7`
 
 ```diff
-- Fix REPL, fucking broken and VM unwind stack w/ exception objects.
-- Add support for concurrency, singleton methods, method tables.
-- Truthiness rules (nil/false, rest truthy, falsey) and each, map, select, inject on core collections via blocks.
-- Array and Map (hash) with collections like iteration, slicing, to_s/inspect (my version of it because to_s? dumb).
-- Escapes: raise, begin/rescue/redo/retry/do/next/ensure (implemented but needs extended to each and map), yield, &block capture.
-- Allow the use (import/require) to support for urls.
-- Intermediate Values: Lambda values, Array/NamedArray, Map/NamedMap (hash), Range/NamedRange, and Tuple/NamedTuple.
++ Implement optional explicit typing. 
++ Escapes: raise, begin/rescue/redo/retry/do/next/ensure, yield, &block capture.
++ Add support for Array, map (hash), and bag(like set but not .set that's different) on core collections via blocks.
++ Add support for .slice and .display/.inspect (my version of to_s/inspect).
++ Truthiness rules (nil/false, rest truthy, falsey).
++ Escapes are implemented but needs extended to each, map and bag. 
++ Advanced Values: Para (proc), Lambda values, Sym/Symbol (Symbol), and Object* 
 ```
 
 ###     <h2 align="center">         Phase Eight
 #####   <h6 align="center">         `v0.0.7 -> v0.0.8`
 
 ```diff
-- Fix FFI and make sure to do some boilerplate code avoidance and freeze current grammar subset if needed on C side.
-- Implement optional Borrow Checker/Ownership (rust-like).
-- Implement optional Garbage Collection (c-like or crystal-like).
-- Implement optional explicit typing.
-- Add support for until, each, map (hash), bag(set but not .set that's different), select, inject on core collections via blocks
-- Make string builder in stdlib for the runtime and a method cache w/ fallback path.
-- Bindings for 3-Way Interop so Dragonstone can call any C, Ruby or Crystal code.
+- (Started) COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
+- (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
+- Implement optional Garbage Collection (c-like or crystal-like) and Borrow Checker/Ownership (rust-like).
+- Add support for concurrency, singleton methods, method tables, and make a string builder in stdlib for the runtime.
+- Allow the use (import/require) to support for urls.
+- Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
+- Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
 ```
 
 ###     <h2 align="center">         Phase Nine
 #####   <h6 align="center">         `v0.0.8 -> v0.0.9`
 
 ```diff
-- The `Great Refactor`.
+- VM unwind stack w/ exception objects.
+- Make a method cache w/ fallback path.
 - Set CI + cross-platform builds (Linux/macOS/Windows).
 - Maximize portability/native cross-platform.
 - No Ruby/Crystal/C in build, runtime, or tooling and port stdlib to dragonstone if there is any not.
@@ -154,8 +156,9 @@
 #####   <h6 align="center">         `v0.0.9 -> v0.1.0`
 
 ```diff
+- The `Great Refactor`.
 - (Started) Begin Bootstrapping, remove donors so everything runs on dragonstone.
-- (Started) Add dev commands/flags.
+- Add dev commands/flags.
 - (Started) Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
 - (Started) Flesh out the docs, samples, examples, tutorials, changelogs, and some versioned grammar.
 - (Started) Start building the website (quickstart, language tour, FFI roadmap, reference to the docs, etc.)
@@ -166,23 +169,18 @@
 ---
 
 <h1 align="center">                     The Future of Dragonstone       </h1>
-<h5 align="center">                              v0.1.0+                </h2>
+<h5 align="center">                              Alpha                  </h5>
+<h5 align="center">                         v0.1.0 -> v1.0.0            </h5>
 
 ###     <h2 align="center">         Future Phases
-#####   <h6 align="center">         `v0.1.0+`
+#####   <h6 align="center">         `v0.1.0 -> v0.2.0`
 
 ```diff
-- Implement the bridge to the eden project (internal project for my magnum opus, the dream).
-- 
-- Setup a linguist repo for later? If ppl like who knows? that'd be cool but also probably not.
-- 
-- Expand the Forge Package Manager.
-- 
-- Explore Python FFI (or if we can get some of the math/ai setup for ffi).
-- Explore FFI for RayLib (and maybe other graphic APIs), Dear imGui (or some other GUIs).
-- Explore building a native web framework like Ruby on Rails/Svelte style (hmm could I just make some sort of ds -> svelte/sveltekit bridge?).
-- Try porting my Unreal Engine extension I made to be able to use Crystal in Unreal Engine projects?
-- Explore other extensions to Unity and Godot to support Dragonstone?
-- Make sure we are capable of using the Dragonstone for embedded.
-- Explore being able to send the Bytecode to other VMs (JVM, etc.) or transpile (like to Javascript)?
+
+
+
+
+
+
+ 
 ```

@@ -5,9 +5,9 @@ describe "tuple literals" do
     it "evaluates tuple indexing" do
         source = <<-DS
 my_tuple = {1, "Hey", 'x'}
-puts my_tuple[0]
-puts my_tuple[1]
-puts my_tuple[2]
+echo my_tuple[0]
+echo my_tuple[1]
+echo my_tuple[2]
 DS
         result = Dragonstone.run(source)
         result.output.should eq "1\nHey\nx\n"
@@ -16,8 +16,8 @@ DS
     it "evaluates named tuples with symbol access" do
         source = <<-DS
 person = {name: "V", age: 30}
-puts person[:name]
-puts person[:age]
+echo person[:name]
+echo person[:age]
 DS
         result = Dragonstone.run(source)
         result.output.should eq "V\n30\n"
@@ -27,8 +27,8 @@ DS
         source = <<-DS
 #! typed
 person = {name: str = "V", age: int = 30}
-puts person[:name]
-puts person[:age]
+echo person[:name]
+echo person[:age]
 DS
         result = Dragonstone.run(source, typed: true)
         result.output.should eq "V\n30\n"

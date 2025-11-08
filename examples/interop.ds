@@ -7,8 +7,6 @@
     methods from C, Ruby and Crystal.
 ]#
 
-# TODO: They like to print extra lines, was C now its Crystal, ffi is fucked anyways rn so fix it, and also expand feature set.
-
 # Ruby's puts
 ffi.call_ruby("puts", ["Hello from Ruby!"])
 
