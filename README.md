@@ -275,7 +275,14 @@ echo square.call(6)
 #### Examples the interop (some done but still a work in progress)
 
 ```crystal
+    # Call puts from Ruby
+    ffi.call_ruby("puts", ["Hello from Ruby!"])
 
+    # Call puts from Crystal
+    ffi.call_crystal("puts", ["Hello from Crystal!"])
+
+    # Call printf from C
+    ffi.call_c("printf", ["Hello from C!"])
 ```
 
 See the `examples/` directory for more sample `.ds` files.
