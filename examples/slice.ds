@@ -1,0 +1,10 @@
+#[
+    Slice (.slice) Example
+]#
+
+unit = "Dragonstone"
+
+echo unit.slice(0, 2)       # "Dr"
+echo unit.slice(2..4)       # "ago"
+echo unit.slice(6, 4)       # "ston"
+# echo unit.slice(100, 1)   # raises OutOfBounds

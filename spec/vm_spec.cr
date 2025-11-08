@@ -18,7 +18,7 @@ describe Dragonstone::VM do
             return a + b
         end
 
-        puts add(2, 3)
+        echo add(2, 3)
         DS
 
         bytecode = compile_bytecode(source)
@@ -34,11 +34,11 @@ describe Dragonstone::VM do
         source = <<-'DS'
         def shout(name)
             msg = "Hello, #{name}"
-            puts msg
+            echo msg
             return msg
         end
 
-        puts shout("VM")
+        echo shout("VM")
         DS
 
         bytecode = compile_bytecode(source)
@@ -50,8 +50,8 @@ describe Dragonstone::VM do
         output.to_s.should eq("Hello, VM\nHello, VM\n")
     end
 
-    it "prints empty line for nil puts" do
-        source = "puts nil\n"
+    it "prints empty line for nil echo" do
+        source = "echo nil\n"
         bytecode = compile_bytecode(source)
         output = IO::Memory.new
         vm = Dragonstone::VM.new(bytecode, stdout_io: output)

@@ -43,6 +43,9 @@ You can run these yourself from the `./scripts` directory. *(This was made using
 ```
 
 ## Project Setup
+### Requirements
+1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed. (1.17.1 or higher are the only versions verified)
+
 ### Building from Source using Bash (All Platforms)
 1. Clone this repository.
 2. Change directory to this project.

@@ -1,0 +1,7 @@
+#[
+    Display (.display) Example
+]#
+
+age = 25
+
+echo "Your age is " + age.display

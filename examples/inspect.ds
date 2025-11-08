@@ -1,0 +1,13 @@
+#[
+    Inspect (.inspect) Example
+]#
+
+# Example One
+age = 25
+
+echo "Your age is " + age.inspect
+
+# Example Two
+arr = [1, 2, 3]
+
+echo arr.inspect

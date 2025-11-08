@@ -29,7 +29,7 @@
     - ❌ Dragonstone v4 had Ruby, Crystal and C, Wasn't ready to switch and Ruby removed.
     - Dragonstone v5 (This Version & Last Rewrite) has Crystal and C.
 - Crystal and Ruby inspired but with a modern refresh (*for now just temporarily use their keywords then swap but then keep legacy compatibility?*)
-- Bindings to C at minimum, expose a blank ffi to C++? (*cool? or nah?*), and MAYBE with Crystal and Ruby too (*smh went from making a ruby gem to use crystal to making a shard to use ruby, to just saying fuck it and making a whole language...do I even bother and just make a language thats both of them but better? and maintain the ability to use them within it? or nah?*).
+- Bindings to C at minimum, expose a blank ffi to C++? (*maybe?*), and MAYBE with Crystal and Ruby too.
 
 ---
 
@@ -115,12 +115,24 @@
 #####   <h6 align="center">         `v0.0.6 -> v0.0.7`
 
 ```diff
-- Fix REPL, fucking broken and VM unwind stack w/ exception objects.
-- Add support for concurrency, singleton methods, method tables.
-- Truthiness rules (nil/false, rest truthy, falsey) and each, map, select, inject on core collections via blocks.
-- Array and Map (hash) with collections like iteration, slicing, to_s/inspect (my version of it because to_s? dumb).
-- Escapes: raise, begin/rescue/redo/retry/do/next/ensure (implemented but needs extended to each and map), yield, &block capture.
++ REPL needs to be wired to the CLI.
++ Implement optional explicit typing. 
++ Escapes: raise, begin/rescue/redo/retry/do/next/ensure, yield, &block capture.
++ Add support for Array, map (hash), and bag(like set but not .set that's different) on core collections via blocks.
++ Add support for .slice and .display/.inspect (my version of to_s/inspect).
++ Truthiness rules (nil/false, rest truthy, falsey).
+- Escapes are implemented but needs extended to each, map and bag. 
+
+
+
+
+
+
+
+- (Started) COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks.
+- Make string builder in stdlib for the runtime.
 - Allow the use (import/require) to support for urls.
+- Add support for concurrency, singleton methods, method tables.
 - Intermediate Values: Lambda values, Array/NamedArray, Map/NamedMap (hash), Range/NamedRange, and Tuple/NamedTuple.
 ```
 
@@ -128,12 +140,12 @@
 #####   <h6 align="center">         `v0.0.7 -> v0.0.8`
 
 ```diff
-- Fix FFI and make sure to do some boilerplate code avoidance and freeze current grammar subset if needed on C side.
+- VM unwind stack w/ exception objects.
+- Fix FFI and make sure to do some boilerplate code avoidance.
+- Freeze current grammar subset if needed on C side.
 - Implement optional Borrow Checker/Ownership (rust-like).
 - Implement optional Garbage Collection (c-like or crystal-like).
-- Implement optional explicit typing.
-- Add support for until, each, map (hash), bag(set but not .set that's different), select, inject on core collections via blocks
-- Make string builder in stdlib for the runtime and a method cache w/ fallback path.
+- Make a method cache w/ fallback path.
 - Bindings for 3-Way Interop so Dragonstone can call any C, Ruby or Crystal code.
 ```
 
@@ -155,7 +167,7 @@
 
 ```diff
 - (Started) Begin Bootstrapping, remove donors so everything runs on dragonstone.
-- (Started) Add dev commands/flags.
+- Add dev commands/flags.
 - (Started) Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
 - (Started) Flesh out the docs, samples, examples, tutorials, changelogs, and some versioned grammar.
 - (Started) Start building the website (quickstart, language tour, FFI roadmap, reference to the docs, etc.)
@@ -172,12 +184,9 @@
 #####   <h6 align="center">         `v0.1.0+`
 
 ```diff
-- Implement the bridge to the eden project (internal project for my magnum opus, the dream).
-- 
+- Implement the bridge to the eden project (internal project).
 - Setup a linguist repo for later? If ppl like who knows? that'd be cool but also probably not.
-- 
 - Expand the Forge Package Manager.
-- 
 - Explore Python FFI (or if we can get some of the math/ai setup for ffi).
 - Explore FFI for RayLib (and maybe other graphic APIs), Dear imGui (or some other GUIs).
 - Explore building a native web framework like Ruby on Rails/Svelte style (hmm could I just make some sort of ds -> svelte/sveltekit bridge?).

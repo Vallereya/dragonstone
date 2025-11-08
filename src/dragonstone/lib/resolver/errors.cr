@@ -84,4 +84,8 @@ module Dragonstone
     # Raised when attempting to redefine immutable bindings.
     class ConstantError < InterpreterError
     end
+
+    # Raised when attempting to access elements outside valid bounds.
+    class OutOfBounds < InterpreterError
+    end
 end

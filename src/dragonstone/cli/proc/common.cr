@@ -38,6 +38,7 @@ module Dragonstone
             io.puts "   run <file>              Run File"
             io.puts "   run [--typed] <file>    Run w/ Forced Types"
             io.puts "   build <file>            Compile File"
+            io.puts "   repl                    Starts REPL"
             io.puts "   --help or --h           Show Help"
             io.puts "   --version or --v        Show Version"
             io.puts "-------------------------------------------------"

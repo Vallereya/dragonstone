@@ -633,7 +633,7 @@ module Dragonstone
                         io << content
                     else
                         value = evaluate_interpolation(content)
-                        io << (value.nil? ? "" : value.to_s)
+                        io << display_value(value)
                     end
                 end
             end
@@ -1631,7 +1631,7 @@ module Dragonstone
                     runtime_error(InterpreterError, "echo does not accept a block", node)
                 end
                 values = arg_nodes.map { |arg| arg.accept(self) }
-                append_output(values.map { |v| v.nil? ? "" : v.to_s }.join(" "))
+                append_output(values.map { |v| display_value(v) }.join(" "))
                 nil
 
             when "typeof"
@@ -1649,15 +1649,18 @@ module Dragonstone
                 binding = find_binding(node.name)
                 if binding
                     value = unwrap_binding(binding)
-                    unless value.is_a?(Function)
+                    if value.is_a?(Function)
+                        call_function(value.as(Function), arg_nodes, block_value, node.location)
+                    elsif arg_nodes.empty? && block_value.nil?
+                        value
+                    else
                         runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
-                    call_function(value.as(Function), arg_nodes, block_value, node.location)
                 else
                     if self_value = current_scope["self"]?
                         call_receiver_method(self_value, node, arg_nodes, block_value, implicit_self: true)
                     else
-                    runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
+                        runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
                 end
 
@@ -1666,6 +1669,7 @@ module Dragonstone
 
         private def call_receiver_method(receiver, node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?, implicit_self : Bool = false)
             args = evaluate_arguments(arg_nodes)
+            conversion_call = conversion_method?(node.name)
 
             if node.name == "nil?"
                 if block_value
@@ -1675,6 +1679,11 @@ module Dragonstone
                     runtime_error(InterpreterError, "nil? does not take arguments", node)
                 end
                 return receiver.nil?
+            end
+
+            if conversion_call && !supports_custom_methods?(receiver)
+                ensure_conversion_call_valid(args, block_value, node)
+                return conversion_result_for(receiver, node.name)
             end
 
             case receiver
@@ -1750,7 +1759,13 @@ module Dragonstone
 
                 else
                     method = receiver.lookup_method(node.name)
-                    runtime_error(NameError, "Unknown method '#{node.name}' for enum #{receiver.name}", node) unless method
+                    unless method
+                        if conversion_call
+                            ensure_conversion_call_valid(args, block_value, node)
+                            return conversion_result_for(receiver, node.name)
+                        end
+                        runtime_error(NameError, "Unknown method '#{node.name}' for enum #{receiver.name}", node)
+                    end
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
                     with_container(receiver) do
@@ -1767,7 +1782,13 @@ module Dragonstone
 
                 else
                     method = receiver.lookup_method(node.name)
-                    runtime_error(NameError, "Unknown method '#{node.name}' for class #{receiver.name}", node) unless method
+                    unless method
+                        if conversion_call
+                            ensure_conversion_call_valid(args, block_value, node)
+                            return conversion_result_for(receiver, node.name)
+                        end
+                        runtime_error(NameError, "Unknown method '#{node.name}' for class #{receiver.name}", node)
+                    end
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
                     with_container(receiver) do
@@ -1777,7 +1798,13 @@ module Dragonstone
 
             when DragonModule
                 method = receiver.lookup_method(node.name)
-                runtime_error(NameError, "Unknown method '#{node.name}' for module #{receiver.name}", node) unless method
+                unless method
+                    if conversion_call
+                        ensure_conversion_call_valid(args, block_value, node)
+                        return conversion_result_for(receiver, node.name)
+                    end
+                    runtime_error(NameError, "Unknown method '#{node.name}' for module #{receiver.name}", node)
+                end
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
                 with_container(receiver) do
@@ -1786,7 +1813,13 @@ module Dragonstone
 
             when DragonInstance
                 method = receiver.klass.lookup_method(node.name)
-                runtime_error(NameError, "Undefined method '#{node.name}' for instance of #{receiver.klass.name}", node) unless method
+                unless method
+                    if conversion_call
+                        ensure_conversion_call_valid(args, block_value, node)
+                        return conversion_result_for(receiver, node.name)
+                    end
+                    runtime_error(NameError, "Undefined method '#{node.name}' for instance of #{receiver.klass.name}", node)
+                end
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
                 with_container(receiver.klass) do
@@ -1823,6 +1856,32 @@ module Dragonstone
             else
                 runtime_error(TypeError, "Cannot call method '#{node.name}' on #{receiver.class}", node)
 
+            end
+        end
+
+        private def conversion_method?(name : String) : Bool
+            name == "display" || name == "inspect"
+        end
+
+        private def supports_custom_methods?(receiver) : Bool
+            receiver.is_a?(DragonModule) || receiver.is_a?(DragonInstance)
+        end
+
+        private def ensure_conversion_call_valid(args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            reject_block(block_value, node.name, node)
+            unless args.empty?
+                runtime_error(InterpreterError, "#{node.name} does not take arguments", node)
+            end
+        end
+
+        private def conversion_result_for(value, method_name : String) : String
+            case method_name
+            when "display"
+                display_value(value)
+            when "inspect"
+                format_value(value)
+            else
+                runtime_error(InterpreterError, "Unsupported conversion '#{method_name}'", nil)
             end
         end
 
@@ -2405,10 +2464,93 @@ module Dragonstone
                 reject_block(block_value, "String##{name}", node)
                 string.empty?
 
+            when "slice"
+                reject_block(block_value, "String##{name}", node)
+                case args.size
+                when 2
+                    slice_string_with_start_and_length(string, args[0], args[1], node)
+                when 1
+                    slice_string_with_range(string, args.first, node)
+                else
+                    runtime_error(InterpreterError, "String#slice expects either 2 arguments (start, length) or 1 range argument, got #{args.size}", node)
+                end
+
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for String", node)
                 
             end
+        end
+
+        private def slice_string_with_start_and_length(string : String, start_value, length_value, node : AST::MethodCall) : String
+            start = slice_numeric_argument(start_value, "slice start index", node)
+            length = slice_numeric_argument(length_value, "slice length", node)
+            slice_chars_with_bounds(string.chars, start, length, node)
+        end
+
+        private def slice_string_with_range(string : String, range_value, node : AST::MethodCall) : String
+            range = case range_value
+                when Range(Int64, Int64)
+                    range_value
+                else
+                    runtime_error(TypeError, "String#slice expects a range of integers", node)
+                end
+
+            start = slice_numeric_argument(range.begin, "slice range start", node)
+            finish = slice_numeric_argument(range.end, "slice range end", node)
+            length = if range.excludes_end?
+                finish - start
+            else
+                finish - start + 1
+            end
+
+            length = 0_i64 if length < 0
+            slice_chars_with_bounds(string.chars, start, length, node)
+        end
+
+        private def slice_chars_with_bounds(chars : Array(Char), start : Int64, length : Int64, node : AST::Node) : String
+            if length < 0
+                runtime_error(OutOfBounds, "String#slice length must be >= 0, got #{length}", node)
+            end
+
+            if start < 0
+                runtime_error(OutOfBounds, "String#slice start index #{start} is negative", node)
+            end
+
+            char_count = chars.size.to_i64
+
+            if start > char_count
+                runtime_error(OutOfBounds, "String#slice start index #{start} is out of bounds for #{char_count} characters", node)
+            elsif start == char_count
+                if length == 0
+                    return ""
+                else
+                    runtime_error(OutOfBounds, "String#slice start index #{start} is out of bounds for #{char_count} characters", node)
+                end
+            end
+
+            return "" if length == 0
+
+            if start + length > char_count
+                runtime_error(OutOfBounds, "String#slice length #{length} exceeds string boundary (#{char_count} characters)", node)
+            end
+
+            start_i = start.to_i32
+            length_i = length.to_i32
+            chars[start_i, length_i].not_nil!.join
+        end
+
+        private def slice_numeric_argument(value, description : String, node : AST::Node) : Int64
+            number = case value
+                when Int64
+                    value
+                when Int32
+                    value.to_i64
+                when Float64
+                    value.to_i64
+                else
+                    runtime_error(TypeError, "String##{description} must be numeric", node)
+                end
+            number
         end
 
         private def call_range_method(range : RangeValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
@@ -2516,10 +2658,46 @@ module Dragonstone
                 with_container(klass) do
                     call_bound_method(instance, initializer.not_nil!, args, nil, node.location, self_object: instance)
                 end
+            elsif klass.is_a?(DragonStruct)
+                initialize_struct_instance(instance, args, node)
             elsif !args.empty?
                 runtime_error(TypeError, "#{klass.name}#initialize expects 0 arguments, got #{args.size}", node)
             end
             instance
+        end
+
+        private def initialize_struct_instance(instance : DragonInstance, args : Array(RuntimeValue), node : AST::MethodCall)
+            klass = instance.klass
+            field_names = klass.ivar_type_annotations.keys
+
+            if field_names.empty?
+                unless args.empty?
+                    runtime_error(TypeError, "#{klass.name}.new expects 0 arguments, got #{args.size}", node)
+                end
+                return
+            end
+
+            if args.empty?
+                runtime_error(TypeError, "#{klass.name}.new expects named arguments for #{field_names.join(", ")}", node)
+            end
+
+            unless args.size == 1 && args.first.is_a?(NamedTupleValue)
+                runtime_error(TypeError, "#{klass.name}.new expects named arguments", node)
+            end
+
+            tuple = args.first.as(NamedTupleValue)
+            tuple.entries.each do |symbol, value|
+                name = symbol.name
+                unless klass.ivar_type_annotations.has_key?(name)
+                    runtime_error(NameError, "Unknown attribute '#{name}' for #{klass.name}", node)
+                end
+                set_instance_variable(instance, name, value, node)
+            end
+
+            missing = field_names.reject { |name| instance.ivars.has_key?(name) }
+            unless missing.empty?
+                runtime_error(TypeError, "#{klass.name}.new missing required attributes: #{missing.join(", ")}", node)
+            end
         end
 
         private def call_function(func : Function, arg_nodes : Array(AST::Node), block_value : Function?, call_location : Location? = nil)
@@ -3289,6 +3467,84 @@ module Dragonstone
             end
         end
 
+        private def display_value(value) : String
+            case value
+
+            when Nil
+                ""
+
+            when String
+                value
+
+            when SymbolValue
+                value.name
+
+            when Array(RuntimeValue)
+                "[#{value.map { |v| display_value(v) }.join(", ")}]"
+
+            when MapValue
+                pairs = value.map { |k, v| "#{display_value(k)} -> #{display_value(v)}" }.join(", ")
+                "{#{pairs}}"
+
+            when TupleValue
+                "{#{value.elements.map { |element| display_value(element) }.join(", ")}}"
+
+            when NamedTupleValue
+                pairs = value.entries.map { |key, val| "#{key.name}: #{display_value(val)}" }.join(", ")
+                "{#{pairs}}"
+
+            when Bool
+                value.to_s
+
+            when Int64
+                value.to_s
+
+            when Int32
+                value.to_i64.to_s
+
+            when Float64
+                value.to_s
+
+            when Char
+                value.to_s
+
+            when FFIModule
+                "ffi"
+
+            when DragonInstance
+                "#<#{value.klass.name}:0x#{value.object_id.to_s(16)}>"
+
+            when DragonClass
+                value.name
+
+            when DragonModule
+                value.name
+
+            when DragonEnumMember
+                value.name
+
+            when BagValue
+                "[#{value.elements.map { |element| display_value(element) }.join(", ")}]"
+
+            when BagConstructor
+                value.to_s
+
+            when Function
+                name = value.name || "<anonymous>"
+                "#<Function #{name}>"
+
+            when RaisedException
+                value.to_s
+
+            when Range(Int64, Int64), Range(Char, Char)
+                value.to_s
+
+            else
+                value.to_s
+
+            end
+        end
+
         private def format_value(value) : String
             case value
 
@@ -3320,6 +3576,15 @@ module Dragonstone
 
             when SymbolValue
                 value.inspect
+
+            when DragonInstance
+                "#<#{value.klass.name}:0x#{value.object_id.to_s(16)}>"
+
+            when DragonClass
+                value.name
+
+            when DragonModule
+                value.name
 
             else
                 value.to_s

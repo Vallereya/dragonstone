@@ -13,4 +13,9 @@ end
 
 point = Point.new(10, 20)
 
+with point
+    echo x
+    echo y
+end
+
 echo "x: #{point.x}, y: #{point.y}"
