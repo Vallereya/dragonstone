@@ -9,7 +9,6 @@
     These can be on the same line or broken up.
 ]#
 
-ffi.call_ruby
 # Ruby's puts
 ffi.call_ruby("puts", ["Hello from Ruby!"])
 

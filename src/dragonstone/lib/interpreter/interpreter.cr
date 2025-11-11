@@ -622,7 +622,7 @@ module Dragonstone
         end
 
         def visit_block_literal(node : AST::BlockLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup)
+            Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope)
         end
 
         def visit_interpolated_string(node : AST::InterpolatedString) : RuntimeValue?
@@ -872,11 +872,11 @@ module Dragonstone
         end
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup, node.rescue_clauses, node.return_type)
+            Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope, node.rescue_clauses, node.return_type)
         end
 
         def visit_para_literal(node : AST::ParaLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, current_scope.dup, current_type_scope.dup, node.rescue_clauses, node.return_type)
+            Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope, node.rescue_clauses, node.return_type)
         end
 
         def visit_with_expression(node : AST::WithExpression) : RuntimeValue?
@@ -2245,6 +2245,77 @@ module Dragonstone
                 end
                 result
 
+            when "select"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                result = [] of RuntimeValue
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            result << element.as(RuntimeValue)
+                        end
+                    end
+                end
+                result
+
+            when "inject"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.size <= 1
+                    runtime_error(InterpreterError, "Array##{name} expects 0 or 1 argument, got #{args.size}", node)
+                end
+                memo_initialized = args.size == 1
+                memo : RuntimeValue? = memo_initialized ? args.first : nil
+                if array.empty? && !memo_initialized
+                    runtime_error(InterpreterError, "Array##{name} called on empty array with no initial value", node)
+                end
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    array.each do |element|
+                        unless memo_initialized
+                            memo = element.as(RuntimeValue)
+                            memo_initialized = true
+                            next
+                        end
+                        outcome = execute_loop_iteration(block, [memo.as(RuntimeValue), element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        memo = normalize_runtime_value(outcome[:value], node)
+                    end
+                end
+                memo.as(RuntimeValue)
+
+            when "until"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                found : RuntimeValue = nil
+                match_found = false
+                run_enumeration_loop do
+                    array.each do |element|
+                        break if match_found
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            found = element.as(RuntimeValue)
+                            match_found = true
+                            break
+                        end
+                    end
+                end
+                found
+
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Array", node)
 
@@ -2372,6 +2443,77 @@ module Dragonstone
             end
             result
 
+        when "select"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            block = block_value.not_nil!
+            result = MapValue.new
+            run_enumeration_loop do
+                map.each do |key, value|
+                    outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    if truthy?(outcome[:value])
+                        result[key.as(RuntimeValue)] = value.as(RuntimeValue)
+                    end
+                end
+            end
+            result
+
+        when "inject"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.size <= 1
+                runtime_error(InterpreterError, "Map##{name} expects 0 or 1 argument, got #{args.size}", node)
+            end
+            memo_initialized = args.size == 1
+            memo : RuntimeValue? = memo_initialized ? args.first : nil
+            if map.empty? && !memo_initialized
+                runtime_error(InterpreterError, "Map##{name} called on empty map with no initial value", node)
+            end
+            block = block_value.not_nil!
+            run_enumeration_loop do
+                map.each do |key, value|
+                    unless memo_initialized
+                        memo = value.as(RuntimeValue)
+                        memo_initialized = true
+                        next
+                    end
+                    outcome = execute_loop_iteration(block, [memo.as(RuntimeValue), key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    memo = normalize_runtime_value(outcome[:value], node)
+                end
+            end
+            memo.as(RuntimeValue)
+
+        when "until"
+            unless block_value
+                runtime_error(InterpreterError, "Map##{name} requires a block", node)
+            end
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            block = block_value.not_nil!
+            found : RuntimeValue = nil
+            match_found = false
+            run_enumeration_loop do
+                map.each do |key, value|
+                    break if match_found
+                    outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
+                    next if outcome[:state] == :next
+                    if truthy?(outcome[:value])
+                        found = TupleValue.new([key.as(RuntimeValue), value.as(RuntimeValue)])
+                        match_found = true
+                        break
+                    end
+                end
+            end
+            found
+
         when "has_key?", "includes_key?", "key?"
             reject_block(block_value, "Map##{name}", node)
             unless args.size == 1
@@ -2483,6 +2625,77 @@ module Dragonstone
                     end
                 end
                 result
+
+            when "select"
+                unless block_value
+                    runtime_error(InterpreterError, "Bag##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                result = BagValue.new(bag.element_descriptor)
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_loop_iteration(block, [value], node)
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            result.add(value)
+                        end
+                    end
+                end
+                result
+
+            when "inject"
+                unless block_value
+                    runtime_error(InterpreterError, "Bag##{name} requires a block", node)
+                end
+                unless args.size <= 1
+                    runtime_error(InterpreterError, "Bag##{name} expects 0 or 1 argument, got #{args.size}", node)
+                end
+                memo_initialized = args.size == 1
+                memo : RuntimeValue? = memo_initialized ? args.first : nil
+                if bag.elements.empty? && !memo_initialized
+                    runtime_error(InterpreterError, "Bag##{name} called on empty bag with no initial value", node)
+                end
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        unless memo_initialized
+                            memo = value
+                            memo_initialized = true
+                            next
+                        end
+                        outcome = execute_loop_iteration(block, [memo.as(RuntimeValue), value], node)
+                        next if outcome[:state] == :next
+                        memo = normalize_runtime_value(outcome[:value], node)
+                    end
+                end
+                memo.as(RuntimeValue)
+
+            when "until"
+                unless block_value
+                    runtime_error(InterpreterError, "Bag##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                found : RuntimeValue = nil
+                match_found = false
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        break if match_found
+                        outcome = execute_loop_iteration(block, [value], node)
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            found = value
+                            match_found = true
+                            break
+                        end
+                    end
+                end
+                found
 
             when "to_a"
                 reject_block(block_value, "Bag##{name}", node)
@@ -2775,7 +2988,8 @@ module Dragonstone
             end
 
             with_block(block_value) do
-                push_scope(func.closure.dup, func.type_closure.dup)
+                push_scope(func.closure, func.type_closure)
+                push_scope(Scope.new, new_type_scope)
                 scope_index = @scopes.size - 1
                 func.typed_parameters.each_with_index do |param, index|
                     value = final_args[index]
@@ -2791,6 +3005,7 @@ module Dragonstone
                 rescue e : ReturnValue
                     result = e.value
                 ensure
+                    pop_scope
                     pop_scope
                 end
 
@@ -2860,7 +3075,8 @@ module Dragonstone
             end
 
             with_block(nil) do
-                push_scope(block.closure.dup, block.type_closure.dup)
+                push_scope(block.closure, block.type_closure)
+                push_scope(Scope.new, new_type_scope)
                 scope_index = @scopes.size - 1
                 block.typed_parameters.each_with_index do |param, index|
                     value = args[index]
@@ -2884,17 +3100,22 @@ module Dragonstone
                     result = e.value
                 ensure
                     pop_scope
+                    pop_scope
                 end
                 result
             end
         end
 
         private def execute_loop_iteration(block : Function, args : Array(RuntimeValue), node : AST::MethodCall) : NamedTuple(state: Symbol, value: RuntimeValue?)
-            begin
-                value = invoke_block(block, args, node.location)
-                {state: :yielded, value: value}
-            rescue e : NextSignal
-                {state: :next, value: nil}
+            loop do
+                begin
+                    value = invoke_block(block, args, node.location)
+                    return {state: :yielded, value: value}
+                rescue e : NextSignal
+                    return {state: :next, value: nil}
+                rescue e : RedoSignal
+                    next
+                end
             end
         end
 
@@ -3095,7 +3316,7 @@ module Dragonstone
 
                 if stored_value.is_a?(ConstantBinding)
                     runtime_error(ConstantError, "Cannot reassign constant #{name}", location)
-                elsif binding_info[:scope] == current_scope
+                else
                     target_scope = binding_info[:scope]
                     scope_index = binding_info[:index]
                 end

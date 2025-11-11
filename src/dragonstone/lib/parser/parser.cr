@@ -64,6 +64,10 @@ module Dragonstone
             :LOGICAL_AND_ASSIGN
         ]
 
+        METHOD_NAME_KEYWORDS = [
+            :SELECT
+        ]
+
         PRECEDENCE = {
             assignment: 10,
             conditional: 20,
@@ -815,7 +819,7 @@ module Dragonstone
                     left = AST::IndexAccess.new(left, index, nil_safe: nil_safe, location: bracket_token.location)
                 when :DOT
                     advance
-                    method_token = expect(:IDENTIFIER)
+                    method_token = expect_method_name
                     name = method_token.value.as(String)
                     arguments = [] of AST::Node
                     if current_token.type == :LPAREN
@@ -1364,6 +1368,16 @@ module Dragonstone
             end
             advance
             token
+        end
+
+        private def expect_method_name : Token
+            token = current_token
+            if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type)
+                advance
+                token
+            else
+                expect(:IDENTIFIER)
+            end
         end
 
         private def error(message : String, token : Token, hint : String? = nil) : NoReturn

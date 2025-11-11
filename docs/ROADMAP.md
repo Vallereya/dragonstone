@@ -129,7 +129,7 @@
 #####   <h6 align="center">         `v0.0.7 -> v0.0.8`
 
 ```diff
-- (Started) COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
++ COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
 - (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
 - Implement optional Garbage Collection (c-like or crystal-like) and Borrow Checker/Ownership (rust-like).
 - Add support for concurrency, singleton methods, method tables, and make a string builder in stdlib for the runtime.

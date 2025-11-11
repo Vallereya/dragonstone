@@ -1,0 +1,68 @@
+#[
+    Some Collection Examples
+]#
+
+numbers = [1, 2, 3, 4, 5]
+
+evens = numbers.select do |value|
+    value % 2 == 0
+end
+e! evens
+
+sum = numbers.inject do |memo, value|
+    memo + value
+end
+echo sum
+
+first_large = numbers.until do |value|
+    value > 3
+end
+echo first_large
+
+scores = {
+    "Ringo" -> 9, 
+    "Peet" -> 5, 
+    "Jules" -> 8
+}
+
+top_scores = scores.select do |name, score|
+    score >= 8
+end
+e! top_scores
+
+total_score = scores.inject(0) do |memo, _name, score|
+    memo + score
+end
+echo total_score
+
+peet_entry = scores.until do |name, _score|
+    name == "Peet"
+end
+
+if peet_entry
+    echo peet_entry.first
+    echo peet_entry.last
+end
+
+levels = bag(int).new
+levels.add(1)
+levels.add(3)
+levels.add(5)
+
+big_levels = levels.select do |value|
+    value >= 3
+end
+
+big_levels.each do |value|
+    echo value
+end
+
+product = levels.inject(1) do |memo, value|
+    memo * value
+end
+echo product
+
+first_above_four = levels.until do |value|
+    value > 4
+end
+echo first_above_four
