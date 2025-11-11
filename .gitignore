@@ -2,6 +2,9 @@
 # Here I'm putting in files and folders
 # to be ignored from git.
 #
+# Cross ignore for dragonstone and
+# dragonstone-lang.org website.
+#
 
 # Ignore any Output/Build Files.
 dragonstone.exe
@@ -13,6 +16,29 @@ iconv-2.dll
 pcre2-8.dll
 version.h
 NUL
+.dragonstone
+install-dragonstone.iss
+installer
+release
+.DS_Store
+Thumbs.db
+/build
+/.svelte-kit
+node_modules
+.output
+.vercel
+.netlify
+.wrangler
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 
 # Ignore any Cache that's created.
 .cache
@@ -27,12 +53,6 @@ NUL
 .vscode
 .idea
 .vim
-
-# Other ignores.
-.dragonstone
-install-dragonstone.iss
-installer
-release
 
 # Annoying IDE ignores.
 .fake

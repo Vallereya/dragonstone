@@ -9,6 +9,7 @@
     These can be on the same line or broken up.
 ]#
 
+ffi.call_ruby
 # Ruby's puts
 ffi.call_ruby("puts", ["Hello from Ruby!"])
 
@@ -16,8 +17,4 @@ ffi.call_ruby("puts", ["Hello from Ruby!"])
 ffi.call_crystal("puts", ["Hello from Crystal!"])
 
 # C's printf
-ffi.call_c(
-    "printf", [
-        "Hello from C!"
-    ]
-)
+ffi.call_c("printf", ["Hello from C!"])

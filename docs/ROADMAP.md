@@ -24,10 +24,10 @@
     - Compile to Machine Code (*coming soon..working on thought process for this*)
     - Interpret to Bytecode executed by the DVM (**Dragonstone Virtual Machine**)
 - Complete removal of donor languages and bootstrap dragonstone to be Self-Hosted
-    - ☑️ Dragonstone v1 had Python, removed.
-    - ☑️ Dragonstone v2 had Ruby, removed.
-    - ☑️ Dragonstone v3 also had Ruby and Crystal, Ruby removed.
-    - ❌ Dragonstone v4 had Ruby, Crystal and C, Wasn't ready to switch and Ruby removed.
+    - ☑️ Dragonstone v1 had Python, was removed and rebuilt.
+    - ☑️ Dragonstone v2 had Ruby, ran into issues with performance and rebuilt.
+    - ☑️ Dragonstone v3 also had Ruby and Crystal, ran into issues with performance again and rebuilt.
+    - ❌ Dragonstone v4 had Ruby, Crystal and C, wasn't ready to switch, got annoyed with Ruby so removed it and rebuilt again.
     - Dragonstone v5 (This Version & Last Rewrite) has Crystal and C.
 - Crystal and Ruby inspired but with a modern refresh (*for now just temporarily use their keywords then swap but then keep legacy compatibility?*)
 - Bindings to C at minimum, expose a blank ffi to C++? (*maybe?*), and MAYBE with Crystal and Ruby too.

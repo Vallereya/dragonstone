@@ -8,7 +8,7 @@
 
 #### This document serves as a quick overview to understanding how to contribute to this project. This document will update as the project evolves.
 
-## 1. Contribution Process
+## <p align=left> 1. Contribution Process </p>
 
 ```md
 1. Fork the repository.
