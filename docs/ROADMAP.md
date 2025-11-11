@@ -131,9 +131,9 @@
 ```diff
 + COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
 - (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
+- (Started) Allow the use (import/require) to support for urls and update folder structure.
 - Implement optional Garbage Collection (c-like or crystal-like) and Borrow Checker/Ownership (rust-like).
 - Add support for concurrency, singleton methods, method tables, and make a string builder in stdlib for the runtime.
-- Allow the use (import/require) to support for urls.
 - Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
 - Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
 ```

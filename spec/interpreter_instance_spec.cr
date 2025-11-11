@@ -1,7 +1,7 @@
 require "spec"
 require "../src/dragonstone/lib/lexer/*"
 require "../src/dragonstone/lib/parser/*"
-require "../src/dragonstone/lib/interpreter/*"
+require "../src/dragonstone/native/interpreter/*"
 
 private def run_program(source : String, typing : Bool = false)
     tokens = Dragonstone::Lexer.new(source).tokenize

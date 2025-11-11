@@ -1,13 +1,13 @@
 # ---------------------------------
 # ---------- Interpreter ----------
 # ---------------------------------
-require "../resolver/errors"
-require "../lexer/*"
-require "../parser/*"
-require "../codegen/*"
-require "../typing/*"
-require "../runtime/ffi_module"
-require "../runtime/symbol"
+require "../../lib/resolver/errors"
+require "../../lib/lexer/*"
+require "../../lib/parser/*"
+require "../../lib/codegen/*"
+require "../../lib/typing/*"
+require "../../lib/runtime/ffi_module"
+require "../../lib/runtime/symbol"
 
 module Dragonstone
     class RaisedException
