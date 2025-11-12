@@ -133,7 +133,7 @@
 + Add support for singleton methods.
 + Update folder structure so its properly splitup for bootstrapping and separate compiler.
 + Allow the use (import/require) to support for urls.
-- 
++ Make a string builder in stdlib for the runtime.
 - 
 - 
 ```
@@ -142,8 +142,14 @@
 #####   <h6 align="center">         `v0.0.8 -> v0.0.9`
 
 ```diff
+- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors. Full/Expand diagnostics handling.
+- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics. Full/Expand exception handling.
+
+- Set CI + cross-platform builds (Linux/macOS/Windows).
+- Maximize portability/native cross-platform.
+
 - Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
-- Make a string builder in stdlib for the runtime.
+
 - Add support for concurrency.
 - VM unwind stack w/ exception objects.
 - Make a method cache w/ fallback path.
@@ -151,11 +157,7 @@
 - Implement optional Borrow Checker/Ownership (rust-like).
 - Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
 - Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
-- Set CI + cross-platform builds (Linux/macOS/Windows).
-- Maximize portability/native cross-platform.
 - No Ruby/Crystal/C in build, runtime, or tooling and port stdlib to dragonstone if there is any not.
-- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors. Full/Expand diagnostics handling.
-- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics. Full/Expand exception handling.
 ```
 
 ###     <h2 align="center">         Phase Ten
