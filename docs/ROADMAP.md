@@ -129,19 +129,25 @@
 #####   <h6 align="center">         `v0.0.7 -> v0.0.8`
 
 ```diff
-+ COLLECTIONS: Add support for select, until, inject, each, on core collections via blocks?
-- (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
-- (Started) Allow the use (import/require) to support for urls and update folder structure.
-- Implement optional Garbage Collection (c-like or crystal-like) and Borrow Checker/Ownership (rust-like).
-- Add support for concurrency, singleton methods, method tables, and make a string builder in stdlib for the runtime.
-- Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
-- Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
++ COLLECTIONS: Add support for select, until, inject, and each.
++ Add support for singleton methods.
++ Update folder structure so its properly splitup for bootstrapping and separate compiler.
++ Allow the use (import/require) to support for urls.
+- Implement optional Garbage Collection (c-like or crystal-like) 
+- Implement optional Borrow Checker/Ownership (rust-like).
+- Make a string builder in stdlib for the runtime.
 ```
 
 ###     <h2 align="center">         Phase Nine
 #####   <h6 align="center">         `v0.0.8 -> v0.0.9`
 
 ```diff
+- (Started) Extend for named for Bag/NamedBag, Array/NamedArray, Map/NamedMap, Range/NamedRange, and Tuple/NamedTuple?
+- Add support for concurrency.
+
+- Fix FFI and make sure to do some boilerplate code avoidance, and freeze current grammar subset if needed on C side.
+- Expand the bindings of the 3-Way Interop, so Dragonstone can call more from any C, Ruby or Crystal code.
+
 - VM unwind stack w/ exception objects.
 - Make a method cache w/ fallback path.
 - Set CI + cross-platform builds (Linux/macOS/Windows).
@@ -176,11 +182,5 @@
 #####   <h6 align="center">         `v0.1.0 -> v0.2.0`
 
 ```diff
-
-
-
-
-
-
- 
+- Expand the stdlib.
 ```

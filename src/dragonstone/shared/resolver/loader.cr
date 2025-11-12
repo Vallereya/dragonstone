@@ -15,15 +15,16 @@ module Dragonstone
         end
 
         def apply_imports(current_unit, use_decl : AST::UseDecl, base_file : String)
+            base_dir = @resolver.base_directory(base_file)
             use_decl.items.each do |item|
                 case item.kind
                 when AST::UseItemKind::Paths
-                    @resolver.expand_use_item(item, File.dirname(base_file)).each do |path|
+                    @resolver.expand_use_item(item, base_dir).each do |path|
                         unit = load_unit(path)
                         current_unit.bind_namespace(unit.default_namespace)
                     end
                 when AST::UseItemKind::From
-                    path = @resolver.expand_use_item(item, File.dirname(base_file)).first
+                    path = @resolver.expand_use_item(item, base_dir).first
                     unit = load_unit(path)
                     item.imports.each do |ni|
                         value = unit.exported_lookup(ni.name) || raise "Symbol `#{ni.name}` not exported by #{path}"

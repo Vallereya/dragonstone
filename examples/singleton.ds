@@ -1,0 +1,11 @@
+#[
+    Singleton Example
+]#
+
+greeting = "Hello"
+
+def greeting.shout
+    upcase + "!"
+end
+
+echo greeting.shout

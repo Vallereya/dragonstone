@@ -6,8 +6,22 @@
     The file that's actually 
     with the logic, taking from
     the ./test_use.ds example.
+
+    As well as ./classes.ds and
+    2 examples directly from the
+    same examples on GitHub.
 ]#
 
 use "test_use.ds"
+use { Person } from "classes.ds"
+
+use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode.ds"
+use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution.ds"
 
 echo add(magic, 8)
+
+person = Person.new
+person.greet
+
+🔥.道
+echo MyModule::Test

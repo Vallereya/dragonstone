@@ -12,6 +12,30 @@ DS
         result.output.should eq "25\n"
     end
 
+    it "supports singleton methods on objects and classes" do
+        source = <<-DS
+greeting = "Hello"
+
+def greeting.shout
+    upcase + "!"
+end
+
+echo greeting.shout
+
+class Phrase
+    GREETING = "hi"
+
+    def self.loud
+        GREETING.upcase
+    end
+end
+
+echo Phrase.loud
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "HELLO!\nHI\n"
+    end
+
     it "supports with blocks as implicit receivers" do
         source = <<-DS
 struct Point

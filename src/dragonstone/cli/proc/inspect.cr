@@ -204,7 +204,14 @@ module Dragonstone
                 params = node.typed_parameters.map(&.to_source).join(", ")
                 sig = "#{node.name}(#{params})"
                 sig += " -> #{node.return_type.not_nil!.to_source}" if node.return_type
-                io.puts "#{prefix}FunctionDef: #{sig}"
+
+                if receiver = node.receiver
+                    receiver_source = receiver.to_source rescue "<receiver>"
+                    io.puts "#{prefix}FunctionDef: #{receiver_source}.#{sig}"
+                else
+                    io.puts "#{prefix}FunctionDef: #{sig}"
+                end
+
                 node.body.each { |stmt| print_ast(stmt, indent + 1, io) }
 
             when Dragonstone::AST::FunctionLiteral

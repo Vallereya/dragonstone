@@ -460,7 +460,17 @@ module Dragonstone
 
         private def parse_function_def(visibility : Symbol = :public) : AST::Node
             def_token = expect(:DEF)
-            name_token = expect(:IDENTIFIER)
+            receiver_node = nil
+            name_token = nil
+
+            if singleton_method_definition_start?
+                receiver_node = parse_singleton_receiver
+                expect(:DOT)
+                name_token = expect_method_name
+            else
+                name_token = expect_method_name
+            end
+
             parameters = parse_parameter_list
             return_type = parse_optional_return_type
             body = parse_block([:END, :RESCUE])
@@ -469,7 +479,7 @@ module Dragonstone
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, visibility: visibility, location: def_token.location)
+            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, visibility: visibility, receiver: receiver_node, location: def_token.location)
         end
 
         private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)
@@ -924,6 +934,56 @@ module Dragonstone
             end
 
             node
+        end
+
+        private def singleton_method_definition_start? : Bool
+            token = current_token
+            case token.type
+            when :IDENTIFIER
+                lookahead_for_singleton_receiver(1)
+            when :INSTANCE_VAR
+                next_token = peek_token
+                return false unless next_token && next_token.type == :DOT
+                method_name_token?(peek_token(2))
+            else
+                false
+            end
+        end
+
+        private def lookahead_for_singleton_receiver(offset : Int32) : Bool
+            index = offset
+            loop do
+                next_token = peek_token(index)
+                return false unless next_token
+                case next_token.type
+                when :DOUBLE_COLON
+                    segment = peek_token(index + 1)
+                    return false unless segment && segment.type == :IDENTIFIER
+                    index += 2
+                when :DOT
+                    return method_name_token?(peek_token(index + 1))
+                else
+                    return false
+                end
+            end
+            false
+        end
+
+        private def method_name_token?(token : Token?) : Bool
+            return false unless token
+            token.not_nil!.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.not_nil!.type)
+        end
+
+        private def parse_singleton_receiver : AST::Node
+            case current_token.type
+            when :IDENTIFIER
+                parse_identifier_expression
+            when :INSTANCE_VAR
+                ivar_token = expect(:INSTANCE_VAR)
+                AST::InstanceVariable.new(ivar_token.value.as(String), location: ivar_token.location)
+            else
+                error("Invalid singleton receiver", current_token)
+            end
         end
 
         private def parse_typeof_expression : AST::Node

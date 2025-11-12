@@ -376,6 +376,10 @@ module Dragonstone
         end
 
         private def compile_function_def(node : AST::FunctionDef)
+            if node.receiver
+                raise ArgumentError.new("Singleton methods are not supported in the bytecode compiler")
+            end
+
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body)
             fn_const_idx = const_index(fn_chunk)

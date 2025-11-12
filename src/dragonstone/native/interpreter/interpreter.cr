@@ -300,6 +300,15 @@ module Dragonstone
         end
     end
 
+    class SingletonClass < DragonModule
+        getter target_id : UInt64
+        property parent : DragonModule?
+
+        def initialize(@target_id : UInt64, name : String, @parent : DragonModule? = nil)
+            super(name)
+        end
+    end
+
     class DragonInstance
         getter klass : DragonClass
         getter ivars : Hash(String, RuntimeValue)
@@ -332,6 +341,7 @@ module Dragonstone
             @type_aliases = {} of String => AST::TypeExpression
             @alias_descriptor_cache = {} of String => Typing::Descriptor
             @block_stack = [] of Function?
+            @singleton_classes = {} of UInt64 => SingletonClass
             set_variable("ffi", FFIModule.new)
         end
 
@@ -497,10 +507,8 @@ module Dragonstone
             return constant_info[:value] if constant_info[:found]
 
             if self_value = current_scope["self"]?
-                if method_defined_for_implicit_self?(self_value, node.name)
-                    method_call = AST::MethodCall.new(node.name, [] of AST::Node, nil, location: node.location)
-                    return call_receiver_method(self_value, method_call, [] of AST::Node, nil, implicit_self: true)
-                end
+                method_call = AST::MethodCall.new(node.name, [] of AST::Node, nil, location: node.location)
+                return call_receiver_method(self_value, method_call, [] of AST::Node, nil, implicit_self: true)
             end
 
             runtime_error(NameError, "Undefined variable or constant: #{node.name}", node)
@@ -839,8 +847,14 @@ module Dragonstone
             type_closure = current_type_scope.dup
 
             container = current_container
-            if node.typed_parameters.any?(&.assigns_instance_variable?) && !container.is_a?(DragonClass)
+            if node.typed_parameters.any?(&.assigns_instance_variable?) && (!container.is_a?(DragonClass) || node.receiver)
                 runtime_error(InterpreterError, "Instance variable parameters are only allowed inside classes", node)
+            end
+
+            if receiver_node = node.receiver
+                target = receiver_node.accept(self)
+                define_singleton_method(target, node, closure, type_closure)
+                return nil
             end
 
             if container
@@ -874,6 +888,22 @@ module Dragonstone
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
             Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope, node.rescue_clauses, node.return_type)
+        end
+
+        private def define_singleton_method(target, node : AST::FunctionDef, closure : Scope, type_closure : TypeScope)
+            owner = singleton_class_for_value(target, node)
+            method = MethodDefinition.new(
+                node.name,
+                node.typed_parameters,
+                node.body,
+                closure,
+                type_closure,
+                owner,
+                node.rescue_clauses,
+                node.return_type,
+                visibility: node.visibility
+            )
+            owner.define_method(node.name, method)
         end
 
         def visit_para_literal(node : AST::ParaLiteral) : RuntimeValue?
@@ -1669,6 +1699,7 @@ module Dragonstone
         end
 
         private def call_receiver_method(receiver, node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?, implicit_self : Bool = false)
+            receiver = receiver.value if receiver.is_a?(ConstantBinding)
             args = evaluate_arguments(arg_nodes)
             conversion_call = conversion_method?(node.name)
 
@@ -1680,6 +1711,15 @@ module Dragonstone
                     runtime_error(InterpreterError, "nil? does not take arguments", node)
                 end
                 return receiver.nil?
+            end
+
+            if singleton_info = lookup_singleton_method(receiver, node.name)
+                method = singleton_info[:method]
+                owner = singleton_info[:owner]
+                ensure_method_visible!(receiver, method, node, implicit_self)
+                with_singleton_container(owner) do
+                    return call_bound_method(owner, method, args, block_value, node.location, self_object: receiver)
+                end
             end
 
             if conversion_call && !supports_custom_methods?(receiver)
@@ -1869,7 +1909,92 @@ module Dragonstone
         end
 
         private def supports_custom_methods?(receiver) : Bool
-            receiver.is_a?(DragonModule) || receiver.is_a?(DragonInstance)
+            return true if receiver.is_a?(DragonModule) || receiver.is_a?(DragonInstance)
+            if identity = singleton_identity(receiver)
+                @singleton_classes.has_key?(identity)
+            else
+                false
+            end
+        end
+
+        private def lookup_singleton_method(receiver, name : String) : NamedTuple(method: MethodDefinition, owner: SingletonClass)?
+            if identity = singleton_identity(receiver)
+                if owner = @singleton_classes[identity]?
+                    if method = owner.lookup_method(name)
+                        return {method: method, owner: owner}
+                    end
+                end
+            end
+            nil
+        end
+
+        private def singleton_identity(value) : UInt64?
+            case value
+            when Nil
+                nil
+            when Bool
+                nil
+            when Int32
+                nil
+            when Int64
+                nil
+            when Float64
+                nil
+            when Char
+                nil
+            when SymbolValue
+                nil
+            when Range(Int64, Int64)
+                nil
+            when Range(Char, Char)
+                nil
+            when FFIModule
+                nil
+            else
+                value.object_id
+            end
+        end
+
+        private def singleton_class_for_value(value, node : AST::Node) : SingletonClass
+            unless identity = singleton_identity(value)
+                runtime_error(TypeError, "Cannot define singleton methods on #{describe_runtime_value(value)}", node)
+            end
+            parent_candidate = singleton_parent_for(value)
+            owner = @singleton_classes.fetch(identity) do
+                singleton = SingletonClass.new(identity, singleton_class_name(value, identity), parent_candidate)
+                @singleton_classes[identity] = singleton
+                singleton
+            end
+            if owner.parent.nil? && parent_candidate
+                owner.parent = parent_candidate
+            end
+            owner
+        end
+
+        private def singleton_class_name(value, identity : UInt64) : String
+            descriptor = describe_runtime_value(value)
+            "#<Singleton:0x#{identity.to_s(16)} #{descriptor}>"
+        end
+
+        private def singleton_parent_for(value)
+            case value
+            when DragonInstance
+                value.klass
+            when DragonModule
+                value
+            else
+                nil
+            end
+        end
+
+        private def with_singleton_container(owner : SingletonClass)
+            with_container(owner) do
+                if parent = owner.parent
+                    with_container(parent) { yield }
+                else
+                    yield
+                end
+            end
         end
 
         private def ensure_conversion_call_valid(args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
@@ -2098,25 +2223,6 @@ module Dragonstone
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Tuple", node)
 
-            end
-        end
-
-        private def method_defined_for_implicit_self?(receiver, name : String) : Bool
-            case receiver
-            when DragonInstance
-                !!receiver.klass.lookup_method(name)
-            when DragonClass
-                !!receiver.lookup_method(name)
-            when DragonModule
-                !!receiver.lookup_method(name)
-            when DragonEnum
-                !!receiver.lookup_method(name)
-            when DragonEnumMember
-                name == "name" || name == "enum" || name == "value" || name == receiver.enum.value_method_name
-            when Function
-                name == "call"
-            else
-                false
             end
         end
 

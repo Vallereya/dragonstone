@@ -68,10 +68,11 @@ module Dragonstone
                 end
             end
 
-            private def function_supported?(node : AST::FunctionDef) : Bool
-                return false unless node.rescue_clauses.empty?
-                return false unless node.typed_parameters.all? { |param| param.instance_var_name.nil? }
-                nodes_supported?(node.body)
+        private def function_supported?(node : AST::FunctionDef) : Bool
+            return false if node.receiver
+            return false unless node.rescue_clauses.empty?
+            return false unless node.typed_parameters.all? { |param| param.instance_var_name.nil? }
+            nodes_supported?(node.body)
             end
 
             private def interpolated_string_supported?(node : AST::InterpolatedString) : Bool
