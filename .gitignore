@@ -14,6 +14,9 @@ dragonstone.o
 gc.dll
 iconv-2.dll
 pcre2-8.dll
+zlib1.dll
+libssl-3-x64.dll
+libcrypto-3-x64.dll
 version.h
 NUL
 .dragonstone
@@ -30,6 +33,15 @@ node_modules
 .netlify
 .wrangler
 
+# Ignore any Cache that's created.
+.cache
+.c
+.c_cache
+.ruby
+.ruby_cache
+.crystal
+.crystal_cache
+
 # Env
 .env
 .env.*
@@ -40,15 +52,6 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Ignore any Cache that's created.
-.cache
-.c
-.c_cache
-.ruby
-.ruby_cache
-.crystal
-.crystal_cache
-
 # Ignore any IDE folders.
 .vscode
 .idea
@@ -56,10 +59,3 @@ vite.config.ts.timestamp-*
 
 # Annoying IDE ignores.
 .fake
-
-# Temporarily Ignoring the bootstrap conversion files.
-version.ds
-main.ds
-cli.ds
-run_proc.ds
-dragonstone.ds

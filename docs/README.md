@@ -1,6 +1,6 @@
 <p align="center">
     <div align="center">
-        <img src="./0_Index/logos/Dragonstone-Logo-Full.png" width="500"/>
+        <img src="./0_Index/logos/dragonstone-logo-type.png" width="500"/>
     </div>
 </p>
 
