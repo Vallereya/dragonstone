@@ -1,5 +1,5 @@
 <p align="center">
-    <div align="center"> <img src="./docs/0_Index/logos/Dragonstone-Logo-Full.png" width="500"/>                            </div>
+    <div align="center"> <img src="./docs/0_Index/logos/dragonstone-logo-type.png" width="500"/>                            </div>
 </p>
 <br>
 
@@ -272,7 +272,7 @@ square: para(int, int) = ->(x: int) { x * x }
 echo square.call(6)
 ```
 
-#### Examples the interop (some done but still a work in progress)
+#### Examples the interop (some done but still a work in progress).
 
 ```crystal
     # Call puts from Ruby
@@ -293,7 +293,6 @@ See the `examples/` directory for more sample `.ds` files.
 
 ## License
 *© 2025 Vallereya* <br>
-All rights reserved. <br>
-
-*Code and Contributions have **Apache-2.0 License** agreed upon by all copyright holders. <br>
+All rights reserved. <br> <br>
+*Code and Contributions have **Apache-2.0 License** agreed upon by all copyright holders. <br> <br>
 See **LICENSE** for more information.* <br>

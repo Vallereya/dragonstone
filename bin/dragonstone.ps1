@@ -1,11 +1,5 @@
 <# 
 
-Heavily modified from what was in the Crystal source.
-
-#>
-
-<# 
-
 Commands, I need to remember to rebuild if needed.
 
     Using either commands will add an icon to dragonstone.exe:

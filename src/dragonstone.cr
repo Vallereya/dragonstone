@@ -3,7 +3,11 @@
 # --------- Orchestrator ----------
 # ---------------------------------
 require "./version"
-require "./dragonstone/lib/**"
+require "./dragonstone/shared/lexer/lexer"
+require "./dragonstone/shared/parser/parser"
+require "./dragonstone/shared/resolver/resolver"
+require "./dragonstone/shared/runtime/runtime"
+require "./dragonstone/native/interpreter/interpreter"
 
 module Dragonstone
     PATH_SEPARATOR = {% if flag?(:windows) %} ';' {% else %} ':' {% end %}

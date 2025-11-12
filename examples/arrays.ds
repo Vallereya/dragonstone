@@ -39,7 +39,3 @@ e! empty.empty
 # Mixed types.
 mixed = [1, "hello", 3.14, true]
 e! mixed
-
-# Example Seven (Named Array)
-numbers = [1, 2, 3, 4, 5]
-e! numbers

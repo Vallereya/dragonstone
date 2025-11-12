@@ -1,4 +1,4 @@
-@REM This adds to local path and then handoff to .ps1 got the idea from the Crystal source.
+@REM This adds to local path and then handoff to .ps1
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"

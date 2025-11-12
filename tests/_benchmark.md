@@ -26,35 +26,35 @@ These runs I'm going to start making after any new implementations, updates or c
 ## Runs:
 
 ```diff
-+    Tested on 25-10-2025:
++    Tested on 2025-10-25:
         Iterations Tested of 1,000,000 (1 Million)
         5 Passes with an Average of 3.43ms.
 
         If we were going to 1,000,000,000 (1 Billion),
         this would take about ~57 Minutes.
 
-+    Tested on 25-10-2025:
++    Tested on 2025-10-25:
         Iterations Tested of 1,000,000 (1 Million)
         5 Passes with an Average of 3.43ms.
 
         If we were going to 1,000,000,000 (1 Billion),
         this would take about ~57 Minutes.
 
-+    Tested on 03-11-2025:
++    Tested on 2025-11-03:
         Iterations Tested of 1,000,000 (1 Million)
         5 Passes with an Average of 2.27ms.
 
         If we were going to 1,000,000,000 (1 Billion),
         this would take about ~37 Minutes.
 
-+    Tested on 04-11-2025:
++    Tested on 2025-11-04:
         Iterations Tested of 1,000,000 (1 Million)
         5 Passes with an Average of 242-246ms.
 
         Iterations Tested of 1,000,000,000 (1 Billion)
         this would take about ~4 Minutes.
 
-+    Tested on 05-11-2025:
++    Tested on 2025-11-05:
         Nested Iterations Tested of 1,000,000 (1 Million)
         Time: 282.6ms
         Overhead: 15.4% slower than Single Loop.

@@ -12,6 +12,30 @@ DS
         result.output.should eq "25\n"
     end
 
+    it "supports singleton methods on objects and classes" do
+        source = <<-DS
+greeting = "Hello"
+
+def greeting.shout
+    upcase + "!"
+end
+
+echo greeting.shout
+
+class Phrase
+    GREETING = "hi"
+
+    def self.loud
+        GREETING.upcase
+    end
+end
+
+echo Phrase.loud
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "HELLO!\nHI\n"
+    end
+
     it "supports with blocks as implicit receivers" do
         source = <<-DS
 struct Point
@@ -126,6 +150,129 @@ end
 DS
         result = Dragonstone.run(source, typed: true)
         result.output.should eq "5\n1\n10\n"
+    end
+
+    it "provides select, inject, and until helpers across collections" do
+        source = <<-DS
+numbers = [1, 2, 3, 4, 5]
+
+selected = numbers.select do |value|
+    value % 2 == 1
+end
+
+echo selected.length
+echo selected.first
+echo selected.last
+
+sum = numbers.inject do |memo, value|
+    memo + value
+end
+
+echo sum
+
+first_over_three = numbers.until do |value|
+    value > 3
+end
+
+echo first_over_three
+
+scores = {"arya" -> 9, "bran" -> 5, "sansa" -> 8}
+
+high_scores = scores.select do |name, score|
+    score >= 8
+end
+
+echo high_scores.length
+echo high_scores["arya"]
+echo high_scores.has_key?("bran")
+
+total_score = scores.inject(0) do |memo, _name, score|
+    memo + score
+end
+
+echo total_score
+
+match = scores.until do |name, score|
+    score == 5
+end
+
+if match
+    echo match.first
+    echo match.last
+else
+    echo "none"
+end
+
+numbers_bag = bag(int).new
+numbers_bag.add(2)
+numbers_bag.add(3)
+numbers_bag.add(5)
+
+large_bag = numbers_bag.select do |value|
+    value >= 3
+end
+
+echo large_bag.size
+
+product = numbers_bag.inject(1) do |memo, value|
+    memo * value
+end
+
+echo product
+
+first_even = numbers_bag.until do |value|
+    value % 2 == 0
+end
+
+echo first_even
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "3\n1\n5\n15\n4\n2\n9\nfalse\n22\nbran\n5\n2\n30\n2\n"
+    end
+
+    it "supports redo within collection each helpers" do
+        source = <<-DS
+numbers = [1, 2]
+array_redos = 0
+
+numbers.each do |value|
+    if value == 1 && array_redos == 0
+        array_redos += 1
+        redo
+    end
+end
+
+echo array_redos
+
+pairs = {"a" -> 1, "b" -> 2}
+map_redos = 0
+
+pairs.each do |key, _value|
+    if key == "a" && map_redos == 0
+        map_redos += 1
+        redo
+    end
+end
+
+echo map_redos
+
+counts = bag(int).new
+counts.add(10)
+counts.add(20)
+
+bag_redos = 0
+
+counts.each do |value|
+    if value == 10 && bag_redos == 0
+        bag_redos += 1
+        redo
+    end
+end
+
+echo bag_redos
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "1\n1\n1\n"
     end
 
     it "converts runtime values with display and inspect" do

@@ -1,23 +1,52 @@
-# This is a random testing file.
+#[ 
+    This is a Test File.
+]#
 
 #[ 
-    I dup junk here to do quick tests for 
-    dragonstone and if you happen to come
-    across something here, there's a 
-    99% chance it's not going to work.
+    I dump junk here to do quick tests for 
+    dragonstone or to explore things I might
+    integrate. 
+    
+    If you happen to come across something in 
+    here, there's a 99% chance it's not going 
+    to work.
 
-    Because it is either not working, 
-    looking at code that I might get working
+    Because it is either not working, code 
+    snippets that I might get integrate
     or just junk in general.
 ]#
 
 echo "----------------------------"
-echo "------- Testing File -------"
+echo "-------- Test File ---------"
 echo "----------------------------"
-
 # Testing File Begin.
-echo "Testing..."
+echo "\n"
+echo "Starting Test File"
+echo "\n"
 
-# TODO: Uppercase isn't enforced. Should it and snake case be?
+# TODO: Uppercase isn't enforced. Should lowercase and snakecase be enforced?
 # Message = "Hello!"
 # echo Message
+
+
+# use "test_use.ds"
+# echo add(magic, 8)
+
+
+# TODO: Expand FFI to allow more to be done with it, and a better way to call than using ffi.call_ruby, etc.
+
+#[
+# Add Invoke as a keyword? to use something from the FFI?
+# Use & and a name to set an object?
+Invoke Ruby &Account
+    # with an `as` keyword to set a method_name?
+    as Class
+
+    # then what about for [args]?
+
+# or InvokeRuby, InvokeCrystal, InvokeC separately?
+InvokeRuby("puts", ["Hello from Ruby!"])
+]#
+
+echo "\n"
+echo "Ending Test File"

@@ -1,5 +1,5 @@
 require "spec"
-require "../src/dragonstone/lib/interpreter/*"
+require "../src/dragonstone/native/interpreter/interpreter"
 
 describe Dragonstone::DragonModule do
     it "stores and looks up methods by string name" do
