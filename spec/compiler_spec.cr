@@ -1,7 +1,7 @@
 require "spec"
-require "../src/dragonstone/lib/lexer/*"
-require "../src/dragonstone/lib/parser/*"
-require "../src/dragonstone/lib/compiler/*"
+require "../src/dragonstone/shared/lexer/lexer"
+require "../src/dragonstone/shared/parser/parser"
+require "../src/dragonstone/core/compiler/compiler"
 
 describe Dragonstone::Compiler do
     it "compiles function parameters as indexed consts" do

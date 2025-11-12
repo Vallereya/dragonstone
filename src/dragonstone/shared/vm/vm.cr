@@ -2,12 +2,12 @@
 # ----------- Virtual -------------
 # ----------- Machine -------------
 # ---------------------------------
-require "../lexer/*"
-require "../parser/*"
-require "../compiler/*"
+require "../lexer/lexer"
+require "../parser/parser"
+require "../../core/compiler/compiler"
 require "../runtime/opc"
-require "../codegen/ffi"
-require "../resolver/*"
+require "../runtime/ffi_module"
+require "../ffi/ffi"
 
 module Dragonstone
     class VM

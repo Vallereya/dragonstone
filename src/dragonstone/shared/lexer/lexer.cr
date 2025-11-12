@@ -3,7 +3,8 @@
 # ---------------------------------
 require "unicode"
 require "string/grapheme"
-require "../resolver/*"
+require "../resolver/encoding"
+require "../resolver/errors"
 require "../runtime/symbol"
 
 module Dragonstone

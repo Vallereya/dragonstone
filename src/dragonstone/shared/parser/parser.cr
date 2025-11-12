@@ -1,9 +1,9 @@
 # ---------------------------------
 # ------------ Parser -------------
 # ---------------------------------
-require "../lexer/*"
-require "../codegen/ast"
-require "../resolver/*"
+require "../lexer/lexer"
+require "../ast/ast"
+require "../resolver/errors"
 require "../runtime/symbol"
 
 module Dragonstone

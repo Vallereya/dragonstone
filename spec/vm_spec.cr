@@ -1,8 +1,8 @@
 require "spec"
-require "../src/dragonstone/lib/lexer/*"
-require "../src/dragonstone/lib/parser/*"
-require "../src/dragonstone/lib/compiler/*"
-require "../src/dragonstone/lib/vm/vm"
+require "../src/dragonstone/shared/lexer/lexer"
+require "../src/dragonstone/shared/parser/parser"
+require "../src/dragonstone/core/compiler/compiler"
+require "../src/dragonstone/shared/vm/vm"
 
 private def compile_bytecode(source : String) : Dragonstone::CompiledCode
     tokens = Dragonstone::Lexer.new(source).tokenize

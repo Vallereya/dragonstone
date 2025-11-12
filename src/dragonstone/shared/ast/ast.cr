@@ -1,7 +1,7 @@
 # ---------------------------------
 # -------------- AST --------------
 # ---------------------------------
-require "../resolver/*"
+require "../resolver/errors"
 require "../runtime/symbol"
 
 module Dragonstone
@@ -47,4 +47,4 @@ module Dragonstone
     end
 end
 
-require "./ast/*"
+require "./proc/*"

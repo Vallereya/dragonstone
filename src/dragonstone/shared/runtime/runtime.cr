@@ -1,6 +1,7 @@
 require "set"
-require "../compiler/compiler"
+require "../../core/compiler/compiler"
 require "../../native/interpreter/interpreter"
+require "../resolver/resolver"
 require "../resolver/loader"
 require "../runtime/symbol"
 require "../vm/vm"

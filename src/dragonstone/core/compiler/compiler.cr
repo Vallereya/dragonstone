@@ -1,12 +1,12 @@
 # ---------------------------------
 # ----------- Compiler ------------
 # ---------------------------------
-require "../runtime/opc"
-require "../runtime/ffi_module"
-require "../lexer/*"
-require "../parser/*"
-require "../codegen/ast"
-require "../runtime/symbol"
+require "../../shared/runtime/opc"
+require "../../shared/runtime/ffi_module"
+require "../../shared/lexer/lexer"
+require "../../shared/parser/parser"
+require "../../shared/ast/ast"
+require "../../shared/runtime/symbol"
 
 module Dragonstone
     module Bytecode

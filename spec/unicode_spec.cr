@@ -1,6 +1,6 @@
 require "spec"
-require "../src/dragonstone/lib/lexer/lexer"
-require "../src/dragonstone/lib/resolver/encoding"
+require "../src/dragonstone/shared/lexer/lexer"
+require "../src/dragonstone/shared/resolver/encoding"
 
 describe "Dragonstone Unicode support" do
     it "reads UTF-8 sources that include emoji identifiers" do
