@@ -12,3 +12,4 @@ end
 
 use "./strings/**"
 use "./utilities/**"
+use "./net/**"
