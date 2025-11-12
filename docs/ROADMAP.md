@@ -126,7 +126,7 @@
 + Advanced Values: Para (proc), Lambda values, Sym/Symbol (Symbol), and Object*
 + Add support for singleton methods.
 + COLLECTIONS: Add support for select, until, inject, and each in collections.
-- 
++ Start Standard Library with a String Length, I/O, and a String Builder for the runtime.
 ```
 
 ###     <h2 align="center">         Phase Ten
@@ -134,11 +134,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Two)              Pre-Alpha Refactor.
-- 
-- 
 + REPL needs to be wired to the CLI.
-+ Start Standard Library with a String Length, I/O, and a String Builder for the runtime.
 + Update folder structure so its properly splitup for bootstrapping and separate compiler.
+- 
+- 
 ```
 
 ---

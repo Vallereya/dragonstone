@@ -22,12 +22,6 @@ module Dragonstone
             def to_source : String
                 raise NotImplementedError.new("#{self.class} must implement #to_source")
             end
-
-            # I avoided dynamic String -> Symbol conversion to keep compatibility
-            # across Crystal versions for some reason I have 3 versions. Names are 
-            # kept as String for now.
-
-            # I also broke this up so when I add more it doesn't get super long.
         end
 
         class Program < Node
