@@ -35,6 +35,15 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     ./bin/dragonstone.exe run examples/hello_world.ds
 ```
 
+#### Select Backend (temporary flag).
+```bash
+    # Force the bytecode/VM backend
+    dragonstone run --backend core examples/hello_world.ds
+
+    # Stick to the native interpreter regardless of heuristics
+    DRAGONSTONE_BACKEND=native dragonstone run examples/hello_world.ds
+```
+
 #### Build and Run Files via Compiler (Coming Soon). 
 ```bash
     dragonstone build examples/hello_world.ds
@@ -45,6 +54,10 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Run Test/Spec.
 ```bash
     crystal spec
+
+    # Backend-aware helper (auto-detects repo root even from src/dragonstone/native or core)
+    # Use `bash` ./scripts/backend_ci.sh [...] when on Windows (Git Bash / WSL).
+    ./scripts/backend_ci.sh spec --backend core
 ```
 
 ## Benchmark Information

@@ -1,0 +1,3 @@
+name: net/net
+entry: module.ds
+requires: shared

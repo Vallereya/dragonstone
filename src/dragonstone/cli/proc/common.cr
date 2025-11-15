@@ -26,22 +26,34 @@ module Dragonstone
         end
 
         def print_usage(io : IO) : Nil
-            io.puts "-------------------------------------------------"
-            io.puts "       DRAGONSTONE COMMAND LINE INTERFACE        "
-            io.puts "-------------------------------------------------"
+            io.puts "-----------------------------------------------------------------------------"
+            io.puts "                     DRAGONSTONE COMMAND LINE INTERFACE                      "
+            io.puts "-----------------------------------------------------------------------------"
             io.puts "Usage:"
             io.puts "   dragonstone <command> [options]"
             io.puts
             io.puts "Commands:"
-            io.puts "   lex <file>              Tokenize File"
-            io.puts "   parse <file>            Parse File & Show AST"
-            io.puts "   run <file>              Run File"
-            io.puts "   run [--typed] <file>    Run w/ Forced Types"
-            io.puts "   build <file>            Compile File"
-            io.puts "   repl                    Starts REPL"
-            io.puts "   --help or --h           Show Help"
-            io.puts "   --version or --v        Show Version"
-            io.puts "-------------------------------------------------"
+            io.puts "   --version or --v                            Show Version"
+            io.puts "   --help or --h                               Show Help"
+            io.puts "   repl                                        Starts REPL"
+            io.puts "   <command> [--typed] <file>                  Force types in a File"
+            io.puts
+            io.puts "Commands to lex a File:"
+            io.puts "   lex <file>                                  Tokenize File"
+            io.puts
+            io.puts "Commands to parse a File:"
+            io.puts "   parse <file>                                Parse File & Show AST"
+            io.puts
+            io.puts "Commands to run a File:"
+            io.puts "   run <file>                                  Run File"
+            io.puts "   run [--backend auto|native|core] <file>     Choose backend to use"
+            io.puts "                  auto     = default"
+            io.puts "                  native   = interpreter"
+            io.puts "                  core     = compiler"
+            io.puts
+            io.puts "Commands for building a File via compiler:"
+            io.puts "   build <file>                                Compile File"
+            io.puts "-----------------------------------------------------------------------------"
         end
     end
 end

@@ -1,3 +1,1 @@
-module net
-    
-end
+use "../modules/shared/net/net/module"

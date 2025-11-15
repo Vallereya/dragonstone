@@ -13,7 +13,7 @@
 
 - Core Language Setup (**allow for both interpreted and compiled**).
 - Standard Library Setup (**stdlib**).
-- Package Manager Setup (**Forge (.forge)**).
+- Package Manager Setup (**Forge aka .forge**).
 - Optional Types (Dynamic and Static).
 - Optional Typing (Implicit and Explicit).
 - Optional Garbage Collection (**Opt in or out of manual memory management**).
@@ -133,11 +133,11 @@
 #####   <h6 align="center">         `v0.0.9 -> v0.1.0`
 
 ```diff
-- The `Great Refactor`: (Part Two)              Pre-Alpha Refactor.
++ The `Great Refactor`: (Part Two)              Pre-Alpha Refactor.
 + REPL needs to be wired to the CLI.
 + Update folder structure so its properly splitup for bootstrapping and separate compiler.
-- 
-- 
++ Modularize files to better support separate interpreter and compiler.
++ Flesh out the compiler for targets.
 ```
 
 ---

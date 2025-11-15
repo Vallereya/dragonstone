@@ -3,7 +3,8 @@
 # ---------------------------------
 version = `shards version`.chomp
 
-File.write(File.join(__DIR__, "version.h"), <<-HEADER
+output_path = File.join(__DIR__, "runtime/include/dragonstone/core/version.h")
+File.write(output_path, <<-HEADER
     #pragma once
     #define DRAGONSTONE_VERSION "#{version}"
     HEADER

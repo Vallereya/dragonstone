@@ -1,0 +1,93 @@
+module strings
+    con DEFAULT_CAPACITY = 16
+
+    class Builder
+
+        def initialize(initial_capacity: int)
+            setup_buffer(initial_capacity)
+        end
+
+        def append(str: str)
+            length = str.size
+            if length <= 0
+                return self
+            end
+
+            increase_capacity(length)
+
+            index = 0
+            while index < length
+                @buffer.push(str.slice(index, 1))
+                index += 1
+            end
+
+            self
+        end
+
+        def append_char(char: char)
+            increase_capacity(1)
+            char_text = "" + char
+            @buffer.push(char_text)
+            self
+        end
+
+        def back
+            @buffer.pop
+            self
+        end
+
+        def to_s -> str
+            result = ""
+            @buffer.each do |segment|
+                result = result + segment
+            end
+            result
+        end
+
+        def increase_capacity(additional: int)
+            if additional <= 0
+                return
+            end
+
+            needed_capacity = @buffer.size + additional
+            if needed_capacity > @capacity
+                @capacity = next_capacity(needed_capacity)
+            end
+        end
+
+        def setup_buffer(initial_capacity: int)
+            capacity = initial_capacity
+            if capacity <= 0
+                capacity = DEFAULT_CAPACITY
+            end
+
+            @buffer = []
+            @capacity = capacity
+        end
+
+        def next_capacity(needed_capacity: int) -> int
+            new_capacity = @capacity
+            if new_capacity <= 0
+                new_capacity = DEFAULT_CAPACITY
+            end
+
+            while new_capacity < needed_capacity
+                new_capacity *= 2
+            end
+
+            new_capacity
+        end
+    end
+
+    def build
+        builder = Builder.new(DEFAULT_CAPACITY)
+        yield builder
+        builder.to_s
+    end
+
+    def build_with_capacity(initial_capacity: int)
+        builder = Builder.new(initial_capacity)
+        yield builder
+        builder.to_s
+    end
+end

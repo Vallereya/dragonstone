@@ -11,29 +11,23 @@ dragonstone.exe
 dragonstone.pdb
 dragonstone.res
 dragonstone.o
+dragonstone-dev
 gc.dll
 iconv-2.dll
 pcre2-8.dll
 zlib1.dll
 libssl-3-x64.dll
 libcrypto-3-x64.dll
+yaml.dll
 version.h
 NUL
 .dragonstone
 install-dragonstone.iss
 installer
 release
-.DS_Store
-Thumbs.db
-/build
-/.svelte-kit
-node_modules
-.output
-.vercel
-.netlify
-.wrangler
 
-# Ignore any Cache that's created.
+# Ignore any Output/Build Cache from testing.
+.tmp
 .cache
 .c
 .c_cache
@@ -42,15 +36,9 @@ node_modules
 .crystal
 .crystal_cache
 
-# Env
-.env
-.env.*
-!.env.example
-!.env.test
-
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
+# Ignore my notes.
+REFACTOR.md
+ROADMAP-IDEALS.md
 
 # Ignore any IDE folders.
 .vscode
