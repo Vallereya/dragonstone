@@ -13,12 +13,18 @@ module Dragonstone
 
                 module VM
                     extend self
+                    @@last_failure : String?
 
-                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :==, :!=, :<, :<=, :>, :>=}
+                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||"}
                     SUPPORTED_UNARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :!, :~}
 
                     def supports?(program : AST::Program) : Bool
+                        @@last_failure = nil
                         nodes_supported?(program.statements)
+                    end
+
+                    def last_failure : String?
+                        @@last_failure
                     end
 
                     private def nodes_supported?(nodes : Array(AST::Node)) : Bool
@@ -32,9 +38,11 @@ module Dragonstone
                         when AST::Literal
                             true
                         when AST::Variable
-                            node.type_annotation.nil?
+                            true
                         when AST::Assignment
-                            node.operator.nil? && node.type_annotation.nil? && node_supported?(node.value)
+                            node_supported?(node.value)
+                        when AST::AliasDefinition
+                            true
                         when AST::BinaryOp
                             SUPPORTED_BINARY_OPERATORS.includes?(node.operator) &&
                                 node_supported?(node.left) &&
@@ -43,7 +51,6 @@ module Dragonstone
                             SUPPORTED_UNARY_OPERATORS.includes?(node.operator) &&
                                 node_supported?(node.operand)
                         when AST::MethodCall
-                            return false if node.arguments.any? { |arg| arg.is_a?(AST::BlockLiteral) }
                             receiver_supported = node.receiver.nil? || node_supported?(node.receiver.not_nil!)
                             receiver_supported && nodes_supported?(node.arguments)
                         when AST::IfStatement
@@ -66,7 +73,18 @@ module Dragonstone
                             node.value.nil? || node_supported?(node.value.not_nil!)
                         when AST::FunctionDef
                             function_supported?(node)
+                        when AST::FunctionLiteral
+                            nodes_supported?(node.body)
+                        when AST::BlockLiteral
+                            nodes_supported?(node.body)
+                        when AST::BagConstructor
+                            true
+                        when AST::NextStatement, AST::BreakStatement, AST::RedoStatement
+                            true
+                        when AST::YieldExpression
+                            nodes_supported?(node.arguments)
                         else
+                            debug_unsupported(node)
                             false
                         end
                     end
@@ -102,6 +120,12 @@ module Dragonstone
                     rescue
                         nil
                     end
+
+                    private def debug_unsupported(node : AST::Node) : Nil
+                        @@last_failure = node.class.name
+                        return unless ENV["DS_DEBUG_VM_SUPPORT"]?
+                        STDERR.puts "VM unsupported node: #{node.class}"
+                    end
                 end
 
                 module Interpreter
@@ -115,6 +139,10 @@ module Dragonstone
 
                 def vm?(program : AST::Program) : Bool
                     VM.supports?(program)
+                end
+
+                def last_failure : String?
+                    VM.last_failure
                 end
 
                 def interpreter?(program : AST::Program) : Bool

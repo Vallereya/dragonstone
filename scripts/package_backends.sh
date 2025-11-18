@@ -6,13 +6,13 @@ usage() {
 Package Dragonstone backend artifacts into backend-specific directories (and archives).
 
 Usage:
-  package_backends.sh [--backend native|core|all] [--output-dir <dir>] [--no-zip]
+  package_backends.sh [--backend native|core|all] [--output <dir>] [--no-zip]
 
 Options:
-  --backend <name>   Backend to package (native, core, or all). Default: all.
-  --output-dir <dir> Directory for staged payloads (defaults to release/backends).
-  --no-zip           Skip creating zip archives (stages only).
-  -h, --help         Show this help text.
+  --backend <name>  Backend to package (native, core, or all). Default: all.
+  --output <dir>    Directory for staged payloads (defaults to release/backends).
+  --no-zip          Skip creating zip archives (stages only).
+  -h, --help        Show this help text.
 EOF
 }
 
@@ -30,11 +30,11 @@ while [[ $# -gt 0 ]]; do
             backend="${1#*=}"
             shift
             ;;
-        --output-dir)
+        --output)
             output_root="$2"
             shift 2
             ;;
-        --output-dir=*)
+        --output=*)
             output_root="${1#*=}"
             shift
             ;;

@@ -101,7 +101,7 @@ module Dragonstone
         RunResult.new(tokens, ast, output_text)
     end
 
-    private def self.build_resolver(entry_path : String, backend_mode : BackendMode) : ModuleResolver
+    def self.build_resolver(entry_path : String, backend_mode : BackendMode) : ModuleResolver
         roots = build_module_roots(entry_path)
         ModuleResolver.new(ModuleConfig.new(roots, backend_mode: backend_mode))
     end

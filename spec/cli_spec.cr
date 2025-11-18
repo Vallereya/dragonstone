@@ -128,6 +128,26 @@ describe Dragonstone::CLI do
         end
     end
 
+    it "builds and runs a program via the bytecode target" do
+        File.tempfile("dragonstone-build-run", suffix: ".ds") do |file|
+            file.print("echo \"Hello from build-run\"")
+            file.flush
+
+            stdout = IO::Memory.new
+            stderr = IO::Memory.new
+            status = Dragonstone::CLI.run(
+                ["build-run", "--target", "bytecode", file.path],
+                stdout,
+                stderr
+            )
+
+            status.should eq(0)
+            stdout.to_s.should contain("Built bytecode target")
+            stdout.to_s.should contain("Hello from build-run")
+            stderr.to_s.should be_empty
+        end
+    end
+
     it "runs the same smoke programs through native and core backends" do
         programs = [
             {name: "hello world", source: %(echo "smoke!") },

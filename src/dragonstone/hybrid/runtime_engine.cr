@@ -7,6 +7,7 @@ require "../shared/language/resolver/module_metadata"
 require "../shared/language/resolver/loader"
 require "../shared/language/sema/type_checker"
 require "../shared/runtime/runtime_env"
+require "../core/vm/bytecode"
 require "../core/vm/vm"
 
 module Dragonstone
@@ -83,15 +84,17 @@ module Dragonstone
                 chunk.names.each_with_index do |candidate, index|
                     name_lookup[candidate] = index
                 end
-                params = [] of Bytecode::Value
-                func.parameters.each do |param|
-                    unless idx = name_lookup[param]?
-                        raise "Parameter #{param} missing from compiled function names"
+                param_specs = [] of Bytecode::ParameterSpec
+                func.typed_parameters.each do |param|
+                    name = param.name
+                    unless idx = name_lookup[name]?
+                        raise "Parameter #{name} missing from compiled function names"
                     end
-                    params << idx
+                    param_specs << Bytecode::ParameterSpec.new(idx, param.type)
                 end
+                signature = Bytecode::FunctionSignature.new(param_specs, func.return_type)
                 name = func.name || "<lambda>"
-                {name: name, params: params, code: chunk}
+                Bytecode::FunctionValue.new(name, signature, chunk)
             end
         end
 
@@ -168,7 +171,13 @@ module Dragonstone
                 compiled = artifact.bytecode
                 raise "Bytecode generation failed for target #{options.target}" unless compiled
                 stdout_io = IO::Memory.new
-                vm = VM.new(compiled, globals: @globals, stdout_io: stdout_io, log_to_stdout: @log_to_stdout)
+                vm = VM.new(
+                    compiled,
+                    globals: @globals,
+                    stdout_io: stdout_io,
+                    log_to_stdout: @log_to_stdout,
+                    typing_enabled: program.typed?
+                )
                 vm.run
                 @output = stdout_io.to_s
                 @globals = vm.export_globals
@@ -282,16 +291,11 @@ module Dragonstone
             end
 
             private def ensure_core_supported!(program : IR::Program, typing_flag : Bool)
-                if typing_flag
-                    raise RuntimeError.new(
-                        "Core backend does not support typed execution yet.",
-                        hint: "Run with --backend native or drop --typed."
-                    )
-                end
-
                 unless IR::Lowering::Supports.vm?(program.ast)
+                    failure = IR::Lowering::Supports.last_failure
+                    detail = failure ? " (unsupported node: #{failure})" : ""
                     raise RuntimeError.new(
-                        "Core backend cannot execute this program yet.",
+                        "Core backend cannot execute this program yet#{detail}.",
                         hint: "Use --backend native until VM coverage expands."
                     )
                 end

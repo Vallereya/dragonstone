@@ -20,6 +20,10 @@ module Dragonstone
         def [](path : String)
             nodes[path]?
         end
+
+        def []?(path : String)
+            nodes[path]?
+        end
     end
 
     class ModuleNode

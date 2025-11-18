@@ -44,11 +44,17 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     DRAGONSTONE_BACKEND=native dragonstone run examples/hello_world.ds
 ```
 
-#### Build and Run Files via Compiler (Coming Soon). 
+#### Build and Run Files via Compiler 
 ```bash
-    dragonstone build examples/hello_world.ds
+    dragonstone build [--target bytecode|llvm|c|crystal|ruby] examples/hello_world.ds
 
-    ./bin/dragonstone.exe build examples/hello_world.ds
+    # Build and immediately execute the produced artifact(s)
+    dragonstone build-run --target bytecode examples/hello_world.ds
+```
+
+#### Inspect Backend Capabilities
+```bash
+    dragonstone backend info
 ```
 
 #### Run Test/Spec.

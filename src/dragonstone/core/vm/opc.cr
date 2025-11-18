@@ -7,6 +7,7 @@ module Dragonstone
         LOAD            = 2     # [LOAD,  name_index]                                       -> push env[name_index]
         STORE           = 3     # [STORE, name_index]                                       -> env[name_index] = pop (and push value back)
         POP             = 41    # pop 1
+        DUP             = 42    # duplicate top of stack
 
         # Arithmetic
         ADD             = 10
@@ -45,8 +46,20 @@ module Dragonstone
         CALL            = 50    # [CALL, argc, name_index]                                  -> call global function
         RET             = 51    # return from function using top-of-stack as result
         INVOKE          = 54    # [INVOKE, name_index, argc]                                -> call method on receiver
-        MAKE_FUNCTION   = 59    # [MAKE_FUNCTION, name_index, params_const, chunk_const]    -> push closure
+        MAKE_FUNCTION   = 59    # [MAKE_FUNCTION, name_index, signature_const, chunk_const] -> push closure
+        MAKE_BLOCK      = 60    # [MAKE_BLOCK, signature_const, chunk_const]                -> push block literal
+        HALT            = 61    # Terminate Execution
 
-        HALT            = 60    # Terminate Execution
+        # Block / Control flow helpers
+        CALL_BLOCK      = 62    # [CALL_BLOCK, argc, name_index]                            -> call function with block
+        INVOKE_BLOCK    = 63    # [INVOKE_BLOCK, name_index, argc]                          -> call method with block
+        YIELD           = 64    # [YIELD, argc]                                             -> yield to current block
+        BREAK_SIGNAL    = 65    # signal break out of the closest loop/enumerator
+        NEXT_SIGNAL     = 66    # signal next (skip iteration)
+        REDO_SIGNAL     = 67    # signal redo (retry current iteration)
+
+        # Typing helpers
+        DEFINE_TYPE_ALIAS = 68  # [DEFINE_TYPE_ALIAS, name_index, type_const]
+        CHECK_TYPE      = 69    # [CHECK_TYPE, type_const]                                  -> ensure top-of-stack matches type
     end
 end

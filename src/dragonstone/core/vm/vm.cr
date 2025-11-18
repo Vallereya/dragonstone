@@ -2,14 +2,22 @@
 # ----------- Virtual -------------
 # ----------- Machine -------------
 # ---------------------------------
+require "set"
+require "../../shared/language/diagnostics/errors"
+require "./bytecode"
 require "../compiler/compiler"
 require "./opc"
 require "../../shared/runtime/ffi_module"
 require "../../shared/ffi/ffi"
+require "../../shared/language/ast/ast"
 
 module Dragonstone
     class VM
         include OPC
+
+        class BreakSignal < Exception; end
+        class NextSignal < Exception; end
+        class RedoSignal < Exception; end
 
         class Frame
             property code : CompiledCode
@@ -17,8 +25,18 @@ module Dragonstone
             property stack_base : Int32
             property locals : Array(Bytecode::Value?)?
             property locals_defined : Array(Bool)?
+            property block : Bytecode::BlockValue?
+            property signature : Bytecode::FunctionSignature?
+            property callable_name : String?
 
-            def initialize(@code : CompiledCode, @stack_base : Int32, use_locals : Bool = false)
+            def initialize(
+                @code : CompiledCode,
+                @stack_base : Int32,
+                use_locals : Bool = false,
+                block_value : Bytecode::BlockValue? = nil,
+                signature : Bytecode::FunctionSignature? = nil,
+                callable_name : String? = nil
+            )
                 @ip = 0
                 if use_locals
                     size = @code.names.size
@@ -28,7 +46,359 @@ module Dragonstone
                     @locals = nil
                     @locals_defined = nil
                 end
+                @block = block_value
+                @signature = signature
+                @callable_name = callable_name
             end
+        end
+
+        private def truthy?(value : Bytecode::Value) : Bool
+            !(value.nil? || value == false)
+        end
+
+        private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
+            @type_aliases[name] = expr
+        end
+
+        private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
+            return unless @typing_enabled
+            return unless type_expr
+            unless type_matches?(value, type_expr, Set(String).new)
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}")
+            end
+        end
+
+        private def type_matches?(value : Bytecode::Value, expr : AST::TypeExpression, seen_aliases : Set(String)) : Bool
+            case expr
+            when AST::SimpleTypeExpression
+                simple_type_matches?(value, expr.name, seen_aliases)
+            when AST::UnionTypeExpression
+                expr.members.any? { |member| type_matches?(value, member, seen_aliases) }
+            when AST::OptionalTypeExpression
+                value.nil? || type_matches?(value, expr.inner, seen_aliases)
+            when AST::GenericTypeExpression
+                generic_type_matches?(value, expr, seen_aliases)
+            else
+                false
+            end
+        end
+
+        private def simple_type_matches?(value : Bytecode::Value, name : String, seen_aliases : Set(String)) : Bool
+            case name.downcase
+            when "int"
+                value.is_a?(Int32) || value.is_a?(Int64)
+            when "str", "string"
+                value.is_a?(String)
+            when "bool"
+                value.is_a?(Bool)
+            when "float"
+                value.is_a?(Float64)
+            when "char"
+                value.is_a?(Char)
+            when "nil"
+                value.nil?
+            else
+                if alias_expr = @type_aliases[name]?
+                    return false if seen_aliases.includes?(name)
+                    next_seen = seen_aliases.dup
+                    next_seen.add(name)
+                    type_matches?(value, alias_expr, next_seen)
+                else
+                    false
+                end
+            end
+        end
+
+        private def generic_type_matches?(value : Bytecode::Value, expr : AST::GenericTypeExpression, seen_aliases : Set(String)) : Bool
+            name = expr.name.downcase
+            case name
+            when "array"
+                return false unless value.is_a?(Array)
+                element_type = expr.arguments.first?
+                return true unless element_type
+                value.all? { |element| type_matches?(element, element_type, seen_aliases) }
+            when "bag"
+                return false unless value.is_a?(Bytecode::BagValue)
+                element_type = expr.arguments.first?
+                return true unless element_type
+                value.elements.all? { |element| type_matches?(element, element_type, seen_aliases) }
+            when "para"
+                return false unless value.is_a?(Bytecode::FunctionValue)
+                param_types = expr.arguments[0...-1]
+                return true if param_types.empty?
+                value.signature.parameters.size == param_types.size
+            else
+                false
+            end
+        end
+
+        private def describe_value(value : Bytecode::Value) : String
+            type_of(value)
+        end
+
+        private def call_bag_constructor_method(
+            constructor : Bytecode::BagConstructorValue,
+            method : String,
+            args : Array(Bytecode::Value),
+            block_value : Bytecode::BlockValue?
+        ) : Bytecode::Value
+            raise ArgumentError.new("Bag constructor methods do not accept blocks") if block_value
+
+            case method
+            when "new"
+                unless args.empty?
+                    raise ArgumentError.new("bag(...)::new does not take arguments")
+                end
+                Bytecode::BagValue.new(constructor.element_type)
+            else
+                raise "Unknown method '#{method}' for bag constructor"
+            end
+        end
+
+        private def call_bag_method(
+            bag : Bytecode::BagValue,
+            method : String,
+            args : Array(Bytecode::Value),
+            block_value : Bytecode::BlockValue?
+        ) : Bytecode::Value
+            case method
+            when "length", "size"
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
+                bag.size
+            when "empty"
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
+                bag.elements.empty?
+            when "add"
+                raise ArgumentError.new("Bag##{method} expects 1 argument") unless args.size == 1
+                raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
+                value = args.first
+                enforce_type(bag.element_type, value, "Bag##{method}")
+                bag.add(value)
+            when "includes?", "member?", "contains?"
+                raise ArgumentError.new("Bag##{method} expects 1 argument") unless args.size == 1
+                raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
+                value = args.first
+                enforce_type(bag.element_type, value, "Bag##{method}")
+                bag.includes?(value)
+            when "each"
+                block = ensure_block(block_value, "Bag##{method}")
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                    end
+                end
+                bag
+            when "map"
+                block = ensure_block(block_value, "Bag##{method}")
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                result = [] of Bytecode::Value
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                        result << (outcome[:value].nil? ? nil : outcome[:value])
+                    end
+                end
+                result
+            when "select"
+                block = ensure_block(block_value, "Bag##{method}")
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                result = Bytecode::BagValue.new(bag.element_type)
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                        result.add(value) if truthy?(outcome[:value])
+                    end
+                end
+                result
+            when "inject"
+                block = ensure_block(block_value, "Bag##{method}")
+                unless args.size <= 1
+                    raise ArgumentError.new("Bag##{method} expects 0 or 1 argument, got #{args.size}")
+                end
+                memo_initialized = args.size == 1
+                memo : Bytecode::Value? = memo_initialized ? args.first : nil
+                if bag.elements.empty? && !memo_initialized
+                    raise ArgumentError.new("Bag##{method} called on empty bag with no initial value")
+                end
+                    run_enumeration_loop do
+                        bag.elements.each do |value|
+                            unless memo_initialized
+                                memo = value
+                                memo_initialized = true
+                                next
+                            end
+                            outcome = execute_block_iteration(block, [memo.as(Bytecode::Value), value])
+                            next if outcome[:state] == :next
+                            memo = outcome[:value]
+                        end
+                    end
+                    memo
+            when "until"
+                block = ensure_block(block_value, "Bag##{method}")
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                found : Bytecode::Value? = nil
+                run_enumeration_loop do
+                    bag.elements.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            found = value
+                            raise BreakSignal.new
+                        end
+                    end
+                end
+                found
+            when "to_a"
+                raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
+                raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
+                bag.elements.dup
+            else
+                raise "Unknown method '#{method}' for Bag"
+            end
+        end
+
+        private def ensure_arity(signature : Bytecode::FunctionSignature, provided : Int32, name : String) : Nil
+            expected = signature.parameters.size
+            return if expected == provided
+            raise "Function #{name} expects #{expected} arguments, got #{provided}"
+        end
+
+        private def yield_to_block(args : Array(Bytecode::Value)) : Bytecode::Value
+            frame = current_frame
+            block = frame.block
+            raise "No block given" unless block
+            ensure_arity(block.signature, args.size, "yield")
+            depth_before = @frames.size
+            push_callable_frame(block.code, block.signature, args, nil, "<block>")
+            execute_with_frame_cleanup(depth_before)
+        end
+
+        private def call_block(block_value : Bytecode::BlockValue, args : Array(Bytecode::Value)) : Bytecode::Value
+            ensure_arity(block_value.signature, args.size, "<block>")
+            depth_before = @frames.size
+            push_callable_frame(block_value.code, block_value.signature, args, nil, "<block>")
+            execute_with_frame_cleanup(depth_before)
+        end
+
+        private def ensure_block(block_value : Bytecode::BlockValue?, feature : String) : Bytecode::BlockValue
+            raise ArgumentError.new("#{feature} requires a block") unless block_value
+            block_value
+        end
+
+        private def execute_block_iteration(block_value : Bytecode::BlockValue, args : Array(Bytecode::Value)) : NamedTuple(state: Symbol, value: Bytecode::Value?)
+            loop do
+                begin
+                    value = call_block(block_value, args)
+                    pop
+                    return {state: :yielded, value: value}
+                rescue NextSignal
+                    return {state: :next, value: nil}
+                rescue RedoSignal
+                    next
+                end
+            end
+        end
+
+        private def run_enumeration_loop(&block)
+            with_loop_context do
+                begin
+                    yield
+                rescue BreakSignal
+                end
+            end
+        end
+
+        private def with_loop_context(&block)
+            @loop_depth += 1
+            yield
+        ensure
+            @loop_depth -= 1
+        end
+
+        private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
+            @type_aliases[name] = expr
+        end
+
+        private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
+            return unless @typing_enabled
+            return unless type_expr
+            unless type_matches?(value, type_expr, Set(String).new)
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}")
+            end
+        end
+
+        private def type_matches?(value : Bytecode::Value, expr : AST::TypeExpression, seen_aliases : Set(String)) : Bool
+            case expr
+            when AST::SimpleTypeExpression
+                simple_type_matches?(value, expr.name, seen_aliases)
+            when AST::UnionTypeExpression
+                expr.members.any? { |member| type_matches?(value, member, seen_aliases) }
+            when AST::OptionalTypeExpression
+                value.nil? || type_matches?(value, expr.inner, seen_aliases)
+            when AST::GenericTypeExpression
+                generic_type_matches?(value, expr, seen_aliases)
+            else
+                false
+            end
+        end
+
+        private def simple_type_matches?(value : Bytecode::Value, name : String, seen_aliases : Set(String)) : Bool
+            case name.downcase
+            when "int"
+                value.is_a?(Int32) || value.is_a?(Int64)
+            when "str", "string"
+                value.is_a?(String)
+            when "bool"
+                value.is_a?(Bool)
+            when "float"
+                value.is_a?(Float64)
+            when "char"
+                value.is_a?(Char)
+            when "nil"
+                value.nil?
+            else
+                if alias_expr = @type_aliases[name]?
+                    return false if seen_aliases.includes?(name)
+                    next_seen = seen_aliases.dup
+                    next_seen.add(name)
+                    type_matches?(value, alias_expr, next_seen)
+                else
+                    false
+                end
+            end
+        end
+
+        private def generic_type_matches?(value : Bytecode::Value, expr : AST::GenericTypeExpression, seen_aliases : Set(String)) : Bool
+            name = expr.name.downcase
+            case name
+            when "array"
+                return false unless value.is_a?(Array)
+                element_type = expr.arguments.first?
+                return true unless element_type
+                value.all? { |element| type_matches?(element, element_type, seen_aliases) }
+            when "bag"
+                return false unless value.is_a?(Bytecode::BagValue)
+                element_type = expr.arguments.first?
+                return true unless element_type
+                value.elements.all? { |element| type_matches?(element, element_type, seen_aliases) }
+            when "para"
+                return false unless value.is_a?(Bytecode::FunctionValue)
+                param_types = expr.arguments[0...-1]
+                return true if param_types.empty?
+                value.signature.parameters.size == param_types.size
+            else
+                false
+            end
+        end
+
+        private def describe_value(value : Bytecode::Value) : String
+            type_of(value)
         end
 
         @bytecode : CompiledCode
@@ -37,17 +407,26 @@ module Dragonstone
         @stdout_io : IO
         @log_to_stdout : Bool
         @frames : Array(Frame)
+        @loop_depth : Int32
         @global_slots : Array(Bytecode::Value?)
         @global_defined : Array(Bool)
         @name_index_cache : Hash(String, Int32)
         @globals_dirty : Bool
 
-        def initialize(@bytecode : CompiledCode, globals : Hash(String, Bytecode::Value)? = nil, *, stdout_io : IO = IO::Memory.new, log_to_stdout : Bool = false)
+        def initialize(
+            @bytecode : CompiledCode,
+            globals : Hash(String, Bytecode::Value)? = nil,
+            *,
+            stdout_io : IO = IO::Memory.new,
+            log_to_stdout : Bool = false,
+            typing_enabled : Bool = false
+        )
             @stack = [] of Bytecode::Value
             @globals = globals ? globals.dup : {} of String => Bytecode::Value
             @stdout_io = stdout_io
             @log_to_stdout = log_to_stdout
             @frames = [] of Frame
+            @loop_depth = 0
             @global_slots = Array(Bytecode::Value?).new(@bytecode.names.size) { nil }
             @global_defined = Array(Bool).new(@bytecode.names.size) { false }
             @name_index_cache = {} of String => Int32
@@ -55,6 +434,8 @@ module Dragonstone
                 @name_index_cache[name] = idx
             end
             @globals_dirty = false
+            @typing_enabled = typing_enabled
+            @type_aliases = {} of String => AST::TypeExpression
 
             # Initialize FFI
             init_ffi_module
@@ -114,6 +495,10 @@ module Dragonstone
 
         def run : Bytecode::Value
             reset_for_run
+            execute
+        end
+
+        private def execute(target_depth : Int32? = nil) : Bytecode::Value
             loop do
                 opcode = fetch_byte
 
@@ -132,10 +517,15 @@ module Dragonstone
                 when OPC::STORE
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
+                    if @stack.empty?
+                        STDERR.puts "STORE stack empty for #{name} ip=#{current_frame.ip}"
+                    end
                     value = peek
                     store_variable(name_idx, name, value)
                 when OPC::POP
                     pop
+                when OPC::DUP
+                    push(peek)
                 when OPC::ADD
                     b, a = pop, pop
                     push(add(a, b))
@@ -218,24 +608,66 @@ module Dragonstone
                     argc = fetch_byte
                     args = pop_values(argc)
                     receiver = pop
-                    result = invoke_method(receiver, current_code.names[name_idx], args)
+                    result = invoke_method(receiver, current_code.names[name_idx], args, nil)
+                    push(result)
+                when OPC::INVOKE_BLOCK
+                    name_idx = fetch_byte
+                    argc = fetch_byte
+                    block_value = pop_block
+                    args = pop_values(argc)
+                    receiver = pop
+                    result = invoke_method(receiver, current_code.names[name_idx], args, block_value)
                     push(result)
                 when OPC::CALL
                     argc = fetch_byte
                     name_idx = fetch_byte
                     args = pop_values(argc)
-                    prepare_function_call(name_idx, args)
+                    prepare_function_call(name_idx, args, nil)
+                when OPC::CALL_BLOCK
+                    argc = fetch_byte
+                    name_idx = fetch_byte
+                    block_value = pop_block
+                    args = pop_values(argc)
+                    prepare_function_call(name_idx, args, block_value)
                 when OPC::MAKE_FUNCTION
                     name_idx = fetch_byte
-                    params_idx = fetch_byte
+                    signature_idx = fetch_byte
                     code_idx = fetch_byte
                     name = current_code.names[name_idx]
-                    params = current_code.consts[params_idx].as(Array(Bytecode::Value))
+                    signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
-                    func_value = {name: name, params: params, code: code}
-                    push(func_value)
+                    push(Bytecode::FunctionValue.new(name, signature, code))
+                when OPC::MAKE_BLOCK
+                    signature_idx = fetch_byte
+                    code_idx = fetch_byte
+                    signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
+                    code = current_code.consts[code_idx].as(CompiledCode)
+                    push(Bytecode::BlockValue.new(signature, code))
+                when OPC::YIELD
+                    argc = fetch_byte
+                    args = pop_values(argc)
+                    result = yield_to_block(args)
+                    push(result)
+                when OPC::BREAK_SIGNAL
+                    raise BreakSignal.new
+                when OPC::NEXT_SIGNAL
+                    raise NextSignal.new
+                when OPC::REDO_SIGNAL
+                    raise RedoSignal.new
+                when OPC::DEFINE_TYPE_ALIAS
+                    name_idx = fetch_byte
+                    type_idx = fetch_byte
+                    type_expr = current_code.consts[type_idx].as(AST::TypeExpression)
+                    define_type_alias(current_code.names[name_idx], type_expr)
+                when OPC::CHECK_TYPE
+                    type_idx = fetch_byte
+                    value = pop
+                    type_expr = current_code.consts[type_idx].as(AST::TypeExpression)
+                    enforce_type(type_expr, value, "assignment")
+                    push(value)
                 when OPC::RET
-                    handle_return
+                    result = handle_return
+                    return result if target_depth && @frames.size == target_depth
                 else
                     raise "Unknown opcode: #{opcode}"
                 end
@@ -255,6 +687,7 @@ module Dragonstone
             push_frame(@bytecode, false)
             init_ffi_module
             sync_globals_slots
+            @type_aliases.clear
         end
 
         private def current_frame : Frame
@@ -303,52 +736,95 @@ module Dragonstone
 
         private def store_variable(name_idx : Int32, name : String, value : Bytecode::Value) : Nil
             frame = current_frame
-            if frame.locals
+            locals = frame.locals
+            defined = frame.locals_defined
+
+            if locals && defined && name_idx < defined.size && defined[name_idx]
+                assign_local(frame, name_idx, value)
+                return
+            end
+
+            if should_store_global?(name)
+                assign_global(name, value)
+            elsif locals
                 assign_local(frame, name_idx, value)
             else
-                if idx = @name_index_cache[name]?
-                    ensure_global_capacity(idx)
-                    @global_slots[idx] = value
-                    @global_defined[idx] = true
-                    @globals_dirty = true
-                else
-                    @globals[name] = value
-                end
+                assign_global(name, value)
             end
         end
 
-        private def prepare_function_call(name_idx : Int32, args : Array(Bytecode::Value)) : Nil
+        private def assign_global(name : String, value : Bytecode::Value) : Nil
+            if idx = @name_index_cache[name]?
+                ensure_global_capacity(idx)
+                @global_slots[idx] = value
+                @global_defined[idx] = true
+                @globals_dirty = true
+            else
+                @globals[name] = value
+            end
+        end
+
+        private def should_store_global?(name : String) : Bool
+            if idx = @name_index_cache[name]?
+                ensure_global_capacity(idx)
+                return true if @global_defined[idx]
+            end
+            @globals.has_key?(name)
+        end
+
+        private def prepare_function_call(name_idx : Int32, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Nil
             name = current_code.names[name_idx]
             value = resolve_variable(name_idx, name)
-            unless value.is_a?(NamedTuple(name: String, params: Array(Bytecode::Value), code: CompiledCode))
+            unless value.is_a?(Bytecode::FunctionValue)
                 raise "Undefined function: #{name}"
             end
 
-            params = value[:params].as(Array(Bytecode::Value))
-            unless params.size == args.size
-                raise "Function #{name} expects #{params.size} arguments, got #{args.size}"
-            end
-
-            frame = push_frame(value[:code], true)
-            params.each_with_index do |param_value, index|
-                param_index = case param_value
-                    when Int32
-                        param_value
-                    when String
-                        idx = frame.code.names.index(param_value)
-                        raise "Parameter #{param_value} missing from function frame" unless idx
-                        idx
-                    else
-                        raise "Unsupported parameter metadata #{param_value.inspect}"
-                    end
-                assign_local(frame, param_index, args[index])
-            end
+            signature = value.signature
+            ensure_arity(signature, args.size, name)
+            frame = push_callable_frame(value.code, signature, args, block_value, name)
+            frame.block = block_value
         end
 
-        private def push_frame(code : CompiledCode, use_locals : Bool) : Frame
-            frame = Frame.new(code, @stack.size, use_locals)
+        private def push_frame(
+            code : CompiledCode,
+            use_locals : Bool,
+            block_value : Bytecode::BlockValue? = nil,
+            signature : Bytecode::FunctionSignature? = nil,
+            callable_name : String? = nil
+        ) : Frame
+            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name)
             @frames << frame
             frame
+        end
+
+        private def push_callable_frame(
+            code : CompiledCode,
+            signature : Bytecode::FunctionSignature,
+            args : Array(Bytecode::Value),
+            block_value : Bytecode::BlockValue?,
+            callable_name : String? = nil
+        ) : Frame
+            frame = push_frame(code, true, block_value, signature, callable_name)
+            signature.parameters.each_with_index do |param, index|
+                value = args[index]
+                enforce_type(param.type_expression, value, "parameter #{index + 1}")
+                assign_local(frame, param.name_index, value)
+            end
+            frame
+        end
+
+        private def execute_with_frame_cleanup(depth_before : Int32) : Bytecode::Value
+            execute(target_depth: depth_before)
+        rescue ex
+            cleanup_frames_from(depth_before)
+            raise ex
+        end
+
+        private def cleanup_frames_from(depth_before : Int32) : Nil
+            while @frames.size > depth_before
+                frame = @frames.pop
+                truncate_stack(frame.stack_base)
+            end
         end
 
         private def ensure_local_capacity(frame : Frame, index : Int32) : Nil
@@ -374,15 +850,19 @@ module Dragonstone
             end
         end
 
-        private def handle_return : Nil
+        private def handle_return : Bytecode::Value
             result = pop
             frame = @frames.pop?
             raise "Return from empty frame stack" unless frame
             if @frames.empty?
                 raise "Return from top-level frame not supported"
             end
+            if signature = frame.signature
+                enforce_type(signature.return_type, result, "return from #{frame.callable_name || "<lambda>"}")
+            end
             truncate_stack(frame.stack_base)
             push(result)
+            result
         end
         
         private def push(value : Bytecode::Value)
@@ -395,7 +875,8 @@ module Dragonstone
         end
         
         private def peek : Bytecode::Value
-            @stack.last? || raise "Stack empty"
+            raise "Stack empty" if @stack.empty?
+            @stack.last
         end
 
         private def pop_values(count : Int32) : Array(Bytecode::Value)
@@ -403,6 +884,14 @@ module Dragonstone
             count.times { values << pop }
             values.reverse!
             values
+        end
+
+        private def pop_block : Bytecode::BlockValue
+            value = pop
+            unless value.is_a?(Bytecode::BlockValue)
+                raise "Expected block literal, got #{type_of(value)}"
+            end
+            value
         end
 
         private def emit_output(text : String) : Nil
@@ -585,6 +1074,8 @@ module Dragonstone
             when Float64 then "Float"
             when String then "String"
             when Array then "Array"
+            when Bytecode::FunctionValue then "Function"
+            when Bytecode::BlockValue then "Block"
             when FFIModule then "FFIModule"
             else "Object"
             end
@@ -616,7 +1107,7 @@ module Dragonstone
             end
         end
         
-        private def invoke_method(receiver : Bytecode::Value, method : String, args : Array(Bytecode::Value)) : Bytecode::Value
+        private def invoke_method(receiver : Bytecode::Value, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
             
             # Checks if its FFI.
             if receiver.is_a?(FFIModule)
@@ -627,19 +1118,109 @@ module Dragonstone
 
             when String
                 case method
-                when "upcase" then receiver.upcase
-                when "downcase" then receiver.downcase
-                when "length", "size" then receiver.size.to_i64
+                when "upcase"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.upcase
+                when "downcase"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.downcase
+                when "length", "size"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.size.to_i64
                 else raise "Unknown method #{method} on String"
                 end
             when Array
+                array = receiver.as(Array(Bytecode::Value))
                 case method
-                when "length", "size" then receiver.size.to_i64
+                when "length", "size"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array.size.to_i64
+                when "first"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array.first?
+                when "last"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array.last?
                 when "push"
-                    receiver.as(Array(Bytecode::Value)) << args[0]
-                    receiver
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array << args[0]
+                    array
+                when "each"
+                    block = ensure_block(block_value, "Array##{method}")
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                        end
+                    end
+                    array
+                when "map"
+                    block = ensure_block(block_value, "Array##{method}")
+                    result = [] of Bytecode::Value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            result << (outcome[:value].nil? ? nil : outcome[:value])
+                        end
+                    end
+                    result
+                when "select"
+                    block = ensure_block(block_value, "Array##{method}")
+                    result = [] of Bytecode::Value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            if truthy?(outcome[:value])
+                                result << element
+                            end
+                        end
+                    end
+                    result
+                when "inject"
+                    block = ensure_block(block_value, "Array##{method}")
+                    unless args.size <= 1
+                        raise ArgumentError.new("Array##{method} expects 0 or 1 argument, got #{args.size}")
+                    end
+                    memo_initialized = args.size == 1
+                    memo : Bytecode::Value? = memo_initialized ? args.first : nil
+                    if array.empty? && !memo_initialized
+                        raise ArgumentError.new("Array##{method} called on empty array with no initial value")
+                    end
+                    run_enumeration_loop do
+                        array.each do |element|
+                            unless memo_initialized
+                                memo = element
+                                memo_initialized = true
+                                next
+                            end
+                            outcome = execute_block_iteration(block, [memo.as(Bytecode::Value), element])
+                            next if outcome[:state] == :next
+                            memo = outcome[:value]
+                        end
+                    end
+                    memo
+                when "until"
+                    block = ensure_block(block_value, "Array##{method}")
+                    found : Bytecode::Value? = nil
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            if truthy?(outcome[:value])
+                                found = element
+                                raise BreakSignal.new
+                            end
+                        end
+                    end
+                    found
                 else raise "Unknown method #{method} on Array"
                 end
+            when Bytecode::BagConstructorValue
+                call_bag_constructor_method(receiver, method, args, block_value)
+            when Bytecode::BagValue
+                call_bag_method(receiver, method, args, block_value)
             else
                 raise "Cannot call method #{method} on #{type_of(receiver)}"
             end

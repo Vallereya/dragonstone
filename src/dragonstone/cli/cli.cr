@@ -13,6 +13,7 @@ require "./proc/inspect"
 require "./cli_run"
 require "./cli_build"
 require "./cli_repl"
+require "./cli_backend"
 
 module Dragonstone
     module CLI
@@ -45,8 +46,14 @@ module Dragonstone
             when "build", "compile"
                 return CLIBuild.build_command(args, stdout, stderr)
 
+            when "build-run", "buildrun"
+                return CLIBuild.build_and_run_command(args, stdout, stderr)
+
             when "repl"
                 return CLIRepl.start_repl(args, stdout, stderr)
+
+            when "backend"
+                return CLIBackend.handle_command(args, stdout, stderr)
 
             else
                 stderr.puts "Unknown command: #{command}"
