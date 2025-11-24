@@ -1,4 +1,5 @@
 require "spec"
+require "file_utils"
 require "../src/dragonstone"
 
 describe "core backend execution" do
@@ -85,6 +86,108 @@ name: str = 1
 DS
         expect_raises(Dragonstone::TypeError) do
             Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Core)
+        end
+    end
+
+    it "evaluates para literals and allows calling them" do
+        source = <<-DS
+greet = ->(name: str) { "Hello, \#{name}!" }
+echo greet.call("Alice")
+
+square = ->(value: int) { value * value }
+echo square.call(6)
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Hello, Alice!\n36\n"
+    end
+
+    it "supports tuple and named tuple literals" do
+        source = <<-DS
+data = {1, "two", 3}
+echo data.length
+echo data[1]
+
+person = {name: "Ada", age: 37}
+echo person[:name]
+echo person[:age]
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "3\ntwo\nAda\n37\n"
+    end
+
+    it "evaluates unless statements" do
+        source = <<-DS
+username = "guest"
+
+unless username == "admin"
+    echo "Not an admin"
+else
+    echo "Welcome, admin!"
+end
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Not an admin\n"
+    end
+
+    it "handles instance variable declarations and accessors" do
+        source = <<-DS
+class Person
+    @name: str
+    @age: int
+
+    getter name, age
+
+    def initialize(@name, @age)
+    end
+end
+
+person = Person.new("Jules", 30)
+echo person.name
+echo person.age
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Jules\n30\n"
+    end
+
+    it "loads modules via use declarations on the core backend" do
+        dir = File.join(Dir.current, "tmp", "core_use_#{Time.utc.to_unix}_#{Process.pid}")
+        FileUtils.rm_rf(dir)
+        Dir.mkdir(dir)
+        begin
+            helpers = File.join(dir, "helpers.ds")
+            people = File.join(dir, "people.ds")
+            entry = File.join(dir, "main.ds")
+
+            File.write(helpers, <<-DS)
+con magic = 42
+
+def add(a, b)
+    a + b
+end
+DS
+
+            File.write(people, <<-DS)
+class Person
+    def greet
+        echo "Hi from Person"
+    end
+end
+DS
+
+            File.write(entry, <<-DS)
+use "helpers.ds"
+use { Person } from "people.ds"
+
+echo add(magic, 8)
+
+person = Person.new
+person.greet
+DS
+
+            result = Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core)
+            result.output.should eq "50\nHi from Person\n"
+        ensure
+            FileUtils.rm_rf(dir)
         end
     end
 end

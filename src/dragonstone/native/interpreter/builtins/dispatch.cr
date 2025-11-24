@@ -985,14 +985,18 @@ module Dragonstone
                 unless args.empty?
                     runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
                 end
-                tuple.entries.keys.map(&.as(RuntimeValue))
+                keys = [] of RuntimeValue
+                tuple.entries.each_key { |key| keys << key.as(RuntimeValue) }
+                keys
 
             when "values"
                 reject_block(block_value, "NamedTuple##{name}", node)
                 unless args.empty?
                     runtime_error(InterpreterError, "NamedTuple##{name} does not take arguments", node)
                 end
-                tuple.entries.values.map { |value| value.as(RuntimeValue) }
+                result = [] of RuntimeValue
+                tuple.entries.each_value { |value| result << value.as(RuntimeValue) }
+                result
 
             when "each"
                 unless block_value

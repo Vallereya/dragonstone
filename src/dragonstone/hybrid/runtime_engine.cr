@@ -50,6 +50,24 @@ module Dragonstone
                         converted << runtime_to_bytecode(element)
                     end
                     converted
+                when TupleValue
+                    elements = value.elements.map { |element| runtime_to_bytecode(element) }
+                    Bytecode::TupleValue.new(elements)
+                when NamedTupleValue
+                    tuple = Bytecode::NamedTupleValue.new
+                    value.entries.each do |key, entry_value|
+                        tuple.entries[key] = runtime_to_bytecode(entry_value)
+                    end
+                    tuple
+                when DragonModule
+                    Bytecode::ModuleValue.new(value.name)
+                when DragonClass
+                    Bytecode::ClassValue.new(value.name)
+                when DragonInstance
+                    Bytecode::InstanceValue.new(Bytecode::ClassValue.new(value.klass.name))
+                when DragonEnumMember
+                    enum_val = Bytecode::EnumValue.new(value.enum.name)
+                    Bytecode::EnumMemberValue.new(enum_val, value.name, value.value)
                 when Dragonstone::Function
                     convert_function_to_bytecode(value)
                 else
@@ -68,6 +86,28 @@ module Dragonstone
                         converted << bytecode_to_runtime(element)
                     end
                     converted
+                when Bytecode::TupleValue
+                    elements = [] of RuntimeValue
+                    value.elements.each do |element|
+                        elements << bytecode_to_runtime(element)
+                    end
+                    TupleValue.new(elements)
+                when Bytecode::NamedTupleValue
+                    entries = {} of SymbolValue => RuntimeValue
+                    value.entries.each do |key, entry_value|
+                        entries[key] = bytecode_to_runtime(entry_value)
+                    end
+                    NamedTupleValue.new(entries)
+                when Bytecode::ModuleValue
+                    DragonModule.new(value.name)
+                when Bytecode::ClassValue
+                    DragonClass.new(value.name)
+                when Bytecode::InstanceValue
+                    DragonInstance.new(DragonClass.new(value.klass.name))
+                when Bytecode::EnumValue
+                    DragonEnum.new(value.name)
+                when Bytecode::EnumMemberValue
+                    DragonEnumMember.new(DragonEnum.new(value.enum.name), value.name, value.value)
                 else
                     raise "Cannot import #{value.class} into interpreter runtime"
                 end
@@ -90,7 +130,7 @@ module Dragonstone
                     unless idx = name_lookup[name]?
                         raise "Parameter #{name} missing from compiled function names"
                     end
-                    param_specs << Bytecode::ParameterSpec.new(idx, param.type)
+                    param_specs << Bytecode::ParameterSpec.new(idx, param.type, param.instance_var_name)
                 end
                 signature = Bytecode::FunctionSignature.new(param_specs, func.return_type)
                 name = func.name || "<lambda>"

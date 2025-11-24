@@ -27,6 +27,7 @@ installer
 release
 
 # Ignore any Output/Build Cache from testing.
+tmp
 .tmp
 .cache
 .c

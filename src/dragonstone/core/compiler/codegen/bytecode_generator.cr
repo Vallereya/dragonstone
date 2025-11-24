@@ -44,6 +44,7 @@ module Dragonstone
         @consts : Array(Bytecode::Value)
         @stack_depth : Int32
         @max_stack : Int32
+        @container_depth : Int32
 
         def initialize(name_pool : NamePool? = nil)
             @name_pool = name_pool || NamePool.new
@@ -51,9 +52,11 @@ module Dragonstone
             @consts = [] of Bytecode::Value
             @stack_depth = 0
             @max_stack = 0
+            @container_depth = 0
         end
 
         def compile(ast : AST::Program) : CompiledCode
+            name_index("self")
             compile_program(ast)
             emit(OPC::HALT)
             ensure_stack_clean!
@@ -102,12 +105,46 @@ module Dragonstone
                     emit(OPC::REDO_SIGNAL)
                 end
 
+            when AST::RetryStatement
+                compile_flow_modifier(node.condition, node.condition_type) do
+                    emit(OPC::RETRY)
+                end
+
+            when AST::ModuleDefinition
+                compile_module_definition(node)
+                emit(OPC::POP) if consume_result
+
+            when AST::ClassDefinition
+                compile_class_definition(node)
+                emit(OPC::POP) if consume_result
+
+            when AST::StructDefinition
+                compile_struct_definition(node)
+                emit(OPC::POP) if consume_result
+
+            when AST::EnumDefinition
+                compile_enum_definition(node)
+                emit(OPC::POP) if consume_result
+            when AST::ExtendStatement
+                compile_extend(node)
+                emit(OPC::POP) if consume_result
+            when AST::AccessorMacro
+                compile_accessor_macro(node)
+
+            when AST::UnlessStatement
+                compile_unless(node)
+                emit(OPC::POP) if consume_result
+
+            when AST::InstanceVariableDeclaration
+                compile_instance_variable_declaration(node)
+                emit(OPC::POP) if consume_result
+
             when AST::ReturnStatement
                 compile_return(node)
                 
             when AST::FunctionDef
                 compile_function_def(node)
-                emit(OPC::POP) if consume_result
+                emit(OPC::POP) if consume_result && @container_depth == 0
 
             when AST::IfStatement
                 compile_if(node)
@@ -120,9 +157,28 @@ module Dragonstone
             when AST::DebugPrint
                 compile_debug_print(node)
                 emit(OPC::POP) if consume_result
-                
+            when AST::CaseStatement
+                compile_case_statement(node)
+                emit(OPC::POP) if consume_result
+            when AST::RaiseExpression
+                compile_raise(node)
+                # raise does not return; no POP
+
+            when AST::ConstantDeclaration
+                compile_constant_declaration(node)
+                emit(OPC::POP) if consume_result
+
             when AST::Assignment
                 compile_assignment(node)
+                emit(OPC::POP) if consume_result
+            when AST::InstanceVariableAssignment
+                compile_instance_variable_assignment(node)
+                emit(OPC::POP) if consume_result
+            when AST::IndexAssignment
+                compile_index_assignment(node)
+                emit(OPC::POP) if consume_result
+            when AST::AttributeAssignment
+                compile_attribute_assignment(node)
                 emit(OPC::POP) if consume_result
 
             else
@@ -143,6 +199,8 @@ module Dragonstone
 
             when AST::Assignment
                 compile_assignment(node)
+            when AST::InstanceVariable
+                compile_instance_variable(node)
 
             when AST::BinaryOp
                 compile_binary(node)
@@ -155,6 +213,8 @@ module Dragonstone
 
             when AST::IfStatement
                 compile_if(node)
+            when AST::UnlessStatement
+                compile_unless(node)
 
             when AST::WhileStatement
                 compile_while(node)
@@ -164,9 +224,19 @@ module Dragonstone
 
             when AST::ArrayLiteral
                 compile_array_literal(node)
+            when AST::TupleLiteral
+                compile_tuple_literal(node)
+            when AST::NamedTupleLiteral
+                compile_named_tuple_literal(node)
+            when AST::MapLiteral
+                compile_map_literal(node)
+            when AST::WithExpression
+                compile_with_expression(node)
 
             when AST::IndexAccess
                 compile_index_access(node)
+            when AST::IndexAssignment
+                compile_index_assignment(node)
 
             when AST::UnaryOp
                 compile_unary(node)
@@ -179,15 +249,27 @@ module Dragonstone
 
             when AST::FunctionLiteral
                 compile_function_literal(node)
+            when AST::ParaLiteral
+                compile_para_literal(node)
 
             when AST::BlockLiteral
                 compile_block_literal(node)
 
             when AST::BagConstructor
                 compile_bag_constructor(node)
+            when AST::InstanceVariableDeclaration
+                compile_instance_variable_declaration(node)
 
             when AST::YieldExpression
                 compile_yield(node)
+            when AST::ConstantPath
+                compile_constant_path(node)
+            when AST::CaseStatement
+                compile_case_statement(node)
+            when AST::RaiseExpression
+                compile_raise(node)
+            when AST::BeginExpression
+                compile_begin_expression(node)
 
             else
                 raise ArgumentError.new("Unhandled AST node #{node.class}")
@@ -208,6 +290,22 @@ module Dragonstone
             emit_store_name(node.name)
         end
 
+        private def compile_instance_variable(node : AST::InstanceVariable)
+            emit(OPC::LOAD_IVAR, name_index(node.name))
+        end
+
+        private def compile_instance_variable_declaration(node : AST::InstanceVariableDeclaration)
+            emit_nil
+        end
+
+        private def compile_instance_variable_assignment(node : AST::InstanceVariableAssignment)
+            if node.operator
+                raise ArgumentError.new("Compound instance variable assignment is not supported by the core backend yet")
+            end
+            compile_expression(node.value)
+            emit(OPC::STORE_IVAR, name_index(node.name))
+        end
+
         BINARY_OPCODE = {
             :+   => OPC::ADD,
             :"&+" => OPC::ADD,
@@ -216,12 +314,20 @@ module Dragonstone
             :*   => OPC::MUL,
             :"&*" => OPC::MUL,
             :/   => OPC::DIV,
+            :"//" => OPC::FLOOR_DIV,
+            :%   => OPC::MOD,
+            :&   => OPC::BIT_AND,
+            :|   => OPC::BIT_OR,
+            :^   => OPC::BIT_XOR,
+            :<<  => OPC::SHL,
+            :>>  => OPC::SHR,
             :==  => OPC::EQ,
             :!=  => OPC::NE,
             :<   => OPC::LT,
             :<=  => OPC::LE,
             :>   => OPC::GT,
             :>=  => OPC::GE,
+            :<=> => OPC::CMP,
         }
 
         private def compile_binary(node : AST::BinaryOp)
@@ -230,9 +336,17 @@ module Dragonstone
                 compile_logical_and(node)
             when :"||"
                 compile_logical_or(node)
+            when :"..", :"..."
+                compile_range(node)
             else
                 compile_standard_binary(node)
             end
+        end
+
+        private def compile_range(node : AST::BinaryOp)
+            compile_expression(node.left)
+            compile_expression(node.right)
+            emit(OPC::MAKE_RANGE, node.operator == :".." ? 1 : 0)
         end
 
         private def compile_standard_binary(node : AST::BinaryOp)
@@ -349,6 +463,26 @@ module Dragonstone
             emit(OPC::DEBUG_PRINT, source_idx)
         end
 
+        private def compile_unless(node : AST::UnlessStatement)
+            compile_expression(node.condition)
+            jump_to_body = emit(OPC::JMPF, 0)
+
+            if node.else_block
+                compile_block(node.else_block.not_nil!)
+                emit_nil
+            else
+                emit_nil
+            end
+
+            after_else = emit(OPC::JMP, 0)
+            patch_jump(jump_to_body, current_ip)
+
+            compile_block(node.body)
+            emit_nil
+
+            patch_jump(after_else, current_ip)
+        end
+
         private def compile_if(node : AST::IfStatement)
             compile_expression(node.condition)
             jump_false = emit(OPC::JMPF, 0)
@@ -385,14 +519,79 @@ module Dragonstone
             loop_start = current_ip
             compile_expression(node.condition)
             exit_jump = emit(OPC::JMPF, 0)
+            enter_pos = emit(OPC::ENTER_LOOP, loop_start, 0, 0)
+            body_start = current_ip
             compile_block(node.block)
+            emit(OPC::EXIT_LOOP)
             emit(OPC::JMP, loop_start)
-            patch_jump(exit_jump, current_ip)
+            exit_ip = current_ip
+            patch_jump(exit_jump, exit_ip)
+            # Patch loop metadata operands: condition_ip already set, fill body and exit.
+            @code[enter_pos + 2] = body_start
+            @code[enter_pos + 3] = exit_ip
             emit_nil
         end
 
-        private def compile_block(statements : Array(AST::Node))
-            compile_statements(statements)
+        private def compile_block(statements : Array(AST::Node), preserve_last : Bool = false)
+            compile_statements(statements, preserve_last)
+        end
+
+        private def enter_container(&block)
+            @container_depth += 1
+            name_index("self")
+            yield
+        ensure
+            @container_depth -= 1
+        end
+
+        private def compile_begin_expression(node : AST::BeginExpression)
+            if node.rescue_clauses.empty? && node.ensure_block.nil?
+                compile_block(node.body)
+                return
+            end
+
+            rescue_label = 0
+            ensure_label = 0
+
+            handler_pos = emit(OPC::PUSH_HANDLER, 0, 0, 0)
+            body_start = current_ip
+
+            compile_block(node.body, preserve_last: true)
+            after_body = emit(OPC::JMP, 0)
+
+            rescue_label = node.rescue_clauses.empty? ? -1 : current_ip
+            rescue_jumps = [] of Int32
+            node.rescue_clauses.each do |clause|
+                if var = clause.exception_variable
+                    emit(OPC::LOAD_EXCEPTION)
+                    emit(OPC::STORE, name_index(var))
+                end
+                compile_block(clause.body, preserve_last: true)
+                rescue_jumps << emit(OPC::JMP, 0)
+            end
+
+            ensure_label = current_ip
+            if node.ensure_block
+                compile_block(node.ensure_block.not_nil!)
+            end
+            emit(OPC::CHECK_RETHROW)
+            emit(OPC::POP_HANDLER)
+
+            @code[handler_pos + 1] = rescue_label
+            @code[handler_pos + 2] = ensure_label
+            @code[handler_pos + 3] = body_start
+            patch_jump(after_body, ensure_label)
+            rescue_jumps.each { |pos| patch_jump(pos, ensure_label) }
+        end
+
+        private def compile_raise(node : AST::RaiseExpression)
+            if node.expression
+                compile_expression(node.expression.not_nil!)
+            else
+                emit_nil
+            end
+            emit(OPC::RAISE)
+            @stack_depth = 0
         end
 
         def compile_function_body(statements : Array(AST::Node), preserve_last : Bool = false) : CompiledCode
@@ -404,6 +603,7 @@ module Dragonstone
         private def finalize_function_chunk(use_default_nil : Bool = true) : CompiledCode
             emit_nil if use_default_nil
             emit(OPC::RET)
+            @stack_depth = 0
             ensure_stack_clean!
             build_bytecode
         end
@@ -462,10 +662,97 @@ module Dragonstone
             end
         end
 
+        private def compile_tuple_literal(node : AST::TupleLiteral)
+            if node.elements.empty?
+                emit_const(Bytecode::TupleValue.new([] of Bytecode::Value))
+                return
+            end
+
+            node.elements.each { |element| compile_expression(element) }
+            emit(OPC::MAKE_TUPLE, node.elements.size)
+        end
+
+        private def compile_named_tuple_literal(node : AST::NamedTupleLiteral)
+            if node.entries.empty?
+                emit_const(Bytecode::NamedTupleValue.new)
+                return
+            end
+
+            node.entries.each do |entry|
+                symbol_idx = const_index(SymbolValue.new(entry.name))
+                emit(OPC::CONST, symbol_idx)
+                compile_expression(entry.value)
+            end
+            emit(OPC::MAKE_NAMED_TUPLE, node.entries.size)
+        end
+
+        private def compile_map_literal(node : AST::MapLiteral)
+            node.entries.each do |(key_node, value_node)|
+                compile_expression(key_node)
+                compile_expression(value_node)
+            end
+            emit(OPC::MAKE_MAP, node.entries.size)
+        end
+
         private def compile_index_access(node : AST::IndexAccess)
             compile_expression(node.object)
             compile_expression(node.index)
             emit(OPC::INDEX)
+        end
+
+        private def compile_index_assignment(node : AST::IndexAssignment)
+            if node.operator
+                raise ArgumentError.new("Compound index assignment is not supported by the core backend yet")
+            end
+            if node.nil_safe
+                raise ArgumentError.new("Nil-safe index assignment is not supported by the core backend yet")
+            end
+
+            compile_expression(node.object)
+            compile_expression(node.index)
+            compile_expression(node.value)
+            emit(OPC::STORE_INDEX)
+        end
+
+        private def compile_attribute_assignment(node : AST::AttributeAssignment)
+            setter_idx = name_index("#{node.name}=")
+            getter_idx = name_index(node.name)
+
+            if operator = node.operator
+                compile_expression(node.receiver)
+                emit(OPC::DUP)
+                emit(OPC::INVOKE, getter_idx, 0)
+                compile_expression(node.value)
+                opcode = BINARY_OPCODE[operator]?
+                raise ArgumentError.new("Unsupported compound operator #{operator}") unless opcode
+                emit(opcode)
+            else
+                compile_expression(node.receiver)
+                compile_expression(node.value)
+            end
+
+            emit(OPC::INVOKE, setter_idx, 1)
+        end
+
+        private def compile_with_expression(node : AST::WithExpression)
+            self_idx = name_index("self")
+            tmp_idx = name_index("__with_prev_self")
+            result_tmp_idx = name_index("__with_result")
+
+            emit(OPC::LOAD, self_idx) rescue nil
+            emit(OPC::STORE, tmp_idx)
+
+            compile_expression(node.receiver)
+            emit(OPC::STORE, self_idx)
+
+            compile_block(node.body, preserve_last: true)
+            emit(OPC::STORE, result_tmp_idx)
+
+            emit(OPC::LOAD, tmp_idx)
+            emit(OPC::STORE, self_idx)
+            emit(OPC::POP)
+
+            emit(OPC::LOAD, result_tmp_idx)
         end
 
         private def compile_return(node : AST::ReturnStatement)
@@ -482,22 +769,50 @@ module Dragonstone
 
         private def compile_function_def(node : AST::FunctionDef)
             if node.receiver
-                raise ArgumentError.new("Singleton methods are not supported in the bytecode compiler")
+                compile_singleton_function_def(node)
+                return
             end
 
             fn_compiler = self.class.new(@name_pool)
-            fn_chunk = fn_compiler.compile_function_body(node.body)
+            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             fn_const_idx = const_index(fn_chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
             name_idx = name_index(node.name)
 
             emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
-            emit(OPC::STORE, name_idx)
+            if @container_depth > 0
+                emit(OPC::DEFINE_METHOD, name_idx)
+            else
+                emit(OPC::STORE, name_idx)
+            end
+        end
+
+        private def compile_singleton_function_def(node : AST::FunctionDef)
+            compile_expression(node.receiver.not_nil!)
+
+            name_index("self")
+            fn_compiler = self.class.new(@name_pool)
+            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            fn_const_idx = const_index(fn_chunk)
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            name_idx = name_index(node.name)
+
+            emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
+            emit(OPC::DEFINE_SINGLETON_METHOD)
         end
 
         private def compile_function_literal(node : AST::FunctionLiteral)
             fn_compiler = self.class.new(@name_pool)
-            chunk = fn_compiler.compile_function_body(node.body)
+            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            chunk_idx = const_index(chunk)
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            name_idx = name_index("<lambda>")
+            emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, chunk_idx)
+        end
+
+        private def compile_para_literal(node : AST::ParaLiteral)
+            fn_compiler = self.class.new(@name_pool)
+            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             chunk_idx = const_index(chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
             name_idx = name_index("<lambda>")
@@ -516,6 +831,138 @@ module Dragonstone
             emit_const(::Dragonstone::Bytecode::BagConstructorValue.new(node.element_type))
         end
 
+        private def compile_constant_declaration(node : AST::ConstantDeclaration)
+            compile_expression(node.value)
+            emit_type_check(node.type_annotation)
+            if @container_depth > 0
+                emit(OPC::DEFINE_CONST, name_index(node.name))
+            else
+                emit(OPC::STORE, name_index(node.name))
+            end
+        end
+
+        private def compile_module_definition(node : AST::ModuleDefinition)
+            name_idx = name_index(node.name)
+            emit(OPC::MAKE_MODULE, name_idx)
+            if @container_depth > 0
+                emit(OPC::DEFINE_CONST, name_idx)
+            else
+                emit(OPC::STORE, name_idx)
+            end
+            emit(OPC::LOAD, name_idx)
+            emit(OPC::ENTER_CONTAINER)
+            enter_container do
+                compile_block(node.body)
+            end
+            emit(OPC::EXIT_CONTAINER)
+            emit(OPC::POP)
+            emit_nil
+        end
+
+        private def compile_class_definition(node : AST::ClassDefinition)
+            name_idx = name_index(node.name)
+            super_idx = node.superclass ? const_index(node.superclass.not_nil!) : -1
+            emit(OPC::MAKE_CLASS, name_idx, super_idx)
+            if @container_depth > 0
+                emit(OPC::DEFINE_CONST, name_idx)
+            else
+                emit(OPC::STORE, name_idx)
+            end
+            emit(OPC::LOAD, name_idx)
+            emit(OPC::ENTER_CONTAINER)
+            enter_container do
+                compile_block(node.body)
+            end
+            emit(OPC::EXIT_CONTAINER)
+            emit(OPC::POP)
+            emit_nil
+        end
+
+        private def compile_struct_definition(node : AST::StructDefinition)
+            name_idx = name_index(node.name)
+            emit(OPC::MAKE_STRUCT, name_idx)
+            if @container_depth > 0
+                emit(OPC::DEFINE_CONST, name_idx)
+            else
+                emit(OPC::STORE, name_idx)
+            end
+            emit(OPC::LOAD, name_idx)
+            emit(OPC::ENTER_CONTAINER)
+            enter_container do
+                compile_block(node.body)
+            end
+            emit(OPC::EXIT_CONTAINER)
+            emit(OPC::POP)
+            emit_nil
+        end
+
+        private def compile_enum_definition(node : AST::EnumDefinition)
+            name_idx = name_index(node.name)
+            value_method = node.value_name || node.value_type ? (node.value_name || "value") : "value"
+            value_method_idx = const_index(value_method)
+            emit(OPC::MAKE_ENUM, name_idx, value_method_idx)
+            if @container_depth > 0
+                emit(OPC::DEFINE_CONST, name_idx)
+            else
+                emit(OPC::STORE, name_idx)
+            end
+            emit(OPC::LOAD, name_idx)
+            emit(OPC::ENTER_CONTAINER)
+            enter_container do
+                node.members.each do |member|
+                    if member.value
+                        compile_expression(member.value.not_nil!)
+                        emit(OPC::DEFINE_ENUM_MEMBER, name_index(member.name), 1)
+                    else
+                        emit(OPC::DEFINE_ENUM_MEMBER, name_index(member.name), 0)
+                    end
+                end
+            end
+            emit(OPC::EXIT_CONTAINER)
+            emit(OPC::POP)
+            emit_nil
+        end
+
+        private def compile_extend(node : AST::ExtendStatement)
+            node.targets.each do |target|
+                compile_expression(target)
+                emit(OPC::EXTEND_CONTAINER)
+            end
+            emit_nil
+        end
+
+        private def compile_accessor_macro(node : AST::AccessorMacro)
+            node.entries.each do |entry|
+                case node.kind
+                when :getter
+                    emit_accessor_getter(entry, node.visibility)
+                when :setter
+                    emit_accessor_setter(entry, node.visibility)
+                when :property
+                    emit_accessor_getter(entry, node.visibility)
+                    emit_accessor_setter(entry, node.visibility)
+                else
+                    raise ArgumentError.new("Unknown accessor macro kind #{node.kind}")
+                end
+            end
+        end
+
+        private def emit_accessor_getter(entry : AST::AccessorEntry, visibility : Symbol)
+            body = [] of AST::Node
+            body << AST::InstanceVariable.new(entry.name)
+            fn = AST::FunctionDef.new(entry.name, [] of AST::TypedParameter, body, [] of AST::RescueClause, entry.type_annotation, visibility: visibility)
+            compile_function_def(fn)
+        end
+
+        private def emit_accessor_setter(entry : AST::AccessorEntry, visibility : Symbol)
+            param = AST::TypedParameter.new("value", entry.type_annotation)
+            assignment = AST::InstanceVariableAssignment.new(entry.name, AST::Variable.new("value"))
+            body = [] of AST::Node
+            body << assignment
+            fn = AST::FunctionDef.new("#{entry.name}=", [param], body, [] of AST::RescueClause, entry.type_annotation, visibility: visibility)
+            compile_function_def(fn)
+        end
+
         private def compile_alias_definition(node : AST::AliasDefinition)
             type_idx = const_index(node.type_expression)
             emit(OPC::DEFINE_TYPE_ALIAS, name_index(node.name), type_idx)
@@ -526,9 +973,53 @@ module Dragonstone
             emit(OPC::YIELD, node.arguments.size)
         end
 
+        private def compile_constant_path(node : AST::ConstantPath)
+            raw_segments = [node.head] + node.tail
+            segments = [] of Bytecode::Value
+            raw_segments.each { |seg| segments << seg }
+            const_idx = const_index(segments)
+            emit(OPC::LOAD_CONST_PATH, const_idx)
+        end
+
+        private def compile_case_statement(node : AST::CaseStatement)
+            has_expression = !!node.expression
+            if has_expression
+                compile_expression(node.expression.not_nil!)
+            end
+
+            end_jumps = [] of Int32
+
+            node.when_clauses.each do |clause|
+                condition_jumps = [] of Int32
+                clause.conditions.each do |condition|
+                    if has_expression
+                        emit(OPC::DUP)
+                        compile_expression(condition)
+                        emit(OPC::EQ)
+                    else
+                        compile_expression(condition)
+                    end
+                    condition_jumps << emit(OPC::JMPF, 0)
+                end
+
+                emit(OPC::POP) if has_expression
+                compile_block(clause.block)
+                emit_nil
+                end_jumps << emit(OPC::JMP, 0)
+                condition_jumps.each { |pos| patch_jump(pos, current_ip) }
+            end
+
+            emit(OPC::POP) if has_expression
+            if node.else_block
+                compile_block(node.else_block.not_nil!)
+            end
+            emit_nil
+            end_jumps.each { |pos| patch_jump(pos, current_ip) }
+        end
+
         private def build_signature(parameters : Array(AST::TypedParameter), return_type : AST::TypeExpression?) : Bytecode::FunctionSignature
             specs = parameters.map do |param|
-                Bytecode::ParameterSpec.new(name_index(param.name), param.type)
+                Bytecode::ParameterSpec.new(name_index(param.name), param.type, param.instance_var_name)
             end
             Bytecode::FunctionSignature.new(specs, return_type)
         end
@@ -611,7 +1102,10 @@ module Dragonstone
             when OPC::DUP
                 stack_push
                 
-            when OPC::ADD, OPC::SUB, OPC::MUL, OPC::DIV, OPC::EQ, OPC::NE, OPC::LT, OPC::LE, OPC::GT, OPC::GE, OPC::CONCAT
+            when OPC::ADD, OPC::SUB, OPC::MUL, OPC::DIV, OPC::EQ, OPC::NE, OPC::LT, OPC::LE, OPC::GT, OPC::GE, OPC::CONCAT, OPC::CMP
+                stack_pop(2)
+                stack_push
+            when OPC::FLOOR_DIV, OPC::MOD, OPC::BIT_AND, OPC::BIT_OR, OPC::BIT_XOR, OPC::SHL, OPC::SHR
                 stack_pop(2)
                 stack_push
 
@@ -632,6 +1126,45 @@ module Dragonstone
                 count = operands[0]? || 0
                 stack_pop(count)
                 stack_push
+
+            when OPC::MAKE_TUPLE
+                count = operands[0]? || 0
+                stack_pop(count)
+                stack_push
+
+            when OPC::MAKE_NAMED_TUPLE
+                count = operands[0]? || 0
+                stack_pop(count * 2)
+                stack_push
+
+            when OPC::MAKE_MAP
+                count = operands[0]? || 0
+                stack_pop(count * 2)
+                stack_push
+
+            when OPC::MAKE_RANGE
+                stack_pop(2)
+                stack_push
+
+            when OPC::MAKE_MODULE, OPC::MAKE_CLASS, OPC::MAKE_STRUCT, OPC::MAKE_ENUM
+                stack_push
+
+            when OPC::ENTER_CONTAINER
+                stack_pop
+
+            when OPC::EXIT_CONTAINER
+                # no stack change
+
+            when OPC::DEFINE_CONST
+                stack_pop
+                stack_push
+
+            when OPC::DEFINE_METHOD
+                stack_pop
+
+            when OPC::DEFINE_ENUM_MEMBER
+                has_value = operands[1]? || 0
+                stack_pop(has_value)
 
             when OPC::INDEX
                 stack_pop(2)
@@ -671,6 +1204,31 @@ module Dragonstone
             when OPC::MAKE_BLOCK
                 stack_push
 
+            when OPC::STORE_INDEX
+                stack_pop(3)
+                stack_push
+
+            when OPC::LOAD_CONST_PATH
+                stack_push
+
+            when OPC::LOAD_IVAR
+                stack_push
+
+            when OPC::STORE_IVAR
+                stack_pop
+                stack_push
+
+            when OPC::PUSH_HANDLER
+                # handler stack only
+            when OPC::POP_HANDLER
+                # handler stack only
+            when OPC::LOAD_EXCEPTION
+                stack_push
+            when OPC::RAISE
+                stack_pop
+            when OPC::CHECK_RETHROW
+                # no stack change
+
             when OPC::YIELD
                 argc = operands[0]? || 0
                 stack_pop(argc)
@@ -686,8 +1244,18 @@ module Dragonstone
                 stack_pop
                 stack_push
 
-            when OPC::HALT, OPC::JMP, OPC::NOP, OPC::BREAK_SIGNAL, OPC::NEXT_SIGNAL, OPC::REDO_SIGNAL, OPC::DEFINE_TYPE_ALIAS
+            when OPC::HALT
+                @stack_depth = 0
+
+            when OPC::JMP, OPC::NOP, OPC::BREAK_SIGNAL, OPC::NEXT_SIGNAL, OPC::REDO_SIGNAL, OPC::DEFINE_TYPE_ALIAS, OPC::RETRY
                 # No interop yet.
+            when OPC::ENTER_LOOP, OPC::EXIT_LOOP
+                # metadata only
+            when OPC::EXTEND_CONTAINER
+                stack_pop
+            when OPC::DEFINE_SINGLETON_METHOD
+                stack_pop(2)
+                stack_push
             end
         end
 
