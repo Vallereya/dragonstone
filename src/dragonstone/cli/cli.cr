@@ -19,15 +19,13 @@ module Dragonstone
     module CLI
         extend self 
 
-        def run (
-            argv = ARGV, 
-            stdout : IO = STDOUT,
-            stderr : IO = STDERR
-        ) : Int32
+        def run (argv = ARGV, stdout : IO = STDOUT, stderr : IO = STDERR) : Int32
 
-            return ProcCommon.print_version(stdout)     if ProcCommon.version_command?(argv)
-            return ProcCommon.print_help(stdout)        if ProcCommon.help_command?(argv)
-            return ProcCommon.show_usage(stdout)        if argv.empty?
+            return ProcCommon.print_version(stdout)         if ProcCommon.version_command?(argv)
+            return ProcCommon.print_help(stdout)            if ProcCommon.help_command?(argv)
+            return ProcCommon.show_usage(stdout)            if argv.empty?
+
+            return CLIBackend.capability_command(stdout)    if CLIBackend.capability_command?(argv)
 
             command = argv[0]
             args    = argv[1..-1]

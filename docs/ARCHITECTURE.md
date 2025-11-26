@@ -41,13 +41,15 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── 4. Advanced Dragonstone/    -> advanced language usage
     │   ├── 5. Guides/                  -> misc. language guides
     │   ├── README.md                   -> documentation overview
-    │   ├── ARCHITECTURE.md             -> *you are here*
+    │   ├── ARCHITECTURE.md         -> *you are here*
     │   └── ROADMAP.md                  -> project roadmap
     ├── examples/                       -> example .ds files
     ├── scripts/                        -> auto scripts
     ├── spec/                           -> testing files
     ├── tests/                          -> unimportant test .ds files
     ├── bin/                            -> **BUILD**
+    │   ├── resources/
+    │   │   └── dragonstone.rc
     │   ├── dragonstone                 -> main entry
     │   ├── dragonstone.ps1             -> .ps1 script for env
     │   └── dragonstone.bat             -> add to path and handoff to .ps1

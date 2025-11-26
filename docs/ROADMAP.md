@@ -137,7 +137,7 @@
 + REPL needs to be wired to the CLI.
 + Update folder structure so its properly splitup for bootstrapping and separate compiler.
 + Modularize files to better support separate interpreter and compiler.
-+ Flesh out the compiler for targets.
++ Flesh out the compiler for later targets.
 ```
 
 ---

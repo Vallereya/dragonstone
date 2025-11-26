@@ -18,64 +18,37 @@ module Dragonstone
     PATH_SEPARATOR = {% if flag?(:windows) %} ';' {% else %} ':' {% end %}
     BACKEND_ENV_KEY = "DRAGONSTONE_BACKEND"
 
-    record RunResult, 
-    tokens : Array(Token), 
-    ast : AST::Program, 
-    output : String
+    record RunResult, tokens : Array(Token), ast : AST::Program, output : String
 
-    def self.run_file(
-            filename : String, 
-            log_to_stdout : Bool = false,
-            typed : Bool = false,
-            backend : BackendMode? = nil
-        ) : RunResult
-
+    def self.run_file(filename : String, log_to_stdout : Bool = false, typed : Bool = false, backend : BackendMode? = nil) : RunResult
         backend_mode = resolve_backend_mode(backend)
         source = File.read(filename)
         processed_source, directive_typed = Language::Directives.process_typed_directive(source)
         typed ||= directive_typed
         lexer = Lexer.new(processed_source, source_name: filename)
         tokens = lexer.tokenize
-
         entry_path = File.realpath(filename)
         resolver = build_resolver(entry_path, backend_mode)
         resolver.resolve(filename)
-
         ast = resolver.cache.get(entry_path) || Parser.new(tokens).parse
-
-        runtime = Runtime::Engine.new(
-            resolver,
-            log_to_stdout: log_to_stdout,
-            typing_enabled: typed,
-            backend_mode: backend_mode
-        )
+        runtime = Runtime::Engine.new(resolver, log_to_stdout: log_to_stdout, typing_enabled: typed, backend_mode: backend_mode)
         analysis = Language::Sema::TypeChecker.new.analyze(ast, typed: typed)
         program = IR::Lowering.lower(ast, analysis)
         unit = runtime.compile_or_eval(program, entry_path, typed)
         runtime.unit_cache[entry_path] = unit
-
         RunResult.new(tokens, ast, unit.output)
     end
 
-    def self.run(
-            source : String, 
-            log_to_stdout : Bool = false, 
-            source_name : String = "<source>",
-            typed : Bool = false,
-            backend : BackendMode? = nil
-        ) : RunResult
-
+    def self.run(source : String, log_to_stdout : Bool = false, source_name : String = "<source>", typed : Bool = false, backend : BackendMode? = nil) : RunResult
         backend_mode = resolve_backend_mode(backend)
         processed_source, directive_typed = Language::Directives.process_typed_directive(source)
         typed ||= directive_typed
         lexer = Lexer.new(processed_source, source_name: source_name)
         tokens = lexer.tokenize
-
         parser = Parser.new(tokens)
         ast = parser.parse
         analysis = Language::Sema::TypeChecker.new.analyze(ast, typed: typed)
         program = IR::Lowering.lower(ast, analysis)
-
         inline_path = inline_source_path(source_name)
         resolver = build_resolver(inline_path, backend_mode)
         node = ModuleNode.new(inline_path, ast, typed)
@@ -83,13 +56,7 @@ module Dragonstone
         resolver.cache.set(inline_path, ast)
 
         output_text = if backend_mode == BackendMode::Core
-
-            runtime = Runtime::Engine.new(
-                resolver,
-                log_to_stdout: log_to_stdout,
-                typing_enabled: typed,
-                backend_mode: backend_mode
-            )
+            runtime = Runtime::Engine.new(resolver, log_to_stdout: log_to_stdout, typing_enabled: typed, backend_mode: backend_mode)
             unit = runtime.compile_or_eval(program, inline_path, typed)
             runtime.unit_cache[inline_path] = unit
             unit.output

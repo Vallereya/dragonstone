@@ -7,28 +7,27 @@ module Dragonstone
         PROMPT = "dragonstone> "
         EXIT_COMMANDS = {"exit", "quit"}
 
-        def start_repl(
-            args : Array(String),
-            stdout : IO,
-            stderr : IO,
-            stdin : IO = STDIN
-        ) : Int32
-
+        def start_repl(args : Array(String), stdout : IO, stderr : IO, stdin : IO = STDIN) : Int32
             typed = false
             log_to_stdout = false
 
             args.each do |arg|
                 case arg
+
                 when "--typed"
                     typed = true
+
                 when "--log"
                     log_to_stdout = true
+
                 when "--help", "--h"
                     ProcCommon.print_usage(stdout)
                     return 0
+
                 else
                     stderr.puts "Unknown REPL option: #{arg}"
                     return 1
+
                 end
             end
 
@@ -54,14 +53,10 @@ module Dragonstone
                 next if trimmed.empty?
 
                 begin
-                    result = Dragonstone.run(
-                        input,
-                        log_to_stdout: log_to_stdout,
-                        typed: typed
-                    )
-
+                    result = Dragonstone.run(input, log_to_stdout: log_to_stdout, typed: typed)
                     output = result.output
                     stdout.puts(output) unless output.empty?
+
                 rescue e : Dragonstone::Error
                     stderr.puts "ERROR: #{e.message}"
 
@@ -72,7 +67,7 @@ module Dragonstone
             end
 
             stdout.puts "Dragonstone REPL Closed."
-            0
+            return 0
         end
     end
 end

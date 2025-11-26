@@ -55,6 +55,7 @@ module Dragonstone
                 else
                     io.puts "#{prefix}MethodCall: #{node.name}"
                 end
+                
                 node.arguments.each { |arg| print_ast(arg, indent + 1, io) }
 
             when Dragonstone::AST::DebugPrint

@@ -8,9 +8,11 @@ module Dragonstone
         def run_command(args : Array(String), stdout : IO, stderr : IO) : Int32
             typed        = false
             filename     = nil
+
             backend_mode : BackendMode? = nil
 
             idx = 0
+
             while idx < args.size
                 arg = args[idx]
 
@@ -19,10 +21,12 @@ module Dragonstone
 
                 elsif arg == "--backend"
                     idx += 1
+
                     if idx >= args.size
                         stderr.puts "Missing value for --backend"
                         return 1
                     end
+                    
                     backend_mode = parse_backend_flag(args[idx], stderr)
                     return 1 unless backend_mode
 
@@ -58,12 +62,7 @@ module Dragonstone
 
         def run_file(filename : String, stdout : IO, stderr : IO, typed : Bool = false, backend : BackendMode? = nil) : Int32
             begin
-                result = Dragonstone.run_file(
-                    filename,
-                    log_to_stdout: false,
-                    typed: typed,
-                    backend: backend
-                )
+                result = Dragonstone.run_file(filename, log_to_stdout: false, typed: typed, backend: backend)
                 stdout.puts result.output
                 return 0
             rescue e : Dragonstone::Error

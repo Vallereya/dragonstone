@@ -23,10 +23,7 @@ module Dragonstone
             end
         end
 
-        alias TargetArtifact = NamedTuple(
-            target: Core::Compiler::Target,
-            artifact: Core::Compiler::BuildArtifact
-        )
+        alias TargetArtifact = NamedTuple(target: Core::Compiler::Target, artifact: Core::Compiler::BuildArtifact)
 
         def build_command(args : Array(String), stdout : IO, stderr : IO) : Int32
             options = parse_cli_options(args, stdout, stderr)
@@ -34,19 +31,23 @@ module Dragonstone
 
             filename = options.filename
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
+
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
 
             begin
                 program, warnings = build_program(filename, typed: options.typed)
                 warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
                 build_targets(program, options.targets, options.output_dir, stdout)
-                0
+                return 0
+
             rescue e : Dragonstone::Error
                 stderr.puts "ERROR: #{e.message}"
-                1
+                return 1
+
             rescue e
                 stderr.puts "UNEXPECTED ERROR: #{e.message}"
-                1
+                return 1
+
             end
         end
 
@@ -56,19 +57,25 @@ module Dragonstone
 
             filename = options.filename
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
+
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
 
             begin
                 program, warnings = build_program(filename, typed: options.typed)
+
                 warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
+
                 artifacts = build_targets(program, options.targets, options.output_dir, stdout)
                 run_artifacts(program, artifacts, stdout, stderr) ? 0 : 1
+
             rescue e : Dragonstone::Error
                 stderr.puts "ERROR: #{e.message}"
-                1
+                return 1
+
             rescue e
                 stderr.puts "UNEXPECTED ERROR: #{e.message}"
-                1
+                return 1
+
             end
         end
 
@@ -83,6 +90,7 @@ module Dragonstone
             filename = nil
 
             idx = 0
+
             while idx < args.size
                 arg = args[idx]
 
@@ -91,26 +99,32 @@ module Dragonstone
 
                 elsif arg == "--target"
                     idx += 1
+
                     if idx >= args.size
                         stderr.puts "Missing value for --target"
                         return nil
                     end
+
                     target = parse_target_flag(args[idx], stderr)
                     return nil unless target
+
                     add_target(targets, target)
 
                 elsif arg.starts_with?("--target=")
                     value = arg.split("=", 2)[1]? || ""
                     target = parse_target_flag(value, stderr)
                     return nil unless target
+
                     add_target(targets, target)
 
                 elsif arg == "--output"
                     idx += 1
+
                     if idx >= args.size
                         stderr.puts "Missing value for --output"
                         return nil
                     end
+
                     output_dir = args[idx]
 
                 elsif arg.starts_with?("--output=")
@@ -143,29 +157,38 @@ module Dragonstone
         private def parse_target_flag(value : String, stderr : IO) : Core::Compiler::Target?
             normalized = value.downcase
             case normalized
+
             when "bytecode", "vm"
                 Core::Compiler::Target::Bytecode
+
             when "llvm"
                 Core::Compiler::Target::LLVM
+
             when "c"
                 Core::Compiler::Target::C
+
             when "crystal"
                 Core::Compiler::Target::Crystal
+
             when "ruby"
                 Core::Compiler::Target::Ruby
+
             else
                 stderr.puts "Unknown target '#{value}'. Expected bytecode, llvm, c, crystal, or ruby."
                 nil
+
             end
         end
 
         private def build_program(filename : String, *, typed : Bool) : Tuple(IR::Program, Array(String))
             entry_path = File.realpath(filename)
+
             resolver = Dragonstone.build_resolver(entry_path, BackendMode::Core)
             resolver.resolve(filename)
 
             node = resolver.graph[entry_path]?
             raise "Internal: missing module node for #{entry_path}" unless node
+
             ast = node.ast || resolver.cache.get(entry_path)
             raise "Internal: missing AST for #{entry_path}" unless ast
 
@@ -175,71 +198,62 @@ module Dragonstone
             {program, program.warnings}
         end
 
-        private def build_targets(
-            program : IR::Program,
-            targets : Array(Core::Compiler::Target),
-            output_dir : String?,
-            stdout : IO
-        ) : Array(TargetArtifact)
+        private def build_targets(program : IR::Program, targets : Array(Core::Compiler::Target), output_dir : String?, stdout : IO) : Array(TargetArtifact)
             artifacts = [] of TargetArtifact
+
             targets.each do |target|
                 options = Core::Compiler::BuildOptions.new(target: target, output_dir: output_dir)
                 artifact = Core::Compiler.build(program, options)
                 report_artifact(target, artifact, stdout)
                 artifacts << {target: target, artifact: artifact}
             end
+
             artifacts
         end
 
-        private def run_artifacts(
-            program : IR::Program,
-            artifacts : Array(TargetArtifact),
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_artifacts(program : IR::Program, artifacts : Array(TargetArtifact), stdout : IO, stderr : IO) : Bool
             artifacts.each do |entry|
                 target = entry[:target]
                 stdout.puts "Running #{target_label(target)} artifact..."
                 return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr)
             end
+
             true
         end
 
-        private def run_build_artifact(
-            program : IR::Program,
-            target : Core::Compiler::Target,
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_build_artifact(program : IR::Program, target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             case target
+
             when Core::Compiler::Target::Bytecode
                 run_bytecode_artifact(program, artifact, stdout, stderr)
+
             when Core::Compiler::Target::Ruby
                 run_ruby_artifact(artifact, stdout, stderr)
+
             when Core::Compiler::Target::Crystal
                 run_crystal_artifact(artifact, stdout, stderr)
+
             when Core::Compiler::Target::C
                 run_c_artifact(artifact, stdout, stderr)
+
             when Core::Compiler::Target::LLVM
                 run_llvm_artifact(artifact, stdout, stderr)
+
             else
                 stderr.puts "Cannot execute #{target_label(target)} artifacts yet"
                 false
+
             end
         end
 
-        private def run_bytecode_artifact(
-            program : IR::Program,
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_bytecode_artifact(program : IR::Program, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             bytecode = artifact.bytecode
+
             unless bytecode
                 stderr.puts "Bytecode artifact is missing compiled instructions"
                 return false
             end
+
             output = IO::Memory.new
             vm = VM.new(bytecode, stdout_io: output, typing_enabled: program.typed?)
             vm.run
@@ -248,13 +262,10 @@ module Dragonstone
         rescue e : Exception
             stderr.puts "Failed to execute bytecode artifact: #{e.message}"
             false
+
         end
 
-        private def run_ruby_artifact(
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_ruby_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             if path = artifact.object_path
                 run_process("ruby", [path], stdout, stderr)
             else
@@ -263,11 +274,7 @@ module Dragonstone
             end
         end
 
-        private def run_crystal_artifact(
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_crystal_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             if path = artifact.object_path
                 run_process("crystal", ["run", path], stdout, stderr)
             else
@@ -276,11 +283,7 @@ module Dragonstone
             end
         end
 
-        private def run_llvm_artifact(
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_llvm_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             if path = artifact.object_path
                 run_process("lli", ["--entry-function=dragonstone_stub", path], stdout, stderr)
             else
@@ -289,12 +292,9 @@ module Dragonstone
             end
         end
 
-        private def run_c_artifact(
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO,
-            stderr : IO
-        ) : Bool
+        private def run_c_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
             path = artifact.object_path
+            
             unless path
                 stderr.puts "C artifact did not produce an output file"
                 return false
@@ -304,17 +304,12 @@ module Dragonstone
             compiler_used = nil
             ["cc", "gcc", "clang"].each do |candidate|
                 begin
-                    status = Process.run(
-                        candidate,
-                        args: ["-std=c11", path, "-o", binary_path],
-                        output: stdout,
-                        error: stderr
-                    )
+                    status = Process.run(candidate, args: ["-std=c11", path, "-o", binary_path], output: stdout, error: stderr)
                     if status.success?
                         compiler_used = candidate
                         break
                     else
-                        stderr.puts "C compiler '#{candidate}' exited with status #{status.exit_status}"
+                        stderr.puts "C compiler '#{candidate}' exited with status #{status.exit_code}"
                         return false
                     end
                 rescue ex : File::NotFoundError
@@ -343,24 +338,12 @@ module Dragonstone
             File.join(dir, "#{base}_run#{EXECUTABLE_SUFFIX}")
         end
 
-        private def run_process(
-            command : String,
-            args : Array(String),
-            stdout : IO,
-            stderr : IO,
-            *,
-            lookup : Bool = true
-        ) : Bool
-            status = Process.run(
-                command,
-                args: args,
-                output: stdout,
-                error: stderr
-            )
+        private def run_process(command : String, args : Array(String), stdout : IO, stderr : IO, *, lookup : Bool = true) : Bool
+            status = Process.run(command, args: args, output: stdout, error: stderr)
             if status.success?
                 true
             else
-                stderr.puts "Command '#{command}' exited with status #{status.exit_status}"
+                stderr.puts "Command '#{command}' exited with status #{status.exit_code}"
                 false
             end
         rescue ex : File::NotFoundError
@@ -375,11 +358,7 @@ module Dragonstone
             false
         end
 
-        private def report_artifact(
-            target : Core::Compiler::Target,
-            artifact : Core::Compiler::BuildArtifact,
-            stdout : IO
-        ) : Nil
+        private def report_artifact(target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO) : Nil
             label = target_label(target)
             if path = artifact.object_path
                 stdout.puts "Built #{label} -> #{path}"
