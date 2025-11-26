@@ -81,15 +81,15 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
 
 ## 3. Backend Architecture & Selection Flow
 ### Layer Overview
-- **Shared front-end (`src/dragonstone/shared/…`)**
+- **Shared front-end (`src/dragonstone/shared/*`)**
     - owns lexing, parsing, AST, semantic analysis, IR construction, and the runtime contracts (values/ABI/FFI) that both engines consume.
-- **Native interpreter (`src/dragonstone/native/…`)**
+- **Native interpreter (`src/dragonstone/native/*`)**
     - evaluates IR/AST directly with the dynamic runtime. This is the compatibility floor and the REPL implementation.
-- **Core compiler + VM (`src/dragonstone/core/…`)**
+- **Core compiler + VM (`src/dragonstone/core/*`)**
     - lowers IR to bytecode/targets via a dedicated frontend/IR/codegen pipeline and executes bytecode inside the VM runtime.
-- **Hybrid orchestration (`src/dragonstone/hybrid/…`)**
+- **Hybrid orchestration (`src/dragonstone/hybrid/*`)**
     - `Runtime::Engine` plus the importer/cache that decides which backend to use per module, exports namespaces, and persists compiled units.
-- **Stdlib modules (`src/dragonstone/stdlib/modules/{shared,native}`)**
+- **Stdlib modules (`src/dragonstone/stdlib/modules/shared or native/*`)**
     - expose metadata that declares backend requirements so the resolver can prevent incompatible mixes up front.
 
 ### Backend Selection Flow
@@ -101,7 +101,7 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
 4. The engine iterates over candidates, using the importer to link dependencies; if a backend raises (unsupported feature, compilation failure, etc.) the next candidate executes transparently.
 5. Successful units export their namespace back into the cache so subsequent modules (or the CLI smoke tests) see identical behavior regardless of backend.
 
-## 3. Branding Information
+## 4. Branding Information
 ### Media
 #### Logo Information
 
