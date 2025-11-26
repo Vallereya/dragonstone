@@ -1,0 +1,3 @@
+name: strings/strings_build
+entry: module.ds
+requires: shared

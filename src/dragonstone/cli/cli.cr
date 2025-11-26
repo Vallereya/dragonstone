@@ -13,20 +13,19 @@ require "./proc/inspect"
 require "./cli_run"
 require "./cli_build"
 require "./cli_repl"
+require "./cli_backend"
 
 module Dragonstone
     module CLI
         extend self 
 
-        def run (
-            argv = ARGV, 
-            stdout : IO = STDOUT,
-            stderr : IO = STDERR
-        ) : Int32
+        def run (argv = ARGV, stdout : IO = STDOUT, stderr : IO = STDERR) : Int32
 
-            return ProcCommon.print_version(stdout)     if ProcCommon.version_command?(argv)
-            return ProcCommon.print_help(stdout)        if ProcCommon.help_command?(argv)
-            return ProcCommon.show_usage(stdout)        if argv.empty?
+            return ProcCommon.print_version(stdout)         if ProcCommon.version_command?(argv)
+            return ProcCommon.print_help(stdout)            if ProcCommon.help_command?(argv)
+            return ProcCommon.show_usage(stdout)            if argv.empty?
+
+            return CLIBackend.capability_command(stdout)    if CLIBackend.capability_command?(argv)
 
             command = argv[0]
             args    = argv[1..-1]
@@ -45,8 +44,14 @@ module Dragonstone
             when "build", "compile"
                 return CLIBuild.build_command(args, stdout, stderr)
 
+            when "build-run", "buildrun"
+                return CLIBuild.build_and_run_command(args, stdout, stderr)
+
             when "repl"
                 return CLIRepl.start_repl(args, stdout, stderr)
+
+            when "backend"
+                return CLIBackend.handle_command(args, stdout, stderr)
 
             else
                 stderr.puts "Unknown command: #{command}"

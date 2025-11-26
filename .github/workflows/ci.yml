@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests-and-builds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: latest
+
+      - name: Install dependencies
+        run: shards install
+
+      - name: Run specs
+        run: crystal spec
+
+      - name: Install LLVM tools
+        run: sudo apt-get update && sudo apt-get install -y llvm
+
+      - name: Build LLVM artifact
+        run: crystal run bin/dragonstone -- build --target llvm examples/hello_world.ds
+
+      - name: Execute LLVM artifact
+        run: lli --entry-function=dragonstone_stub build/core/llvm/dragonstone_llvm.ll
+
+      - name: Build C artifact
+        run: crystal run bin/dragonstone -- build --target c examples/hello_world.ds
+
+      - name: Execute C artifact
+        run: |
+          cc build/core/c/dragonstone_c.c -o build/core/c/dragonstone_c_example
+          build/core/c/dragonstone_c_example
+
+      - name: Build Crystal artifact
+        run: crystal run bin/dragonstone -- build --target crystal examples/hello_world.ds
+
+      - name: Execute Crystal artifact
+        run: crystal run build/core/crystal/dragonstone_crystal.cr
+
+      - name: Build Ruby artifact
+        run: crystal run bin/dragonstone -- build --target ruby examples/hello_world.ds
+
+      - name: Execute Ruby artifact
+        run: ruby build/core/ruby/dragonstone_ruby.rb
+
+      - name: Build and run via bytecode target
+        run: crystal run bin/dragonstone -- build-run --target bytecode examples/hello_world.ds

@@ -7,7 +7,7 @@
 
     Others:
     module      = grouping methods/constants, namespaces.
-    class       = defining classes. 
+    class       = defining classes.
     def         = defining methods.
 
     fun         = single block functions.
@@ -17,7 +17,7 @@
 
 class Person
     happy = true
-  
+
     def greet
         if happy
             echo "Hello!"

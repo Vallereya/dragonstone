@@ -41,25 +41,31 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── 4. Advanced Dragonstone/    -> advanced language usage
     │   ├── 5. Guides/                  -> misc. language guides
     │   ├── README.md                   -> documentation overview
-    │   ├── ARCHITECTURE.md             -> *you are here*
+    │   ├── ARCHITECTURE.md         -> *you are here*
     │   └── ROADMAP.md                  -> project roadmap
     ├── examples/                       -> example .ds files
     ├── scripts/                        -> auto scripts
     ├── spec/                           -> testing files
     ├── tests/                          -> unimportant test .ds files
     ├── bin/                            -> **BUILD**
+    │   ├── resources/
+    │   │   └── dragonstone.rc
     │   ├── dragonstone                 -> main entry
     │   ├── dragonstone.ps1             -> .ps1 script for env
     │   └── dragonstone.bat             -> add to path and handoff to .ps1
     ├── src/                            -> **SOURCE**
     │   ├── dragonstone/
+    │   │   ├── backend_mode.cr         -> backend flag/env helpers
     │   │   ├── cli/                    -> command line interface
-    │   │   ├── core/                   -> compiler
-    │   │   ├── native/                 -> interpreter
-    │   │   ├── shared/                 -> shared modules for both compiler and interpreter
-    │   │   ├── hybrid/                 -> embedded dragonstone
+    │   │   ├── shared/                 -> shared front-end + runtime commons
+    │   │   │   ├── language/           -> lexer, parser, AST, resolver, sema
+    │   │   │   ├── ir/                 -> lowering + IR program objects
+    │   │   │   └── runtime/            -> value contracts, ABI, GC/BC placeholders
+    │   │   ├── native/                 -> interpreter runtime (env, evaluator, builtins, REPL)
+    │   │   ├── core/                   -> compiler + VM (frontend, IR, codegen, targets, runtime helpers)
+    │   │   ├── hybrid/                 -> runtime engine, importer, backend cache/orchestration
     │   │   ├── lib/                    -> lib for C, Crystal and Ruby
-    │   │   ├── stdlib/                 -> dragonstone standard lib
+    │   │   ├── stdlib/                 -> dragonstone standard lib (`modules/{shared,native}` + data)
     │   │   ├── tools/                  -> language tooling
     │   │   └── eden/                   -> native provider for eden
     │   ├── version.cr                  -> version control
@@ -73,7 +79,29 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     └── .gitignore
 ```
 
-## 1. Branding Information
+## 3. Backend Architecture & Selection Flow
+### Layer Overview
+- **Shared front-end (`src/dragonstone/shared/*`)**
+    - owns lexing, parsing, AST, semantic analysis, IR construction, and the runtime contracts (values/ABI/FFI) that both engines consume.
+- **Native interpreter (`src/dragonstone/native/*`)**
+    - evaluates IR/AST directly with the dynamic runtime. This is the compatibility floor and the REPL implementation.
+- **Core compiler + VM (`src/dragonstone/core/*`)**
+    - lowers IR to bytecode/targets via a dedicated frontend/IR/codegen pipeline and executes bytecode inside the VM runtime.
+- **Hybrid orchestration (`src/dragonstone/hybrid/*`)**
+    - `Runtime::Engine` plus the importer/cache that decides which backend to use per module, exports namespaces, and persists compiled units.
+- **Stdlib modules (`src/dragonstone/stdlib/modules/shared or native/*`)**
+    - expose metadata that declares backend requirements so the resolver can prevent incompatible mixes up front.
+
+### Backend Selection Flow
+1. `Dragonstone::CLI` resolves a `BackendMode` from CLI flags or the `DRAGONSTONE_BACKEND` env var (`backend_mode.cr`).
+2. `ModuleResolver` loads the entry file + dependencies, records `#! typed` directives, and caches stdlib data for backend compatibility.
+3. `Runtime::Engine` constructs a candidate list:
+   - Core VM is scheduled first when the IR is untyped, the AST is `IR::Lowering::Supports.vm?`, and stdlib data allows it.
+   - Native interpreter is always added when no data forbids it and acts as the fallback path.
+4. The engine iterates over candidates, using the importer to link dependencies; if a backend raises (unsupported feature, compilation failure, etc.) the next candidate executes transparently.
+5. Successful units export their namespace back into the cache so subsequent modules (or the CLI smoke tests) see identical behavior regardless of backend.
+
+## 4. Branding Information
 ### Media
 #### Logo Information
 

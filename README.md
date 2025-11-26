@@ -4,7 +4,7 @@
 <br>
 
 ## What is Dragonstone?
-Dragonstone is a general purpose, high-level, object-oriented programming language. In its current form it is an interpreted language (with the compiled portion coming soon), inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
+Dragonstone is a general purpose, high-level, object-oriented programming language. Inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
 
 *<font color="color:#5E06EE;">This language is a work in progress. At this stage, much can still be changed.*</font>
 
@@ -15,16 +15,17 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ### Building from Source using Bash (All Platforms)
 1. Clone this repository.
 2. Change directory to this project.
-3. Run the command `shards build` to build *(this gets placed in `./bin`)*.
+3. Run `shards build` to build *(this gets placed in `./bin`)*.
 
 ### Building from Source using Terminal or Powershell (Windows Only)
 1. Clone this repository.
 2. Change directory to this project.
-3. Run the command `shards build` to build *(this gets placed in `./bin`)*.
-4. Run the command `.\bin\dragonstone.bat --rebuild-exe` *(this rebuilds the project with the `--release` flag and the custom icon embedded)*.
-5. <font color="color:#5E06EE;">(Optional)</font> Run the command `.\bin\dragonstone.bat` to add `.\bin` to your user PATH environment variable, allowing you to run `dragonstone` from anywhere. Restart your terminal after this step.
+3. Run `shards build` to build *(this gets placed in `./bin`)*.
+4. Run `.\bin\dragonstone.bat --rebuild-exe` *(this rebuilds the project with the `--release` flag and adds the dragonstone icon)*.
+5. <font color="color:#5E06EE;">(Optional)</font> Run `.\bin\dragonstone.bat` to add `.\bin` to your users PATH environmental variable, allowing you to run `dragonstone` from anywhere. Restart your terminal after this step.
 
-**Note**: You can also just use `shards build` on Windows for a standard build without the custom icon added. <br>
+**Note**: You can also just use `shards build` on Windows for a standard build but this will not use the `--release` flag unless specified otherwise, this will make dragonstone compile/interpret usage significantly slower. <br>
+
 **Note**: Also on Windows you can just use the installer listed in releases. <br>
 
 ## Usage
@@ -35,16 +36,36 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     ./bin/dragonstone.exe run examples/hello_world.ds
 ```
 
-#### Build and Run Files via Compiler (Coming Soon). 
+#### Select Backend (for now this is a temporary flag).
 ```bash
-    dragonstone build examples/hello_world.ds
+    # Select between native (interpreter) or core (compiler) backends.
+    dragonstone run --backend native examples/hello_world.ds
+    dragonstone run --backend core examples/hello_world.ds
 
-    ./bin/dragonstone.exe build examples/hello_world.ds
+    # By default, dragonstone will use native (interpreter),
+    # However, you can change it anytime.
+    DRAGONSTONE_BACKEND=core dragonstone run examples/hello_world.ds
+
+    # Or export the flag once for the CLI:
+    export DRAGONSTONE_BACKEND=core
 ```
 
-#### Run Test/Spec.
+#### Build and Run Files via the Compiler with a target.
+```bash
+    # Supported Target Flags: bytecode, llvm, c, crystal, and ruby
+    dragonstone build --target bytecode examples/hello_world.ds
+
+    # Build and immediately execute the produced artifacts.
+    dragonstone build-run --target bytecode examples/hello_world.ds
+```
+
+#### Run Test/Spec (still building out unit tests).
 ```bash
     crystal spec
+
+    # helper script that runs spec for just a specific backend.
+    ./scripts/backend_ci.sh spec --backend native
+    ./scripts/backend_ci.sh spec --backend core
 ```
 
 ## Benchmark Information
@@ -52,7 +73,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 - <2% overhead at scale.
 - Near identical for loops vs single.
 
-You can run these yourself from the `./scripts` directory. *(This was made using Windows/Powershell)*
+You can run these yourself from the `./scripts` directory.
 
 ### 1 Billion Single Loop Iteration Benchmark (Interpreter)
 ```bash
@@ -70,6 +91,16 @@ You can run these yourself from the `./scripts` directory. *(This was made using
 
     Iterations:     225,810 ms
     Actual Time:    225.81 seconds (3.76 minutes)
+```
+
+### Comparison Context
+For 1 billion iterations of this benchmark:
+```bash
+    Ruby v2.X.X         = ~15-30 minutes    (varies by version)
+    Python v3.X.X       = ~5-15 minutes     (varies by version)
+ -> Dragonstone         = ~3.7 minutes
+    Lua                 = ~1-2 minutes
+    JavaScript          = ~10-30 seconds    (using V8)
 ```
 
 ## Examples
@@ -273,6 +304,7 @@ echo square.call(6)
 ```
 
 #### Examples the interop (some done but still a work in progress).
+###### This calling convention will change when I expand the FFI.
 
 ```crystal
     # Call puts from Ruby

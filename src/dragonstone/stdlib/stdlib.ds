@@ -10,6 +10,4 @@ module Dragonstone
     end
 end
 
-use "./strings/**"
-use "./utilities/**"
-use "./net/**"
+use "./modules/shared/**/module"

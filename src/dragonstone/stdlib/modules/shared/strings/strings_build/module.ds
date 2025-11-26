@@ -1,0 +1,59 @@
+module strings
+    con DEFAULT_CAPACITY = 16
+
+    class Builder
+
+        def initialize(initial_capacity: int)
+            setup_buffer(initial_capacity)
+        end
+
+        def append(str: str)
+            @text = @text + str
+            self
+        end
+
+        def append_char(char: char)
+            @text = @text + ("" + char)
+            self
+        end
+
+        def back
+            if @text.size > 0
+                @text = @text.slice(0, @text.size - 1)
+            end
+            self
+        end
+
+        def to_s -> str
+            @text
+        end
+
+        def increase_capacity(additional: int)
+            self
+        end
+
+        def setup_buffer(initial_capacity: int)
+            @text = ""
+        end
+
+        def next_capacity(needed_capacity: int) -> int
+            needed_capacity
+        end
+    end
+
+    def build
+        builder = Builder.new(DEFAULT_CAPACITY)
+        yield builder
+        result = builder.to_s
+        builder.setup_buffer(0)
+        result
+    end
+
+    def build_with_capacity(initial_capacity: int)
+        builder = Builder.new(initial_capacity)
+        yield builder
+        result = builder.to_s
+        builder.setup_buffer(0)
+        result
+    end
+end

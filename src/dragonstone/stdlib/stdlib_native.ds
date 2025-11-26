@@ -1,0 +1,6 @@
+# Dragonstone StdLib (Native-only extensions).
+#
+# Import this file in addition to `stdlib` if you need interpreter-only
+# modules (e.g., utilities backed by Crystal FFI bindings).
+
+use "./modules/native/**/module"

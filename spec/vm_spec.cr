@@ -1,13 +1,19 @@
 require "spec"
-require "../src/dragonstone/shared/lexer/lexer"
-require "../src/dragonstone/shared/parser/parser"
+require "../src/dragonstone/shared/language/lexer/lexer"
+require "../src/dragonstone/shared/language/parser/parser"
+require "../src/dragonstone/shared/language/sema/type_checker"
+require "../src/dragonstone/shared/ir/program"
 require "../src/dragonstone/core/compiler/compiler"
-require "../src/dragonstone/shared/vm/vm"
+require "../src/dragonstone/core/vm/vm"
 
 private def compile_bytecode(source : String) : Dragonstone::CompiledCode
     tokens = Dragonstone::Lexer.new(source).tokenize
     ast = Dragonstone::Parser.new(tokens).parse
-    Dragonstone::Compiler.compile(ast)
+    checker = Dragonstone::Language::Sema::TypeChecker.new
+    analysis = checker.analyze(ast)
+    program = Dragonstone::IR::Program.new(ast, analysis)
+    artifact = Dragonstone::Core::Compiler.build(program)
+    artifact.bytecode.not_nil!
 end
 
 describe Dragonstone::VM do

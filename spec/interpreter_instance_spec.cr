@@ -1,13 +1,18 @@
 require "spec"
-require "../src/dragonstone/shared/lexer/lexer"
-require "../src/dragonstone/shared/parser/parser"
+require "../src/dragonstone/shared/language/lexer/lexer"
+require "../src/dragonstone/shared/language/parser/parser"
+require "../src/dragonstone/shared/language/resolver/resolver"
+require "../src/dragonstone/shared/language/sema/type_checker"
 require "../src/dragonstone/native/interpreter/interpreter"
 
 private def run_program(source : String, typing : Bool = false)
     tokens = Dragonstone::Lexer.new(source).tokenize
     ast = Dragonstone::Parser.new(tokens).parse
     interpreter = Dragonstone::Interpreter.new(false, typing)
-    interpreter.interpret(ast)
+    analysis = Dragonstone::Language::Sema::TypeChecker.new.analyze(ast, typed: typing)
+    graph = Dragonstone::ModuleGraph.new
+    graph.add(Dragonstone::ModuleNode.new("<spec>", ast, typing))
+    interpreter.interpret(ast, graph, analysis)
 end
 
 describe "Case and select control flow" do
