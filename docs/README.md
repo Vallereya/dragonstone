@@ -24,12 +24,13 @@ Dragonstone is a language meant to provide programmers with happiness and choice
     - Extensions: (Coming Soon) How to get and install IDE extensions.
 
 2. Introduction
-    - These guides provide an quick overview of some of the various capabilities Dragonstone has to offer, including some examples of how they work, for more code examples visit the `./examples` directory.
+    - These guides provides a quick introductory overview of some of the various basic capabilities Dragonstone has to offer, including some examples of how they work, for more code examples visit the `./examples` directory.
+    - This includes Hello World, Comments, Variables and Strings.
 
-3. Basic Dragonstone
+3. Specification
     - (Coming Soon)
 
-4. Advanced Dragonstone
+4. Advanced Specification
     - (Coming Soon)
 
 5. Guides

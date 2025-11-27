@@ -55,7 +55,6 @@
 #####   <h6 align="center">         `v0.0.2 -> v0.0.3`
 
 ```diff
-
 + Create new/port previous AST, Parser, Lexer, Compiler, Interpreter and VM.
 + VM in Crystal: frames, call stack, globals/envs, up-values placeholders
 + Refactor for stack-based VM and single-pass bytecode.
@@ -112,7 +111,7 @@
 
 ```diff
 + Escapes: raise, begin/rescue/redo/retry/do/next/ensure, yield, &block capture.
-+ Add support for Array, map (hash), and bag(like set but not .set that's different) on core collections via blocks.
++ Add support for Array, map (hash), and bag(like set but not .set that's different) on core collections.
 + Add support for .slice and .display/.inspect (my version of to_s/inspect).
 + Truthiness rules (nil/false, rest truthy, falsey).
 + Escapes are implemented but needs extended to each, map and bag.
@@ -134,10 +133,6 @@
 
 ```diff
 + The `Great Refactor`: (Part Two)              Pre-Alpha Refactor.
-+ REPL needs to be wired to the CLI.
-+ Update folder structure so its properly splitup for bootstrapping and separate compiler.
-+ Modularize files to better support separate interpreter and compiler.
-+ Flesh out the compiler for later targets.
 ```
 
 ---
@@ -150,6 +145,17 @@
 #####   <h6 align="center">         `v0.1.0 -> v0.1.1`
 
 ```diff
++ REPL needs to be wired to the CLI.
++ Update folder structure so its properly splitup for bootstrapping and separate compiler.
++ Modularize files to better support separate interpreter and compiler.
++ Flesh out the compiler for later targets.
++ Targets should be setup for artifacts for DVM (Bytecode), LLVM (IR), C, Crystal, and Ruby.
+```
+
+###     <h2 align="center">         Phase Two
+#####   <h6 align="center">         `v0.1.1 -> v0.1.2`
+
+```diff
 - Tagged v0.1.0, signed binaries, reproducible build notes, installer/uninstaller, and setup a proper build/release pipeline.
 - Set CI + cross-platform builds (Linux/macOS/Windows).
 - Maximize portability/native cross-platform.
@@ -157,8 +163,8 @@
 - Flesh out the docs, samples, examples, tutorials, changelogs, and some versioned grammar.
 ```
 
-###     <h2 align="center">         Phase Two
-#####   <h6 align="center">         `v0.1.1 -> v0.1.2`
+###     <h2 align="center">         Phase Three
+#####   <h6 align="center">         `v0.1.2 -> v0.1.3`
 
 ```diff
 - VM unwind stack w/ exception objects.
@@ -168,8 +174,8 @@
 - For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics. Full/Expand exception handling.
 ```
 
-###     <h2 align="center">         Phase Three
-#####   <h6 align="center">         `v0.1.2 -> v0.1.3`
+###     <h2 align="center">         Phase Four
+#####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
 - Freeze current grammar subset if needed on C side.
@@ -179,26 +185,11 @@
 - Implement optional Garbage Collection (c-like or crystal-like).
 ```
 
-###     <h2 align="center">         Phase Four
-#####   <h6 align="center">         `v0.1.3 -> v0.1.4`
-
-```diff
-- Start C lib with something basic.
-- Start Crystal lib with something basic.
-- Start Ruby lib with something basic.
-- Start expanding the stdlib.
-- Setup net (socket) stdlib.
-```
-
 ###     <h2 align="center">         Phase Five
 #####   <h6 align="center">         `v0.1.4 -> v0.1.5`
 
 ```diff
 - The `Great Refactor`: (Part Three)            Alpha Refactor.
-- Begin Bootstrapping, remove donors so everything runs on dragonstone.
-- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI).
-- Port any stdlib to dragonstone if there is any not.
-- Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
 ```
 
 ---
@@ -211,22 +202,22 @@
 #####   <h6 align="center">         `v0.1.5 -> v0.1.6`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Start C lib with something basic.
+- Start Crystal lib with something basic.
+- Start Ruby lib with something basic.
+- Start expanding and reformat the stdlib.
+- Setup net (socket) stdlib.
 ```
 
 ###     <h2 align="center">         Phase Two
 #####   <h6 align="center">         `v0.1.6 -> v0.1.7`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Begin Bootstrapping, remove donors so everything runs on dragonstone.
+- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI).
+- Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
+- Port any stdlib to dragonstone if there is any not.
+- C, Crystal, and Ruby libs expanded into stdlib, they are made separate then added as an stdlib.
 ```
 
 ###     <h2 align="center">         Phase Three
@@ -256,10 +247,6 @@
 
 ```diff
 - The `Great Refactor`: (Part Four)             Beta Refactor.
-- 
-- 
-- 
-- 
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>
@@ -336,8 +323,8 @@
 #####   <h6 align="center">         `v0.8.0 -> v0.9.0`
 
 ```diff
-- 
-- 
+- VSCode extension completed.
+- dragonstone-lang.org and docs.dragonstone-lang.org completed.
 - 
 - 
 - 
@@ -348,10 +335,6 @@
 
 ```diff
 - The `Great Refactor`: (Part Five & Final)     Release Refactor.
-- VSCode extension completed.
-- dragonstone-lang.org and docs.dragonstone-lang.org completed.
-- 
-- 
 ```
 <h1 align="center">                    The Future of Dragonstone        </h1>
 <h1 align="center">                     & Transition to Release         </h1>
