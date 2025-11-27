@@ -4,7 +4,7 @@
 <br>
 
 ## What is Dragonstone?
-Dragonstone is a general purpose, high-level, object-oriented programming language. Inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
+Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice. 
 
 *<font color="color:#5E06EE;">This language is a work in progress. At this stage, much can still be changed.*</font>
 
