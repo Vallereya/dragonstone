@@ -156,11 +156,11 @@
 #####   <h6 align="center">         `v0.1.1 -> v0.1.2`
 
 ```diff
-- Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
-- Tagged version & signed binaries.
-- Setup installer/uninstaller.
-- Reproducible build notes.
-- Flesh out what the versioned grammar is.
++ Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
++ Tagged version & signed binaries.
++ Setup installer/uninstaller.
++ Reproducible build notes.
++ Flesh out what the versioned grammar is.
 ```
 
 ###     <h2 align="center">         Phase Three
