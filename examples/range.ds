@@ -23,3 +23,6 @@ end
 # TODO: Modernize the .to_a into something more meaningful.
 range = 1..5
 echo range.to_a
+
+r = 1...5
+echo r.to_a

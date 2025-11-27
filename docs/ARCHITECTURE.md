@@ -37,8 +37,8 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── 0. Index/                   -> project assets
     │   ├── 1. Getting Started/         -> language quickstart guides
     │   ├── 2. Introduction/            -> language features
-    │   ├── 3. Basic Dragonstone/       -> basic language usage
-    │   ├── 4. Advanced Dragonstone/    -> advanced language usage
+    │   ├── 3. Specification/           -> basic language usage
+    │   ├── 4. Advanced Specification/  -> advanced language usage
     │   ├── 5. Guides/                  -> misc. language guides
     │   ├── README.md                   -> documentation overview
     │   ├── ARCHITECTURE.md         -> *you are here*
