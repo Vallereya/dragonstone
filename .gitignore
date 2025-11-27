@@ -2,9 +2,6 @@
 # Here I'm putting in files and folders
 # to be ignored from git.
 #
-# Cross ignore for dragonstone and
-# dragonstone-lang.org website.
-#
 
 # Ignore any Output/Build Files.
 dragonstone.exe
@@ -27,24 +24,10 @@ installer
 release
 
 # Ignore any Output/Build Cache from testing.
-tmp
-.tmp
 .cache
-.c
-.c_cache
-.ruby
-.ruby_cache
-.crystal
-.crystal_cache
-
-# Ignore my notes.
-REFACTOR.md
-ROADMAP-IDEALS.md
 
 # Ignore any IDE folders.
 .vscode
-.idea
-.vim
 
 # Annoying IDE ignores.
 .fake

@@ -1,0 +1,11 @@
+#[ 
+    EDEN PROVIDER
+]#
+
+module Dragonstone
+    module EDEN
+        class Provider
+
+        end
+    end
+end
