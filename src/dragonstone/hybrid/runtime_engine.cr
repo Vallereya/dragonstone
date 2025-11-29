@@ -62,9 +62,9 @@ module Dragonstone
                 when DragonModule
                     Bytecode::ModuleValue.new(value.name)
                 when DragonClass
-                    Bytecode::ClassValue.new(value.name)
+                    Bytecode::ClassValue.new(value.name, nil, value.abstract?)
                 when DragonInstance
-                    Bytecode::InstanceValue.new(Bytecode::ClassValue.new(value.klass.name))
+                    Bytecode::InstanceValue.new(Bytecode::ClassValue.new(value.klass.name, nil, value.klass.abstract?))
                 when DragonEnumMember
                     enum_val = Bytecode::EnumValue.new(value.enum.name)
                     Bytecode::EnumMemberValue.new(enum_val, value.name, value.value)
@@ -101,9 +101,9 @@ module Dragonstone
                 when Bytecode::ModuleValue
                     DragonModule.new(value.name)
                 when Bytecode::ClassValue
-                    DragonClass.new(value.name)
+                    DragonClass.new(value.name, is_abstract: value.abstract?)
                 when Bytecode::InstanceValue
-                    DragonInstance.new(DragonClass.new(value.klass.name))
+                    DragonInstance.new(DragonClass.new(value.klass.name, is_abstract: value.klass.abstract?))
                 when Bytecode::EnumValue
                     DragonEnum.new(value.name)
                 when Bytecode::EnumMemberValue
@@ -132,9 +132,9 @@ module Dragonstone
                     end
                     param_specs << Bytecode::ParameterSpec.new(idx, param.type, param.instance_var_name)
                 end
-                signature = Bytecode::FunctionSignature.new(param_specs, func.return_type)
+                signature = Bytecode::FunctionSignature.new(param_specs, func.return_type, false)
                 name = func.name || "<lambda>"
-                Bytecode::FunctionValue.new(name, signature, chunk)
+                Bytecode::FunctionValue.new(name, signature, chunk, signature.abstract?)
             end
         end
 

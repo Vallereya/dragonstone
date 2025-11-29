@@ -473,6 +473,9 @@ module Dragonstone
             self_value : Bytecode::Value
         ) : Bytecode::Value
             if fn = container.lookup_method(method)
+                if fn.abstract?
+                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
+                end
                 return with_container_context(container) do
                     call_function_value(fn, args, block_value, self_value)
                 end
@@ -488,6 +491,9 @@ module Dragonstone
             block_value : Bytecode::BlockValue?
         ) : Bytecode::Value
             if fn = instance.klass.lookup_method(method)
+                if fn.abstract?
+                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}")
+                end
                 return with_container_context(instance.klass) do
                     call_function_value(fn, args, block_value, instance)
                 end
@@ -1165,6 +1171,7 @@ module Dragonstone
                     push(Bytecode::ModuleValue.new(name))
                 when OPC::MAKE_CLASS
                     name_idx = fetch_byte
+                    abstract_flag = fetch_byte
                     super_idx = fetch_byte
                     name = current_code.names[name_idx]
                     superclass = nil
@@ -1181,7 +1188,7 @@ module Dragonstone
                             end
                         end
                     end
-                    push(Bytecode::ClassValue.new(name, superclass))
+                    push(Bytecode::ClassValue.new(name, superclass, abstract_flag == 1))
                 when OPC::MAKE_STRUCT
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
@@ -1275,7 +1282,7 @@ module Dragonstone
                     name = current_code.names[name_idx]
                     signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
-                    push(Bytecode::FunctionValue.new(name, signature, code))
+                    push(Bytecode::FunctionValue.new(name, signature, code, signature.abstract?))
                 when OPC::MAKE_BLOCK
                     signature_idx = fetch_byte
                     code_idx = fetch_byte
@@ -1701,6 +1708,9 @@ module Dragonstone
                 end
                 raise "Undefined function: #{name}"
             end
+            if value.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{name}")
+            end
             self_value = @pending_self
             @pending_self = nil
             signature = value.signature
@@ -1710,6 +1720,9 @@ module Dragonstone
         end
 
         private def call_function_value(fn : Bytecode::FunctionValue, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?, self_value : Bytecode::Value? = nil) : Bytecode::Value
+            if fn.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{fn.name}")
+            end
             final_args = coerce_call_args(fn.signature, args, block_value, fn.name)
             depth_before = @frames.size
             push_callable_frame(fn.code, fn.signature, final_args, block_value, fn.name, self_value)
@@ -2564,6 +2577,13 @@ module Dragonstone
             when Bytecode::ClassValue
                 if method == "new"
                     raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
+                    if receiver.abstract?
+                        raise ::Dragonstone::TypeError.new("Cannot instantiate abstract class #{receiver.name}")
+                    end
+                    missing = receiver.unimplemented_abstract_methods
+                    unless missing.empty?
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
+                    end
                     instance = Bytecode::InstanceValue.new(receiver)
                     if init = receiver.lookup_method("initialize")
                         call_function_value(init, args, nil, instance)
@@ -2575,6 +2595,10 @@ module Dragonstone
             when Bytecode::StructValue
                 if method == "new"
                     raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
+                    missing = receiver.unimplemented_abstract_methods
+                    unless missing.empty?
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
+                    end
                     instance = Bytecode::InstanceValue.new(receiver)
                     if init = receiver.lookup_method("initialize")
                         call_function_value(init, args, nil, instance)

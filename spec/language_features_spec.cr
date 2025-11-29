@@ -340,4 +340,23 @@ DS
             Dragonstone.run(bad_source)
         end
     end
+
+    it "supports abstract classes across native and core backends" do
+        source = <<-DS
+abstract class Animal
+    abstract def sound
+    end
+end
+
+class Dog < Animal
+    def sound
+        "woof"
+    end
+end
+
+echo Dog.new.sound
+DS
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Native).output.should eq("woof\n")
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Core).output.should eq("woof\n")
+    end
 end

@@ -62,7 +62,7 @@ module Dragonstone
         RAISE           = 80    # RAISE                                                     -> pop value and raise exception
         CHECK_RETHROW   = 81    # CHECK_RETHROW                                             -> rethrow pending exception after ensure
         MAKE_MODULE     = 82    # [MAKE_MODULE, name_index]                                 -> push new module
-        MAKE_CLASS      = 83    # [MAKE_CLASS, name_index, super_const_idx]                 -> push new class
+        MAKE_CLASS      = 83    # [MAKE_CLASS, name_index, abstract_flag, super_const_idx]  -> push new class
         MAKE_STRUCT     = 84    # [MAKE_STRUCT, name_index]                                 -> push new struct
         MAKE_ENUM       = 85    # [MAKE_ENUM, name_index, value_method_const_idx]           -> push new enum
         ENTER_CONTAINER = 86    # ENTER_CONTAINER                                           -> use top of stack as current container

@@ -11,6 +11,22 @@ private def with_tmpdir(&block : String ->)
     end
 end
 
+private def expect_net_module_available(backend : BackendMode)
+    with_tmpdir do |dir|
+        script = File.join(dir, "net_ok.ds")
+        File.write(script, <<-DS)
+use "net"
+
+server = net.server
+handle = net::Native.listen_tcp("127.0.0.1", 0, net::DEFAULT_BACKLOG)
+net::Native.close(handle)
+echo "net-ok"
+DS
+        result = Dragonstone.run_file(script, backend: backend)
+        result.output.should contain("net-ok")
+    end
+end
+
 require "../src/dragonstone"
 
 describe "Dragonstone standard library" do
@@ -60,5 +76,13 @@ DS
                 end
             end
         end
+    end
+
+    it "exposes net helpers on the native backend" do
+        expect_net_module_available(BackendMode::Native)
+    end
+
+    it "exposes net helpers on the core backend" do
+        expect_net_module_available(BackendMode::Core)
     end
 end

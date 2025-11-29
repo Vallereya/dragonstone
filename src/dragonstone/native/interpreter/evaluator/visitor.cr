@@ -493,11 +493,17 @@ module Dragonstone
             type_closure = current_type_scope.dup
 
             container = current_container
+            if node.abstract && !container
+                runtime_error(InterpreterError, "'abstract def' is only allowed inside classes or modules", node)
+            end
             if node.typed_parameters.any?(&.assigns_instance_variable?) && (!container.is_a?(DragonClass) || node.receiver)
                 runtime_error(InterpreterError, "Instance variable parameters are only allowed inside classes", node)
             end
 
             if receiver_node = node.receiver
+                if node.abstract
+                    runtime_error(InterpreterError, "Singleton methods cannot be abstract", node)
+                end
                 target = receiver_node.accept(self)
                 define_singleton_method(target, node, closure, type_closure)
                 return nil
@@ -521,7 +527,8 @@ module Dragonstone
                     container,
                     node.rescue_clauses,
                     node.return_type,
-                    visibility: node.visibility
+                    visibility: node.visibility,
+                    is_abstract: node.abstract
                 )
                 container.define_method(node.name, method)
                 nil
@@ -547,7 +554,8 @@ module Dragonstone
                 owner,
                 node.rescue_clauses,
                 node.return_type,
-                visibility: node.visibility
+                visibility: node.visibility,
+                is_abstract: node.abstract
             )
             owner.define_method(node.name, method)
         end
@@ -674,7 +682,7 @@ module Dragonstone
                     end
                     superclass = superclass_value.as(DragonClass)
                 end
-                new_class = DragonClass.new(node.name, superclass)
+                new_class = DragonClass.new(node.name, superclass, node.abstract)
                 if container
                     define_container_constant(container, node.name, new_class, node)
                 else
@@ -682,6 +690,8 @@ module Dragonstone
                 end
                 new_class
             end
+
+            klass.mark_abstract! if node.abstract && !klass.abstract?
 
             with_container(klass) do
                 @container_definition_depth += 1
@@ -692,6 +702,13 @@ module Dragonstone
                 ensure
                     pop_scope
                     @container_definition_depth -= 1
+                end
+            end
+
+            unless klass.abstract?
+                missing = klass.unimplemented_abstract_methods
+                unless missing.empty?
+                    runtime_error(TypeError, "#{klass.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}", node)
                 end
             end
             klass

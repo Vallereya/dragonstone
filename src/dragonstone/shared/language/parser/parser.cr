@@ -29,6 +29,7 @@ module Dragonstone
             :RETRY,
             :RAISE,
             :CON, 
+            :ABSTRACT,
             :DEF, 
             :CLASS, 
             :MODULE, 
@@ -232,6 +233,8 @@ module Dragonstone
                 parse_module_definition
             when :CLASS
                 parse_class_definition
+            when :ABSTRACT
+                parse_abstract_prefixed_statement
             when :CON
                 parse_constant_declaration
             when :ENUM
@@ -313,6 +316,14 @@ module Dragonstone
             case current_token.type
             when :DEF
                 parse_function_def(visibility)
+            when :ABSTRACT
+                expect(:ABSTRACT)
+                case current_token.type
+                when :DEF
+                    parse_function_def(visibility, is_abstract: true)
+                else
+                    error("Expected def after #{visibility} abstract", current_token)
+                end
             when :GETTER
                 parse_accessor_macro(:getter, visibility)
             when :SETTER
@@ -393,7 +404,19 @@ module Dragonstone
             AST::ModuleDefinition.new(name_token.value.as(String), body, location: module_token.location)
         end
 
-        private def parse_class_definition : AST::Node
+        private def parse_abstract_prefixed_statement : AST::Node
+            expect(:ABSTRACT)
+            case current_token.type
+            when :CLASS
+                parse_class_definition(is_abstract: true)
+            when :DEF
+                parse_function_def(:public, is_abstract: true)
+            else
+                error("Expected 'class' or 'def' after 'abstract'", current_token)
+            end
+        end
+
+        private def parse_class_definition(is_abstract : Bool = false) : AST::Node
             class_token = expect(:CLASS)
             name_token = expect(:IDENTIFIER)
             superclass = nil
@@ -403,7 +426,7 @@ module Dragonstone
             end
             body = parse_block([:END])
             expect(:END)
-            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, location: class_token.location)
+            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, is_abstract, location: class_token.location)
         end
 
         private def parse_struct_declaration : AST::Node
@@ -458,7 +481,7 @@ module Dragonstone
             AST::AliasDefinition.new(name_token.value.as(String), type_expr, location: alias_token.location)
         end
 
-        private def parse_function_def(visibility : Symbol = :public) : AST::Node
+        private def parse_function_def(visibility : Symbol = :public, is_abstract : Bool = false) : AST::Node
             def_token = expect(:DEF)
             receiver_node = nil
             name_token = nil
@@ -479,7 +502,24 @@ module Dragonstone
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, visibility: visibility, receiver: receiver_node, location: def_token.location)
+
+            if is_abstract
+                unless body.empty? && rescue_clauses.empty?
+                    error("Abstract methods cannot have a body", def_token)
+                end
+            end
+
+            AST::FunctionDef.new(
+                name_token.value.as(String),
+                parameters,
+                body,
+                rescue_clauses,
+                return_type,
+                visibility: visibility,
+                receiver: receiver_node,
+                is_abstract: is_abstract,
+                location: def_token.location
+            )
         end
 
         private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)

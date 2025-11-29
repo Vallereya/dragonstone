@@ -167,10 +167,10 @@
 #####   <h6 align="center">         `v0.1.2 -> v0.1.3`
 
 ```diff
-- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
-- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
++ Reformat the stdlib.
++ Add a simple networking stdlib.
 - Implement support for concurrency.
-- Implement abstract classes and abstract methods.
++ Implement abstract classes and abstract def.
 - Implement optional Garbage Collection (c-like or crystal-like).
 ```
 
@@ -204,9 +204,9 @@
 ```diff
 - Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
 - Start work for the `forge` package manager.
-- Add dev more commands/flags.
-- Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
-- Start expanding and reformat the stdlib, add at least net (socket) stdlib.
+- Add dev more commands/flags and setup micro-benchmarks, verify parser & bytecode coverage for all operators.
+- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
+- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
 ```
 
 ###     <h2 align="center">         Phase Two
@@ -228,7 +228,7 @@
 - Expand Crystal lib.
 - Expand Ruby lib.
 - C, Crystal, and Ruby libs expanded into stdlib, they are made separate then added as an stdlib.
-- Port any stdlib to dragonstone if there is any not.
+- Expand the stdlib and port any stdlib to dragonstone if there is any not.
 ```
 
 ###     <h2 align="center">         Phase Four
@@ -238,7 +238,7 @@
 - Begin Bootstrapping.
 - Remove donors so everything runs on dragonstone.
 - No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI).
-- Freeze current grammar subset if needed on C side.
+- Freeze current grammar subset if needed on C side, and finish target build outs for the compiler.
 - Fix `--backend` flags.
 ```
 

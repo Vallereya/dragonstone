@@ -8,8 +8,9 @@ module Dragonstone
             getter rescue_clauses : RescueArray
             getter visibility : Symbol
             getter receiver : Node?
+            getter abstract : Bool
 
-            def initialize(name : String, typed_parameters : Array(TypedParameter), body : NodeArray, rescue_clauses : RescueArray = [] of RescueClause, return_type : TypeExpression? = nil, visibility : Symbol = :public, receiver : Node? = nil, location : Location? = nil)
+            def initialize(name : String, typed_parameters : Array(TypedParameter), body : NodeArray, rescue_clauses : RescueArray = [] of RescueClause, return_type : TypeExpression? = nil, visibility : Symbol = :public, receiver : Node? = nil, is_abstract : Bool = false, location : Location? = nil)
                 super(location: location)
                 @name = name
                 @typed_parameters = typed_parameters
@@ -18,6 +19,7 @@ module Dragonstone
                 @return_type = return_type
                 @visibility = visibility
                 @receiver = receiver
+                @abstract = is_abstract
             end
 
             def parameters : Array(String)

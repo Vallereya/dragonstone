@@ -1,3 +1,4 @@
+require "set"
 require "../../shared/language/ast/ast"
 require "../../shared/runtime/ffi_module"
 require "../../shared/runtime/symbol"
@@ -19,8 +20,10 @@ module Dragonstone
         class FunctionSignature
             getter parameters : Array(ParameterSpec)
             getter return_type : AST::TypeExpression?
+            getter? abstract : Bool
 
-            def initialize(@parameters : Array(ParameterSpec), @return_type : AST::TypeExpression?)
+            def initialize(@parameters : Array(ParameterSpec), @return_type : AST::TypeExpression?, is_abstract : Bool = false)
+                @abstract = is_abstract
             end
         end
 
@@ -28,8 +31,10 @@ module Dragonstone
             getter name : String
             getter signature : FunctionSignature
             getter code : CompiledCode
+            getter? abstract : Bool
 
-            def initialize(@name : String, @signature : FunctionSignature, @code : CompiledCode)
+            def initialize(@name : String, @signature : FunctionSignature, @code : CompiledCode, is_abstract : Bool = false)
+                @abstract = is_abstract
             end
         end
 
@@ -166,13 +171,40 @@ module Dragonstone
 
         class ClassValue < ModuleValue
             getter superclass : ClassValue?
+            getter? abstract : Bool
 
-            def initialize(name : String, @superclass : ClassValue? = nil)
+            def initialize(name : String, @superclass : ClassValue? = nil, is_abstract : Bool = false)
                 super(name)
+                @abstract = is_abstract
             end
 
             def lookup_method(name : String)
                 super || @superclass.try &.lookup_method(name)
+            end
+
+            def mark_abstract!
+                @abstract = true
+            end
+
+            def unimplemented_abstract_methods : Set(String)
+                lineage = [] of ClassValue
+                current : ClassValue? = self
+                while current
+                    lineage << current
+                    current = current.superclass
+                end
+
+                pending = Set(String).new
+                lineage.reverse_each do |klass|
+                    klass.methods.each do |name, method|
+                        if method.abstract?
+                            pending.add(name)
+                        else
+                            pending.delete(name)
+                        end
+                    end
+                end
+                pending
             end
         end
 

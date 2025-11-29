@@ -45,7 +45,7 @@ describe Dragonstone::ModuleResolver do
         with_tmpdir do |dir|
             dep_dir = File.join(dir, "dep")
             Dir.mkdir_p(dep_dir)
-            File.write(File.join(dep_dir, ".dragonstone-module.yml"), <<-YAML)
+            File.write(File.join(dep_dir, "module.yml"), <<-YAML)
 name: dep
 entry: module.ds
 requires: shared
@@ -71,7 +71,7 @@ DS
         with_tmpdir do |dir|
             dep_dir = File.join(dir, "dep")
             Dir.mkdir_p(dep_dir)
-            File.write(File.join(dep_dir, ".dragonstone-module.yml"), <<-YAML)
+            File.write(File.join(dep_dir, "module.yml"), <<-YAML)
 name: files
 entry: module.ds
 requires: native

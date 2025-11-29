@@ -226,4 +226,22 @@ describe "Interpreter instance variable support" do
             run_program(source)
         end
     end
+
+    it "requires concrete subclasses to implement abstract methods" do
+        source = <<-DS
+        abstract class Animal
+            abstract def speak
+            end
+        end
+
+        class Cat < Animal
+        end
+
+        Cat.new
+        DS
+
+        expect_raises(Dragonstone::TypeError) do
+            run_program(source)
+        end
+    end
 end

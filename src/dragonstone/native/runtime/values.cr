@@ -1,3 +1,4 @@
+require "set"
 require "../../shared/language/ast/ast"
 require "../../shared/language/diagnostics/errors"
 require "../../shared/typing/types"
@@ -118,12 +119,14 @@ module Dragonstone
         getter return_type : AST::TypeExpression?
         getter visibility : Symbol
         getter owner : DragonModule
+        getter? abstract : Bool
         @parameter_names : Array(String)
 
-        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @owner : DragonModule, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, visibility : Symbol = :public)
+        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @owner : DragonModule, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, visibility : Symbol = :public, is_abstract : Bool = false)
             @typed_parameters = typed_parameters
             @parameter_names = typed_parameters.map(&.name)
             @visibility = visibility
+            @abstract = is_abstract
         end
 
         def parameters : Array(String)
@@ -140,7 +143,8 @@ module Dragonstone
                 new_owner,
                 @rescue_clauses.dup,
                 @return_type,
-                visibility: @visibility
+                visibility: @visibility,
+                is_abstract: @abstract
             )
         end
     end
@@ -184,8 +188,9 @@ module Dragonstone
         getter superclass : DragonClass?
         getter ivar_type_annotations : Hash(String, AST::TypeExpression?)
         getter ivar_type_descriptors : Hash(String, Typing::Descriptor?)
+        getter? abstract : Bool
 
-        def initialize(name : String, @superclass : DragonClass? = nil)
+        def initialize(name : String, @superclass : DragonClass? = nil, is_abstract : Bool = false)
             super(name)
             if @superclass
                 parent = @superclass.not_nil!
@@ -195,6 +200,7 @@ module Dragonstone
                 @ivar_type_annotations = {} of String => AST::TypeExpression?
                 @ivar_type_descriptors = {} of String => Typing::Descriptor?
             end
+            @abstract = is_abstract
         end
 
         def lookup_method(name : String) : MethodDefinition?
@@ -220,6 +226,31 @@ module Dragonstone
 
         def cache_ivar_descriptor(name : String, descriptor : Typing::Descriptor)
             @ivar_type_descriptors[name] = descriptor
+        end
+
+        def mark_abstract!
+            @abstract = true
+        end
+
+        def unimplemented_abstract_methods : Set(String)
+            lineage = [] of DragonClass
+            current : DragonClass? = self
+            while current
+                lineage << current
+                current = current.superclass
+            end
+
+            pending = Set(String).new
+            lineage.reverse_each do |klass|
+                klass.@methods.each do |name, method|
+                    if method.abstract?
+                        pending.add(name)
+                    else
+                        pending.delete(name)
+                    end
+                end
+            end
+            pending
         end
     end
 

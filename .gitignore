@@ -3,6 +3,9 @@
 # to be ignored from git.
 #
 
+.tmp
+.crystal-cache
+
 # Ignore any Output/Build Files.
 dragonstone.exe
 dragonstone.pdb

@@ -57,6 +57,7 @@ module Dragonstone
             do 
             def 
             fun 
+            abstract
             module 
             class 
             return 
@@ -570,6 +571,7 @@ module Dragonstone
                     when "do" then :DO
                     when "def" then :DEF
                     when "fun" then :FUN
+                    when "abstract" then :ABSTRACT
                     when "module" then :MODULE
                     when "class" then :CLASS
                     when "return" then :RETURN

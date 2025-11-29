@@ -1,0 +1,24 @@
+#[
+    stdlib for "Net" Example
+
+    This standard library example shows
+    how to use the built-in networking.
+]#
+
+# This is a very basic HTTP server.
+use "net"
+
+server = net.server
+
+address = server.bind_tcp(8080, "0.0.0.0")
+
+# echo's "Listening on http://#{address}\n"
+test = net::Test.new
+test.server
+
+server.listen do |context|
+    context.response.set_content_type("text/plain")
+    context.response.print("Hello world, got #{context.request.path}!")
+end
+
+# You can run `curl http://localhost:8080/hello` in another terminal to see a response.

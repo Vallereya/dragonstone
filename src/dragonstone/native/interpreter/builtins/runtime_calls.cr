@@ -1,6 +1,15 @@
 module Dragonstone
     class Interpreter
         private def instantiate_class(klass : DragonClass, args : Array(RuntimeValue), node : AST::MethodCall)
+            if klass.abstract?
+                runtime_error(TypeError, "Cannot instantiate abstract class #{klass.name}", node)
+            end
+
+            missing = klass.unimplemented_abstract_methods
+            unless missing.empty?
+                runtime_error(TypeError, "#{klass.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}", node)
+            end
+
             instance = DragonInstance.new(klass)
             initializer = klass.lookup_method("initialize")
             
@@ -100,6 +109,10 @@ module Dragonstone
         private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), block_value : Function?, call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
             final_args = args.dup
             expected_params = method_def.parameters.size
+
+            if method_def.abstract?
+                runtime_error(TypeError, "Cannot invoke abstract method #{method_def.name}", call_location)
+            end
 
             if block_value
                 if final_args.size == expected_params

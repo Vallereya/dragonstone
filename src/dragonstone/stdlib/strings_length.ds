@@ -1,1 +1,1 @@
-use "./strings/strings_length"
+use "modules/shared/strings/strings_length/module"

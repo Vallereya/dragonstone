@@ -1,3 +1,202 @@
 module net
+    con DEFAULT_BACKLOG = 128
+
+    module Native
+        def listen_tcp(host: str, port: int, backlog: int) -> int
+            ffi.call_crystal("net_listen_tcp", [host, port, backlog])
+        end
+        def self.listen_tcp(host: str, port: int, backlog: int) -> int
+            listen_tcp(host, port, backlog)
+        end
+
+        def accept_request(listener: int)
+            ffi.call_crystal("net_accept_request", [listener])
+        end
+        def self.accept_request(listener: int)
+            accept_request(listener)
+        end
+
+        def send_response(conn_id: int, status: int, headers: array, body: str)
+            ffi.call_crystal("net_send_response", [conn_id, status, headers, body])
+        end
+        def self.send_response(conn_id: int, status: int, headers: array, body: str)
+            send_response(conn_id, status, headers, body)
+        end
+
+        def close(handle: int)
+            ffi.call_crystal("net_close", [handle])
+        end
+        def self.close(handle: int)
+            close(handle)
+        end
+    end
+
+    class Request
+        def initialize(method: str, path: str, headers: array, body: str, remote_addr: str)
+            @method = method
+            @path = path
+            @headers = headers
+            @body = body
+            @remote_addr = remote_addr
+        end
+
+        def method -> str
+            @method
+        end
+
+        def path -> str
+            @path
+        end
+
+        def headers -> array
+            @headers
+        end
+
+        def body -> str
+            @body
+        end
+
+        def remote_addr -> str
+            @remote_addr
+        end
+
+        def header(name: str) -> str
+            target = name.downcase
+            @headers.each do |pair|
+                name = pair[0]
+                value = pair[1]
+                if name.downcase == target
+                    return value
+                end
+            end
+            ""
+        end
+    end
+
+    class Response
+        def initialize(conn_id: int)
+            @conn_id = conn_id
+            @status = 200
+            @headers = []
+            @body = ""
+        end
+
+        def status -> int
+            @status
+        end
+
+        def set_status(value: int)
+            @status = value
+        end
+
+        def content_type -> str
+            header("Content-Type")
+        end
+
+        def set_content_type(value: str)
+            set_header("Content-Type", value)
+        end
+
+        def set_header(name: str, value: str)
+            pair = [name, value]
+            @headers.push(pair)
+        end
+
+        def header(name: str) -> str
+            target = name.downcase
+            @headers.each do |pair|
+                current = pair[0]
+                value = pair[1]
+                if current.downcase == target
+                    return value
+                end
+            end
+            ""
+        end
+
+        def print(chunk: str)
+            @body = @body + chunk
+        end
+
+        def write(chunk: str)
+            print(chunk)
+        end
+
+        def flush
+            net::Native.send_response(@conn_id, @status, @headers, @body)
+        end
+
+        def close
+            flush
+            net::Native.close(@conn_id)
+        end
+    end
+
+    class Context
+        def initialize(request: Request, response: Response)
+            @request = request
+            @response = response
+        end
+
+        def request -> Request
+            @request
+        end
+
+        def response -> Response
+            @response
+        end
+    end
+
+    def server
+        Server.new
+    end
     
+    def self.server
+        server
+    end
+
+    class Test
+        def server
+            ffi.call_c("printf", ["Listening on http://#{address}\n"])
+            # echo "Listening on http://#{address}"
+        end
+    end
+
+    class Server
+        def initialize
+            @listener = nil
+        end
+
+        def bind_tcp(port: int, host: str) -> str
+            @listener = net::Native.listen_tcp(host, port, net::DEFAULT_BACKLOG)
+            "#{host}:#{port}"
+        end
+
+        def listen
+            if @listener == nil
+                raise "Server not bound. Call bind_tcp first."
+            end
+
+            while true
+                data = net::Native.accept_request(@listener)
+                if data == nil
+                    next
+                end
+
+                conn_id = data[0]
+                method = data[1]
+                path = data[2]
+                headers = data[3]
+                body = data[4]
+                remote_addr = data[5]
+
+                request = net::Request.new(method, path, headers, body, remote_addr)
+                response = net::Response.new(conn_id)
+                context = net::Context.new(request, response)
+
+                yield context
+                response.close
+            end
+        end
+    end
 end

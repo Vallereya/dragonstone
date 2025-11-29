@@ -4,12 +4,14 @@ module Dragonstone
             getter name : String
             getter body : NodeArray
             getter superclass : String?
+            getter abstract : Bool
 
-            def initialize(name : String, body : NodeArray, superclass : String? = nil, location : Location? = nil)
+            def initialize(name : String, body : NodeArray, superclass : String? = nil, is_abstract : Bool = false, location : Location? = nil)
                 super(location: location)
                 @name = name
                 @body = body
                 @superclass = superclass
+                @abstract = is_abstract
             end
 
             def accept(visitor)

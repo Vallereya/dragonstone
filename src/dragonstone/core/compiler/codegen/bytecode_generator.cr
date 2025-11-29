@@ -768,6 +768,10 @@ module Dragonstone
         end
 
         private def compile_function_def(node : AST::FunctionDef)
+            if node.abstract && @container_depth == 0
+                raise "'abstract def' is only allowed inside classes or modules"
+            end
+
             if node.receiver
                 compile_singleton_function_def(node)
                 return
@@ -776,7 +780,7 @@ module Dragonstone
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             fn_const_idx = const_index(fn_chunk)
-            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract))
             name_idx = name_index(node.name)
 
             emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
@@ -794,7 +798,7 @@ module Dragonstone
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             fn_const_idx = const_index(fn_chunk)
-            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract))
             name_idx = name_index(node.name)
 
             emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
@@ -862,7 +866,7 @@ module Dragonstone
         private def compile_class_definition(node : AST::ClassDefinition)
             name_idx = name_index(node.name)
             super_idx = node.superclass ? const_index(node.superclass.not_nil!) : -1
-            emit(OPC::MAKE_CLASS, name_idx, super_idx)
+            emit(OPC::MAKE_CLASS, name_idx, node.abstract ? 1 : 0, super_idx)
             if @container_depth > 0
                 emit(OPC::DEFINE_CONST, name_idx)
             else
@@ -1017,11 +1021,11 @@ module Dragonstone
             end_jumps.each { |pos| patch_jump(pos, current_ip) }
         end
 
-        private def build_signature(parameters : Array(AST::TypedParameter), return_type : AST::TypeExpression?) : Bytecode::FunctionSignature
+        private def build_signature(parameters : Array(AST::TypedParameter), return_type : AST::TypeExpression?, is_abstract : Bool = false) : Bytecode::FunctionSignature
             specs = parameters.map do |param|
                 Bytecode::ParameterSpec.new(name_index(param.name), param.type, param.instance_var_name)
             end
-            Bytecode::FunctionSignature.new(specs, return_type)
+            Bytecode::FunctionSignature.new(specs, return_type, is_abstract)
         end
 
         private def emit_load_name(sym : String)

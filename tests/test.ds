@@ -1,17 +1,17 @@
-#[ 
+#[
     This is a Test File.
 ]#
 
-#[ 
-    I dump junk here to do quick tests for 
+#[
+    I dump junk here to do quick tests for
     dragonstone or to explore things I might
-    integrate. 
-    
-    If you happen to come across something in 
-    here, there's a 99% chance it's not going 
+    integrate.
+
+    If you happen to come across something in
+    here, there's a 99% chance it's not going
     to work.
 
-    Because it is either not working, code 
+    Because it is either not working, code
     snippets that I might get integrate
     or just junk in general.
 ]#
@@ -19,34 +19,88 @@
 echo "----------------------------"
 echo "-------- Test File ---------"
 echo "----------------------------"
-# Testing File Begin.
 echo "\n"
 echo "Starting Test File"
 echo "\n"
 
-# TODO: Uppercase isn't enforced. Should lowercase and snakecase be enforced?
-# Message = "Hello!"
-# echo Message
-
-
-# use "test_use.ds"
-# echo add(magic, 8)
-
-
-# TODO: Expand FFI to allow more to be done with it, and a better way to call than using ffi.call_ruby, etc.
-
 #[
+    #! FFI Improvements
+
+    FOR TESTING AN IDEA:
+    A better FFI CALL SYNTAX,
+    allows easier use of foreign
+    functions from other languages.
+
+    # TODO: Expand FFI to allow more to be done with it, and a better way to call than using ffi.call_ruby, etc.
+
+    # Ruby's puts
+    ffi.call_ruby("puts", ["Hello from Ruby!"])
+
+    # Crystal's puts
+    ffi.call_crystal("puts", ["Hello from Crystal!"])
+
+    # C's printf
+    ffi.call_c("printf", ["Hello from C!"])
+
+]#
+
 # Add Invoke as a keyword? to use something from the FFI?
 # Use & and a name to set an object?
-Invoke Ruby &Account
+Invoke LibC &Account
     # with an `as` keyword to set a method_name?
     as Class
 
     # then what about for [args]?
 
 # or InvokeRuby, InvokeCrystal, InvokeC separately?
-InvokeRuby("puts", ["Hello from Ruby!"])
+InvokeC("printf", ["Hello from C!"])
+
+#[
+    #! Garbage Collection and Borrow Checker
+
+    FOR TESTING AN IDEA:
+    GARBAGE COLLECTION AND 
+    BORROW CHECKER VIA ANNOTATIONS
+
+    # TODO: Need Good Garbage Collection Implementation.
+    # TODO: Need Good Borrow Checker Implementation.
 ]#
+ 
+# For scopes. Area?
+@[gc.area]
+def level(path)
+    area = gc.begin
+
+    data = area.allocate(bytes: 1000000)
+    textures = area.allocate(array: textures, 256)
+
+    level = Level.new(data, textures)
+
+    gc.end(area)
+    level
+end
+
+# with both gc and bc.
+@[gc.disable && bc.enable]
+def Load(area: Area) : Level
+    let doc: @own Document = Document.allocate(area)
+    
+    do
+        let editor: &mut Document = &mut doc
+        editor.append("Hello")
+    end
+
+    alias data = doc.data
+    alias meta = doc.meta
+
+    let level: Level = Level.allocate(
+        data: gc.copy(data),
+        meta: gc.copy(meta)
+    )
+
+    doc.drop()
+    return level
+end
 
 echo "\n"
 echo "Ending Test File"
