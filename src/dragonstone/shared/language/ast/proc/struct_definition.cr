@@ -15,6 +15,16 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_struct_definition(self)
             end
+
+            def to_source : String
+                String.build do |io|
+                    io << "struct " << name << "\n"
+                    body.each do |stmt|
+                        io << "  " << stmt.to_source << "\n"
+                    end
+                    io << "end"
+                end
+            end
         end
     end
 end

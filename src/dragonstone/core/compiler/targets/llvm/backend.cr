@@ -1551,6 +1551,10 @@ module Dragonstone
                         end
                         
                         private def emit_binary_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
+                            if float_operation?(lhs, rhs)
+                                return emit_float_op(ctx, operator, lhs, rhs)
+                            end
+                            
                             case operator
                             when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>"
                                 target_bits = integer_operation_width(lhs, rhs)
@@ -1587,7 +1591,11 @@ module Dragonstone
                                     value_ref(type, "%#{reg}")
                                 end
                             when :"==", :"!=", :"<", :"<=", :">", :">="
-                                emit_integer_comparison(ctx, operator, lhs, rhs)
+                                if float_operation?(lhs, rhs)
+                                    emit_float_comparison(ctx, operator, lhs, rhs)
+                                else
+                                    emit_integer_comparison(ctx, operator, lhs, rhs)
+                                end
                             else
                                 raise "Unsupported operator #{operator}"
                             end
@@ -1811,6 +1819,85 @@ module Dragonstone
                             else
                                 raise "Cannot treat #{value[:type]} as boolean"
                             end
+                        end
+
+                        private def float_operation?(lhs : ValueRef, rhs : ValueRef) : Bool
+                            float_type?(lhs[:type]) || float_type?(rhs[:type])
+                        end
+
+                        private def float_type?(type : String) : Bool
+                            type == "float" || type == "double"
+                        end
+
+                        private def ensure_double(ctx : FunctionContext, value : ValueRef) : ValueRef
+                            case value[:type]
+                            when "double"
+                                value
+                            when "float"
+                                reg = ctx.fresh("fpext")
+                                ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
+                                value_ref("double", "%#{reg}")
+                            else
+                                if integer_type?(value[:type])
+                                    reg = ctx.fresh("sitofp")
+                                    ctx.io << "  %#{reg} = sitofp #{value[:type]} #{value[:ref]} to double\n"
+                                    value_ref("double", "%#{reg}")
+                                else
+                                    raise "Cannot treat #{value[:type]} as floating-point"
+                                end
+                            end
+                        end
+
+                        private def emit_float_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
+                            lhs = ensure_double(ctx, lhs)
+                            rhs = ensure_double(ctx, rhs)
+                            instruction = case operator
+                            when :+, :"&+" then "fadd"
+                            when :-, :"&-" then "fsub"
+                            when :* then "fmul"
+                            when :/ , :"//" then "fdiv"
+                            when :"<=>"
+                                return emit_float_spaceship(ctx, lhs, rhs)
+                            else
+                                raise "Unsupported float operator #{operator}"
+                            end
+                            reg = ctx.fresh("fmath")
+                            ctx.io << "  %#{reg} = #{instruction} double #{lhs[:ref]}, #{rhs[:ref]}\n"
+                            value_ref("double", "%#{reg}")
+                        end
+
+                        private def emit_float_spaceship(ctx : FunctionContext, lhs : ValueRef, rhs : ValueRef) : ValueRef
+                            lhs = ensure_double(ctx, lhs)
+                            rhs = ensure_double(ctx, rhs)
+                            gt = ctx.fresh("fcmpgt")
+                            lt = ctx.fresh("fcmplt")
+                            ctx.io << "  %#{gt} = fcmp ogt double #{lhs[:ref]}, #{rhs[:ref]}\n"
+                            ctx.io << "  %#{lt} = fcmp olt double #{lhs[:ref]}, #{rhs[:ref]}\n"
+                            pos = ctx.fresh("fcmpres")
+                            ctx.io << "  %#{pos} = select i1 %#{gt}, i32 1, i32 0\n"
+                            neg = ctx.fresh("fcmpneg")
+                            ctx.io << "  %#{neg} = select i1 %#{lt}, i32 -1, i32 0\n"
+                            reg = ctx.fresh("fcmpadd")
+                            ctx.io << "  %#{reg} = add i32 %#{pos}, %#{neg}\n"
+                            value_ref("i32", "%#{reg}")
+                        end
+
+                        private def emit_float_comparison(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
+                            lhs = ensure_double(ctx, lhs)
+                            rhs = ensure_double(ctx, rhs)
+                            predicate = case operator
+                            when :"==" then "oeq"
+                            when :"!=" then "one"
+                            when :"<"  then "olt"
+                            when :"<=" then "ole"
+                            when :">"  then "ogt"
+                            when :">=" then "oge"
+                            else
+                                raise "Unsupported float comparison #{operator}"
+                            end
+                            reg = ctx.fresh("fcmp")
+                            ctx.io << "  %#{reg} = fcmp #{predicate} double #{lhs[:ref]}, #{rhs[:ref]}\n"
+                            value_ref("i1", "%#{reg}")
                         end
 
                         private def coerce_boolean_exact(ctx : FunctionContext, value : ValueRef) : ValueRef
