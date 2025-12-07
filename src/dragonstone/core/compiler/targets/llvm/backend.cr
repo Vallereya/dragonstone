@@ -1837,12 +1837,13 @@ module Dragonstone
                             when AST::SimpleTypeExpression
                                 name = type_expr.name
                                 case name
-                                when "Int32", "Int" then "i32"
-                                when "Int64"        then "i64"
-                                when "Bool"         then "i1"
-                                when "Float32"      then "float"
-                                when "Float64", "Float" then "double"
-                                when "String"       then "i8*"
+                                when "Int32", "int"                 then "i32"
+                                when "Int64"                        then "i64"
+                                when "Bool", "bool"                 then "i1"
+                                when "Float32"                      then "float"
+                                when "Float64", "Float", "float"    then "double"
+                                when "String", "str"                then "i8*"
+                                # when "Void", "void"                 then "void"
                                 else
                                     if struct_type?(name)
                                         llvm_struct_name(name)
