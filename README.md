@@ -265,7 +265,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 ###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
-###### WARNING: There is a current bug I made when I split the interpreter that I need to fix with imports, right now you need to specify `dragonstone run --backend native` when running a file with imports.
+###### **WARNING**: There is a current bug I made when I split the interpreter that I need to fix with imports, right now you need to specify `dragonstone run --backend native` and with the import specify the `.ds` when running a file with imports, but the `.ds` is not needed if importing something from the stdlib.
 ```crystal
     # Both by file and selectively.
     use "test_use.ds"

@@ -1627,13 +1627,13 @@ module Dragonstone
                         end
 
                         private def emit_binary_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
-                            if float_type?(lhs[:type]) || float_type?(rhs[:type])
-                                return emit_float_op(ctx, operator, lhs, rhs)
-                            end
-
                             if struct_name = struct_name_for_value(lhs)
                                 method_name = operator.to_s
                                 return emit_struct_method_dispatch(ctx, struct_name, lhs, method_name, [rhs])
+                            end
+
+                            if float_type?(lhs[:type]) || float_type?(rhs[:type])
+                                return emit_float_op(ctx, operator, lhs, rhs)
                             end
 
                             case operator
