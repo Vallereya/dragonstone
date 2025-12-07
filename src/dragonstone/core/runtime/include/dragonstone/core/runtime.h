@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+#include <stddef.h>
 #include "dragonstone/core/version.h"
 
 #ifdef RUBY_SUPPORT
@@ -14,6 +16,67 @@ typedef void* VALUE;
 #define LONG2NUM(x) ((VALUE)(long)(x))
 #define DBL2NUM(x) ((VALUE)(long)(x))
 #endif
+
+/*
+--------------------------------------------------------------------------------
+Hybrid Runtime Core Types
+--------------------------------------------------------------------------------
+The Dragonstone runtime needs to juggle dynamic objects (scripting) and
+primitive/struct payloads (physics/engine code).  These lightweight
+definitions are shared between the interpreter, LLVM runtime stubs, and any
+linked host runtimes so both sides speak the same ABI.
+*/
+
+typedef enum {
+    DS_VALUE_TAG_NIL = 0,
+    DS_VALUE_TAG_INT,
+    DS_VALUE_TAG_FLOAT,
+    DS_VALUE_TAG_BOOL,
+    DS_VALUE_TAG_OBJECT,
+    DS_VALUE_TAG_POINTER
+} DSValueTag;
+
+typedef struct {
+    uint8_t type_tag;
+    union {
+        int64_t i64;
+        double f64;
+        void *ptr;
+        uint8_t boolean;
+    } as;
+} DSValue;
+
+typedef DSValue (*DSMethodThunk)(void *receiver, int64_t argc, const DSValue *argv);
+
+typedef struct DSClass DSClass;
+
+struct DSClass {
+    const char *name;
+    DSClass *parent;
+    void **vtable;
+    uint32_t vtable_size;
+    uint32_t instance_size;
+};
+
+typedef struct {
+    DSClass *klass;
+    /* Instance data follows this header */
+} DSObject;
+
+DSObject *dragonstone_runtime_alloc_instance(DSClass *klass, size_t field_size);
+
+typedef struct {
+    const char *name;
+    uint32_t offset;
+    uint32_t size;
+} DSStructField;
+
+typedef struct {
+    const char *name;
+    uint32_t size;
+    uint32_t field_count;
+    const DSStructField *fields;
+} DSStructLayout;
 
 // Crystal -> C exports.
 extern int ds_run_source(const char* src);

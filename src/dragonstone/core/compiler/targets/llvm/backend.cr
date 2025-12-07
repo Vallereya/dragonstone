@@ -87,13 +87,20 @@ module Dragonstone
                         
                         def initialize(@program : ::Dragonstone::IR::Program)
                             @analysis = @program.analysis
-                        @string_literals = {} of String => NamedTuple(name: String, escaped: String, length: Int32)
-                        @string_order = [] of String
-                        @functions = [] of AST::FunctionDef
-                        @function_signatures = {} of String => FunctionSignature
-                        @function_requires_block = {} of String => Bool
-                        @runtime_literals_preregistered = false
-                        @namespace_stack = [] of String
+                            @string_literals = {} of String => NamedTuple(name: String, escaped: String, length: Int32)
+                            @string_order = [] of String
+                            @functions = [] of AST::FunctionDef
+                            @function_signatures = {} of String => FunctionSignature
+                            @function_requires_block = {} of String => Bool
+                            @runtime_literals_preregistered = false
+                            @runtime_types_emitted = false
+                            @struct_layouts = {} of String => Array(AST::TypeExpression?)
+                            @struct_alias_map = {} of String => String
+                            @struct_stack = [] of String
+                            @emitted_struct_types = Set(String).new
+                            @struct_llvm_lookup = {} of String => String
+                            @namespace_stack = [] of String
+                            index_struct_types
                         @runtime = RuntimeContext.new(
                             box_i32: "dragonstone_runtime_box_i32",
                                 box_i64: "dragonstone_runtime_box_i64",
@@ -126,6 +133,7 @@ module Dragonstone
                             collect_functions
                             prepare_runtime_literals
                             emit_string_constants(io)
+                            emit_runtime_types(io)
                             declare_runtime(io)
                             emit_functions(io)
                             emit_entrypoint(io)
@@ -171,6 +179,51 @@ module Dragonstone
                                 collect_strings_from_node(stmt)
                             end
                             @namespace_stack.clear
+                        end
+
+                        private def index_struct_types
+                            @namespace_stack.clear
+                            @program.ast.statements.each do |stmt|
+                                register_struct_types(stmt)
+                            end
+                            @namespace_stack.clear
+                        end
+
+                        private def struct_fields_for(name : String) : Array(AST::TypeExpression?)
+                            @struct_layouts[name]? || begin
+                                fields = [] of AST::TypeExpression?
+                                @struct_layouts[name] = fields
+                                fields
+                            end
+                        end
+
+                        private def register_struct_types(node : AST::Node)
+                            case node
+                            when AST::StructDefinition
+                                full_name = qualify_name(node.name)
+                                struct_fields_for(full_name)
+                                @struct_alias_map[node.name] = full_name unless @struct_alias_map.has_key?(node.name)
+                                @struct_stack << full_name
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| register_struct_types(stmt) }
+                                end
+                                @struct_stack.pop
+                            when AST::ModuleDefinition, AST::ClassDefinition
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| register_struct_types(stmt) }
+                                end
+                            when AST::AccessorMacro
+                                if current = @struct_stack.last?
+                                    if node.kind == :property
+                                        fields = struct_fields_for(current)
+                                        node.entries.each do |entry|
+                                            fields << entry.type_annotation
+                                        end
+                                    end
+                                end
+                            else
+                                # no-op
+                            end
                         end
                         
                         private def collect_strings_from_node(node : AST::Node)
@@ -386,6 +439,27 @@ module Dragonstone
                             io << "\n" unless @string_order.empty?
                         end
                         
+                        private def emit_runtime_types(io : IO)
+                            return if @runtime_types_emitted
+                            io << "%DSObject = type { i8* }\n"
+                            io << "%DSValue = type { i8, i64 }\n"
+                            @struct_layouts.each do |full_name, fields|
+                                next if @emitted_struct_types.includes?(full_name)
+                                symbol = llvm_struct_symbol(full_name)
+                                @struct_llvm_lookup[symbol] = full_name
+                                type_name = "%#{symbol}"
+                                field_types = fields.map { |field| struct_field_type(field) }
+                                if field_types.empty?
+                                    io << "#{type_name} = type { }\n"
+                                else
+                                    io << "#{type_name} = type { #{field_types.join(", ")} }\n"
+                                end
+                                @emitted_struct_types << full_name
+                            end
+                            io << "\n"
+                            @runtime_types_emitted = true
+                        end
+
                         private def declare_runtime(io : IO)
                             io << "declare i32 @puts(i8*)\n"
                             io << "declare i32 @printf(i8*, ...)\n"
@@ -576,6 +650,9 @@ module Dragonstone
                                 false
                             when AST::ConstantDeclaration
                                 generate_constant_declaration(ctx, stmt)
+                                false
+                            when AST::StructDefinition
+                                generate_struct_definition(ctx, stmt)
                                 false
                             when AST::ClassDefinition
                                 generate_class_definition(ctx, stmt)
@@ -1217,6 +1294,14 @@ module Dragonstone
                                 {type: "i8*", ref: boxed[:ref]}
                             ])
                         end
+
+                        private def generate_struct_definition(ctx : FunctionContext, node : AST::StructDefinition) : Bool
+                            emit_namespace_placeholder(ctx, node.name)
+                            with_namespace(node.name) do
+                                generate_block(ctx, node.body)
+                            end
+                            false
+                        end
                         
                         private def generate_index_access(ctx : FunctionContext, node : AST::IndexAccess) : ValueRef
                             object = ensure_pointer(ctx, generate_expression(ctx, node.object))
@@ -1548,6 +1633,10 @@ module Dragonstone
                                 if call.name == "call" && receiver_value[:type] == "i8*"
                                     return invoke_block(ctx, receiver_value, arg_values)
                                 end
+                                if struct_name = struct_name_for_value(receiver_value)
+                                    raise "Struct methods do not support blocks yet" if block_value
+                                    return emit_struct_method_dispatch(ctx, struct_name, receiver_value, call.name, arg_values)
+                                end
                                 return emit_receiver_call(ctx, call.name, receiver_value, arg_values)
                             end
                             
@@ -1746,21 +1835,37 @@ module Dragonstone
                             
                             case type_expr
                             when AST::SimpleTypeExpression
-                                case type_expr.name
+                                name = type_expr.name
+                                case name
                                 when "Int32", "Int" then "i32"
                                 when "Int64"        then "i64"
                                 when "Bool"         then "i1"
+                                when "Float32"      then "float"
+                                when "Float64", "Float" then "double"
                                 when "String"       then "i8*"
                                 else
-                                    "i8*"
+                                    if struct_type?(name)
+                                        llvm_struct_name(name)
+                                    else
+                                        pointer_type_for("%DSObject")
+                                    end
                                 end
                             else
-                                "i8*"
+                                pointer_type_for("%DSValue")
+                            end
+                        end
+                        
+                        private def struct_field_type(type_expr : AST::TypeExpression?) : String
+                            if type_expr
+                                field_type = llvm_type_of(type_expr)
+                                field_type == "void" ? pointer_type_for("%DSValue") : field_type
+                            else
+                                pointer_type_for("%DSValue")
                             end
                         end
                         
                         private def llvm_param_type(type_expr : AST::TypeExpression?) : String
-                            return "i8*" unless type_expr
+                            return pointer_type_for("%DSValue") unless type_expr
                             llvm_type_of(type_expr)
                         end
                         
@@ -1879,7 +1984,50 @@ module Dragonstone
                             ])
                         end
 
-                        private def qualify_name(name : String) : String
+                        private def canonical_struct_name(name : String) : String?
+                            return name if @struct_layouts.has_key?(name)
+                            @struct_alias_map[name]?
+                        end
+
+                        private def struct_type?(name : String) : Bool
+                            !!canonical_struct_name(name)
+                        end
+
+                        private def struct_name_for_value(value : ValueRef) : String?
+                            type = value[:type]
+                            return nil unless type.starts_with?("%")
+                            symbol = strip_pointer_suffix(type[1..-1])
+                            @struct_llvm_lookup[symbol]?
+                        end
+
+                        private def strip_pointer_suffix(symbol : String) : String
+                            idx = symbol.index('*')
+                            idx ? symbol[0, idx] : symbol
+                        end
+
+                        private def llvm_struct_symbol(name : String) : String
+                            canonical = canonical_struct_name(name) || name
+                            canonical.gsub("::", "_")
+                        end
+
+                        private def llvm_struct_name(name : String) : String
+                            "%#{llvm_struct_symbol(name)}"
+                        end
+
+                        private def struct_method_symbol(struct_name : String, method_name : String) : String
+                            "#{llvm_struct_symbol(struct_name)}_#{method_name}"
+                        end
+
+                        private def emit_struct_method_dispatch(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef
+                            function_symbol = struct_method_symbol(struct_name, method_name)
+                            call_args = [receiver] + args
+                            arg_source = call_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
+                            reg = ctx.fresh("structcall")
+                            ctx.io << "  %#{reg} = call i8* @#{function_symbol}(#{arg_source})\n"
+                            value_ref("i8*", "%#{reg}")
+                        end
+
+                    private def qualify_name(name : String) : String
                             if @namespace_stack.empty?
                                 name
                             else

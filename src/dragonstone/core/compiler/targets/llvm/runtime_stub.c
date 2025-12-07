@@ -49,6 +49,20 @@ typedef struct {
     void *value;
 } DSConstantEntry;
 
+typedef struct DSClass DSClass;
+
+struct DSClass {
+    const char *name;
+    DSClass *parent;
+    void **vtable;
+    size_t vtable_size;
+    size_t instance_size;
+};
+
+typedef struct {
+    DSClass *klass;
+} DSObject;
+
 static DSConstantEntry *g_constant_table = NULL;
 static size_t g_constant_count = 0;
 static size_t g_constant_capacity = 0;
@@ -275,6 +289,20 @@ void *dragonstone_runtime_block_invoke(void *block_handle, int64_t argc, void **
     typedef void *(*BlockFn)(void *, int64_t, void **);
     BlockFn fn = (BlockFn)handle->function;
     return fn(handle->environment, argc, argv);
+}
+
+void *dragonstone_runtime_alloc_instance(void *class_handle, int64_t field_bytes) {
+    if (!class_handle) {
+        runtime_stub_fatal("dragonstone_runtime_alloc_instance", "class pointer missing");
+    }
+    if (field_bytes < 0) {
+        runtime_stub_fatal("dragonstone_runtime_alloc_instance", "negative field size");
+    }
+    size_t payload = (size_t)field_bytes;
+    size_t total = sizeof(DSObject) + payload;
+    DSObject *object = (DSObject *)ds_alloc(total);
+    object->klass = (DSClass *)class_handle;
+    return object;
 }
 
 void *dragonstone_runtime_method_invoke(void *receiver, void *method_name, int64_t argc, void **argv) {
