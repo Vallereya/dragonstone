@@ -13,7 +13,7 @@ def greet(name: str)
     echo "Hello, #{name}!"
 end
 
-greet("Alice")
+greet("Jalyn")
 
 # Example Two
 alias Data = str | int
@@ -26,5 +26,5 @@ def date(year: int)
     echo "This year is: #{year}"
 end
 
-greet("Alice")
+greet("Jalyn")
 date(2025)

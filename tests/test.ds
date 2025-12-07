@@ -24,38 +24,6 @@ echo "Starting Test File"
 echo "\n"
 
 #[
-    #! FFI Improvements
-
-    FOR TESTING AN IDEA:
-    A better FFI CALL SYNTAX,
-    allows easier use of foreign
-    functions from other languages.
-
-    # TODO: Expand FFI to allow more to be done with it, and a better way to call than using ffi.call_ruby, etc.
-
-    # Ruby's puts
-    ffi.call_ruby("puts", ["Hello from Ruby!"])
-
-    # Crystal's puts
-    ffi.call_crystal("puts", ["Hello from Crystal!"])
-
-    # C's printf
-    ffi.call_c("printf", ["Hello from C!"])
-
-]#
-
-# Add Invoke as a keyword? to use something from the FFI?
-# Use & and a name to set an object?
-Invoke LibC &Account
-    # with an `as` keyword to set a method_name?
-    as Class
-
-    # then what about for [args]?
-
-# or InvokeRuby, InvokeCrystal, InvokeC separately?
-InvokeC("printf", ["Hello from C!"])
-
-#[
     #! Garbage Collection and Borrow Checker
 
     FOR TESTING AN IDEA:
@@ -66,41 +34,67 @@ InvokeC("printf", ["Hello from C!"])
     # TODO: Need Good Borrow Checker Implementation.
 ]#
  
-# For scopes. Area?
-@[gc.area]
-def level(path)
-    area = gc.begin
 
-    data = area.allocate(bytes: 1000000)
-    textures = area.allocate(array: textures, 256)
-
-    level = Level.new(data, textures)
-
-    gc.end(area)
-    level
-end
-
-# with both gc and bc.
-@[gc.disable && bc.enable]
-def Load(area: Area) : Level
-    let doc: @own Document = Document.allocate(area)
+# # with both gc and bc.
+# @[gc.disable && bc.enable]
+# def Load(area: Area) : Level
+#     let doc: @own Document = Document.allocate(area)
     
-    do
-        let editor: &mut Document = &mut doc
-        editor.append("Hello")
-    end
+#     do
+#         let editor: &mut Document = &mut doc
+#         editor.append("Hello")
+#     end
 
-    alias data = doc.data
-    alias meta = doc.meta
+#     alias data = doc.data
+#     alias meta = doc.meta
 
-    let level: Level = Level.allocate(
-        data: gc.copy(data),
-        meta: gc.copy(meta)
-    )
+#     let level: Level = Level.allocate(
+#         data: gc.copy(data),
+#         meta: gc.copy(meta)
+#     )
 
-    doc.drop()
-    return level
-end
+#     doc.drop()
+#     return level
+# end
+
+# GC is disabled inside this function (once attribute support exists).
+# def build_cache(area) : Hash
+#     cache = {}                         # GC-managed
+#     doc   = Document.allocate(area)    # arena-managed
+
+#     i = 0
+#     while i < 1_000_000
+#         doc.load_from_source(i)
+#         cache[i] = gc.copy(doc.to_value)
+#         doc.reset
+#         i += 1
+#     end
+
+#     doc.drop
+#     cache
+# end
+
+# def load_level(path : String) : Level
+#     area = gc.begin(capacity: 64 * 1024 * 1024)
+
+#     data     = area.allocate(bytes: 1_000_000)
+#     textures = area.allocate(array: Texture, count: 256)
+#     load_level_data(path, data, textures)
+
+#     level = Level.allocate(
+#         data: gc.copy(data),
+#         meta: gc.copy(textures)
+#     )
+
+#     gc.end(area)
+#     level
+# end
+
+# use "file_utilities"
+# use "path_utilities"
+
+# target = "./tests/test.toml"
+# echo "\n#{File.read(target)}"
 
 echo "\n"
 echo "Ending Test File"

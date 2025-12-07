@@ -12,6 +12,7 @@ module Dragonstone
         extend self
 
         EXECUTABLE_SUFFIX = {% if flag?(:windows) %} ".exe" {% else %} "" {% end %}
+        LLVM_RUNTIME_STUB = "src/dragonstone/core/compiler/targets/llvm/runtime_stub.c"
 
         private struct CLIOptions
             getter typed : Bool
@@ -23,7 +24,11 @@ module Dragonstone
             end
         end
 
-        alias TargetArtifact = NamedTuple(target: Core::Compiler::Target, artifact: Core::Compiler::BuildArtifact)
+        alias TargetArtifact = NamedTuple(
+            target: Core::Compiler::Target,
+            artifact: Core::Compiler::BuildArtifact,
+            linked_path: String?
+        )
 
         def build_command(args : Array(String), stdout : IO, stderr : IO) : Int32
             options = parse_cli_options(args, stdout, stderr)
@@ -37,7 +42,7 @@ module Dragonstone
             begin
                 program, warnings = build_program(filename, typed: options.typed)
                 warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
-                build_targets(program, options.targets, options.output_dir, stdout)
+                build_targets(program, options.targets, options.output_dir, stdout, stderr)
                 return 0
 
             rescue e : Dragonstone::Error
@@ -65,7 +70,7 @@ module Dragonstone
 
                 warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
 
-                artifacts = build_targets(program, options.targets, options.output_dir, stdout)
+                artifacts = build_targets(program, options.targets, options.output_dir, stdout, stderr)
                 run_artifacts(program, artifacts, stdout, stderr) ? 0 : 1
 
             rescue e : Dragonstone::Error
@@ -198,14 +203,15 @@ module Dragonstone
             {program, program.warnings}
         end
 
-        private def build_targets(program : IR::Program, targets : Array(Core::Compiler::Target), output_dir : String?, stdout : IO) : Array(TargetArtifact)
+        private def build_targets(program : IR::Program, targets : Array(Core::Compiler::Target), output_dir : String?, stdout : IO, stderr : IO) : Array(TargetArtifact)
             artifacts = [] of TargetArtifact
 
             targets.each do |target|
                 options = Core::Compiler::BuildOptions.new(target: target, output_dir: output_dir)
                 artifact = Core::Compiler.build(program, options)
-                report_artifact(target, artifact, stdout)
-                artifacts << {target: target, artifact: artifact}
+                linked_path = target == Core::Compiler::Target::LLVM ? link_llvm_binary(artifact, stdout, stderr) : nil
+                report_artifact(target, artifact, stdout, linked_path)
+                artifacts << {target: target, artifact: artifact, linked_path: linked_path}
             end
 
             artifacts
@@ -215,13 +221,13 @@ module Dragonstone
             artifacts.each do |entry|
                 target = entry[:target]
                 stdout.puts "Running #{target_label(target)} artifact..."
-                return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr)
+                return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr, entry[:linked_path])
             end
 
             true
         end
 
-        private def run_build_artifact(program : IR::Program, target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
+        private def run_build_artifact(program : IR::Program, target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?) : Bool
             case target
 
             when Core::Compiler::Target::Bytecode
@@ -237,7 +243,7 @@ module Dragonstone
                 run_c_artifact(artifact, stdout, stderr)
 
             when Core::Compiler::Target::LLVM
-                run_llvm_artifact(artifact, stdout, stderr)
+                run_llvm_artifact(artifact, stdout, stderr, linked_path)
 
             else
                 stderr.puts "Cannot execute #{target_label(target)} artifacts yet"
@@ -283,8 +289,10 @@ module Dragonstone
             end
         end
 
-        private def run_llvm_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
-            if path = artifact.object_path
+        private def run_llvm_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?) : Bool
+            if linked_path && File.exists?(linked_path)
+                run_process(linked_path, [] of String, stdout, stderr, lookup: false)
+            elsif path = artifact.object_path
                 run_process("lli", ["--entry-function=dragonstone_stub", path], stdout, stderr)
             else
                 stderr.puts "LLVM artifact did not produce an output file"
@@ -338,6 +346,11 @@ module Dragonstone
             File.join(dir, "#{base}_run#{EXECUTABLE_SUFFIX}")
         end
 
+        private def llvm_binary_path(ir_path : String) : String
+            dir = File.dirname(ir_path)
+            File.join(dir, "dragonstone_llvm#{EXECUTABLE_SUFFIX}")
+        end
+
         private def run_process(command : String, args : Array(String), stdout : IO, stderr : IO, *, lookup : Bool = true) : Bool
             status = Process.run(command, args: args, output: stdout, error: stderr)
             if status.success?
@@ -358,7 +371,7 @@ module Dragonstone
             false
         end
 
-        private def report_artifact(target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO) : Nil
+        private def report_artifact(target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, linked_path : String?) : Nil
             label = target_label(target)
             if path = artifact.object_path
                 stdout.puts "Built #{label} -> #{path}"
@@ -368,10 +381,44 @@ module Dragonstone
             else
                 stdout.puts "Built #{label}"
             end
+            if linked_path
+                stdout.puts "Linked #{label} binary -> #{linked_path}"
+            end
         end
 
         private def target_label(target : Core::Compiler::Target) : String
             "#{target.to_s.downcase} target"
+        end
+
+        private def link_llvm_binary(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : String?
+            ir_path = artifact.object_path
+            return nil unless ir_path && File.exists?(ir_path)
+            runtime_obj = File.join(File.dirname(ir_path), "runtime_stub.o")
+            return nil unless compile_runtime_stub(runtime_obj, stdout, stderr)
+            binary_path = llvm_binary_path(ir_path)
+            return nil unless link_with_clang(ir_path, runtime_obj, binary_path, stdout, stderr)
+            binary_path
+        end
+
+        private def compile_runtime_stub(output_path : String, stdout : IO, stderr : IO) : Bool
+            args = ["-std=c11", "-c", LLVM_RUNTIME_STUB, "-o", output_path]
+            run_clang(args, stdout, stderr)
+        end
+
+        private def link_with_clang(ir_path : String, runtime_obj : String, binary_path : String, stdout : IO, stderr : IO) : Bool
+            args = [ir_path, runtime_obj, "-o", binary_path]
+            run_clang(args, stdout, stderr)
+        end
+
+        private def run_clang(args : Array(String), stdout : IO, stderr : IO) : Bool
+            status = Process.run("clang", args: args, output: stdout, error: stderr)
+            status.success?
+        rescue ex : File::NotFoundError
+            stderr.puts "clang is required to link LLVM artifacts. Please install it and rerun."
+            false
+        rescue ex
+            stderr.puts "Failed to run clang: #{ex.message}"
+            false
         end
     end
 end

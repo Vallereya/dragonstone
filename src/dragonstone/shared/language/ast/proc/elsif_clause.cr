@@ -19,6 +19,15 @@ module Dragonstone
 
                 end
             end
+
+            def to_source : String
+                String.build do |io|
+                    io << "elsif " << condition.to_source << "\n"
+                    block.each do |node|
+                        io << "  " << node.to_source << "\n"
+                    end
+                end
+            end
         end
     end
 end

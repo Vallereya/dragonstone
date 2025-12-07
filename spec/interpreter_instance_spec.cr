@@ -155,11 +155,11 @@ describe "Interpreter instance variable support" do
             end
         end
 
-        person = Person.new("Alice")
+        person = Person.new("Jalyn")
         echo person.name
         DS
 
-        run_program(source).should eq("Alice\n")
+        run_program(source).should eq("Jalyn\n")
     end
 
     it "updates state through property setter" do

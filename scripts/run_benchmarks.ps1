@@ -15,7 +15,7 @@ Usage:
 Examples:
   .\run_benchmarks.ps1
   .\run_benchmarks.ps1 -Backend core -Iterations 3
-  .\run_benchmarks.ps1 -Programs tests\_benchmark_1b.ds,tests\_benchmark_1m.ds
+  .\run_benchmarks.ps1 -Programs tests\benchmark\1b.ds,tests\benchmark\1m.ds
 "@
 }
 
@@ -30,10 +30,10 @@ Set-Location $repoRoot
 
 if (-not $Programs -or $Programs.Count -eq 0) {
     $defaultPrograms = @(
-        "tests\_benchmark_1b.ds",
-        "tests\_benchmark_1b_nested.ds",
-        "tests\_benchmark_1m.ds",
-        "tests\_benchmark_1m_nested.ds"
+        "tests\benchmark\1b.ds",
+        "tests\benchmark\1b_nested.ds",
+        "tests\benchmark\1m.ds",
+        "tests\benchmark\1m_nested.ds"
     ) | Where-Object { Test-Path $_ }
     $Programs = $defaultPrograms
 }

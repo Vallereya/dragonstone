@@ -4,8 +4,49 @@ require "../../shared/language/diagnostics/errors"
 require "../../shared/typing/types"
 require "../../shared/runtime/ffi_module"
 require "../../shared/runtime/symbol"
+require "../../shared/runtime/gc/gc"
 
 module Dragonstone
+    module Runtime
+        module GC
+            # Runtime-facing GC host for the native interpreter.
+            class Host
+                getter manager : Manager(RuntimeValue)
+
+                def initialize(@manager : Manager(RuntimeValue))
+                end
+            end
+
+            # Deep copy helpers for native runtime values.
+            def self.deep_copy_runtime(value : ::Dragonstone::RuntimeValue) : ::Dragonstone::RuntimeValue
+                case value
+                when Array(::Dragonstone::RuntimeValue)
+                    value.map { |element| deep_copy_runtime(element) }
+                when ::Dragonstone::TupleValue
+                    ::Dragonstone::TupleValue.new(value.elements.map { |element| deep_copy_runtime(element) })
+                when ::Dragonstone::NamedTupleValue
+                    copied = {} of ::Dragonstone::SymbolValue => ::Dragonstone::RuntimeValue
+                    value.entries.each do |key, entry_value|
+                        copied[key] = deep_copy_runtime(entry_value)
+                    end
+                    ::Dragonstone::NamedTupleValue.new(copied)
+                when ::Dragonstone::BagValue
+                    bag = ::Dragonstone::BagValue.new(value.element_descriptor)
+                    value.elements.each { |element| bag.add(deep_copy_runtime(element)) }
+                    bag
+                when ::Dragonstone::MapValue
+                    copied = ::Dragonstone::MapValue.new
+                    value.each do |k, v|
+                        copied[deep_copy_runtime(k)] = deep_copy_runtime(v)
+                    end
+                    copied
+                else
+                    value
+                end
+            end
+        end
+    end
+
     class RaisedException
         getter error : InterpreterError
 
@@ -23,8 +64,7 @@ module Dragonstone
     end
 
     alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | Hash(RuntimeValue, RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue
-    alias MapValue = Hash(RuntimeValue, RuntimeValue)
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue | MapValue | ::Dragonstone::Runtime::GC::Area(RuntimeValue) | ::Dragonstone::Runtime::GC::Host
 
     class TupleValue
         getter elements : Array(RuntimeValue)
@@ -71,10 +111,80 @@ module Dragonstone
         end
 
         def add(value : RuntimeValue)
-            unless includes?(value)
-                @elements << value
-            end
+            @elements << value unless includes?(value)
             self
+        end
+    end
+
+    class MapValue
+        getter entries : Hash(RuntimeValue, RuntimeValue)
+
+        def initialize
+            @entries = {} of RuntimeValue => RuntimeValue
+        end
+
+        def size : Int64
+            @entries.size.to_i64
+        end
+
+        def keys : Array(RuntimeValue)
+            result = [] of RuntimeValue
+            @entries.each_key { |key| result << key }
+            result
+        end
+
+        def values : Array(RuntimeValue)
+            result = [] of RuntimeValue
+            @entries.each_value { |value| result << value }
+            result
+        end
+
+        def empty? : Bool
+            @entries.empty?
+        end
+
+        def [](key : RuntimeValue) : RuntimeValue
+            @entries[key]?
+        end
+
+        def []?(key : RuntimeValue) : RuntimeValue
+            @entries[key]?
+        end
+
+        def []=(key : RuntimeValue, value : RuntimeValue) : RuntimeValue
+            @entries[key] = value
+        end
+
+        def delete(key : RuntimeValue) : RuntimeValue
+            @entries.delete(key)
+        end
+
+        def has_key?(key : RuntimeValue) : Bool
+            @entries.has_key?(key)
+        end
+
+        def has_value?(value : RuntimeValue) : Bool
+            @entries.has_value?(value)
+        end
+
+        def each
+            @entries.each do |key, value|
+                yield key, value
+            end
+        end
+
+        def each_key
+            @entries.each_key { |key| yield key }
+        end
+
+        def each_value
+            @entries.each_value { |value| yield value }
+        end
+
+        def map
+            @entries.map do |key, value|
+                yield key, value
+            end
         end
     end
 
@@ -97,11 +207,13 @@ module Dragonstone
         getter type_closure : TypeScope
         getter rescue_clauses : Array(AST::RescueClause)
         getter return_type : AST::TypeExpression?
+        getter gc_flags : ::Dragonstone::Runtime::GC::Flags
         @parameter_names : Array(String)
 
-        def initialize(@name : String?, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil)
+        def initialize(@name : String?, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new)
             @typed_parameters = typed_parameters
             @parameter_names = typed_parameters.map(&.name)
+            @gc_flags = gc_flags
         end
 
         def parameters : Array(String)
@@ -120,13 +232,15 @@ module Dragonstone
         getter visibility : Symbol
         getter owner : DragonModule
         getter? abstract : Bool
+        getter gc_flags : ::Dragonstone::Runtime::GC::Flags
         @parameter_names : Array(String)
 
-        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @owner : DragonModule, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, visibility : Symbol = :public, is_abstract : Bool = false)
+        def initialize(@name : String, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @owner : DragonModule, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, visibility : Symbol = :public, is_abstract : Bool = false, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new)
             @typed_parameters = typed_parameters
             @parameter_names = typed_parameters.map(&.name)
             @visibility = visibility
             @abstract = is_abstract
+            @gc_flags = gc_flags
         end
 
         def parameters : Array(String)
@@ -144,7 +258,8 @@ module Dragonstone
                 @rescue_clauses.dup,
                 @return_type,
                 visibility: @visibility,
-                is_abstract: @abstract
+                is_abstract: @abstract,
+                gc_flags: @gc_flags
             )
         end
     end

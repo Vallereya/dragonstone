@@ -359,4 +359,25 @@ DS
         Dragonstone.run(source, backend: Dragonstone::BackendMode::Native).output.should eq("woof\n")
         Dragonstone.run(source, backend: Dragonstone::BackendMode::Core).output.should eq("woof\n")
     end
+
+    it "parses annotated definitions without affecting execution" do
+        source = <<-DS
+@[gc.disable]
+def greet
+    echo "hi"
+end
+
+@[meta.tag]
+class Box
+    def value
+        42
+    end
+end
+
+greet
+echo Box.new.value
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "hi\n42\n"
+    end
 end

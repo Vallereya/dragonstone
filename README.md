@@ -294,7 +294,7 @@ greet = ->(name: str) {
     "Hello, #{name}!" 
 }
 
-echo greet.call("Alice")
+echo greet.call("Jalyn")
 ```
 
 ```crystal

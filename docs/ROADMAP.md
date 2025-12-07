@@ -168,10 +168,12 @@
 
 ```diff
 + Reformat the stdlib.
-+ Add a simple networking stdlib.
-- Implement support for concurrency.
++ Add a simple networking and toml stdlibs, and adjust the path/file utilities.
 + Implement abstract classes and abstract def.
+
+- Implement support for concurrency.
 - Implement optional Garbage Collection (c-like or crystal-like).
+- Support for annotations via `@[...]`.
 ```
 
 ###     <h2 align="center">         Phase Four

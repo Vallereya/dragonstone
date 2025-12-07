@@ -261,9 +261,9 @@ module Dragonstone
         def visit_map_literal(node : AST::MapLiteral) : RuntimeValue?
             map = MapValue.new
             node.entries.each do |key_node, value_node|
-                key = key_node.accept(self)
-                value = value_node.accept(self)
-                map[key.as(RuntimeValue)] = value.as(RuntimeValue)
+                key = key_node.accept(self).as(RuntimeValue)
+                value = value_node.accept(self).as(RuntimeValue)
+                map[key] = value
             end
             map
         end
@@ -509,6 +509,8 @@ module Dragonstone
                 return nil
             end
 
+            gc_flags = Runtime::GC.flags_from_annotations(node.annotations)
+
             if container
                 if container.is_a?(DragonClass)
                     klass = container.as(DragonClass)
@@ -528,12 +530,13 @@ module Dragonstone
                     node.rescue_clauses,
                     node.return_type,
                     visibility: node.visibility,
-                    is_abstract: node.abstract
+                    is_abstract: node.abstract,
+                    gc_flags: gc_flags
                 )
                 container.define_method(node.name, method)
                 nil
             else
-                func = Function.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type)
+                func = Function.new(node.name, node.typed_parameters, node.body, closure, type_closure, node.rescue_clauses, node.return_type, gc_flags: gc_flags)
                 set_variable(node.name, func, location: node.location)
                 nil
             end

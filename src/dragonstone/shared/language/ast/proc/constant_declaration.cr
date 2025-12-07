@@ -15,6 +15,14 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_constant_declaration(self)
             end
+
+            def to_source : String
+                type_str = ""
+                if type = type_annotation
+                    type_str = " : #{type.to_source}"
+                end
+                "const #{name}#{type_str} = #{value.to_source}"
+            end
         end
     end
 end

@@ -135,7 +135,12 @@ module Dragonstone
                 else
                     case char
                 when '@'
-                    scan_instance_variable
+                    if peek_char == '['
+                        add_token(:ANNOTATION_START, "@[", @line, @column, 2)
+                        advance(2)
+                    else
+                        scan_instance_variable
+                    end
                 when '='
                     case peek_char
                     when '='

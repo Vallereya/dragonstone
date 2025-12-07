@@ -1,4 +1,5 @@
 #[ 
+    #! WORK IN PROGRESS ! 
     An Example of the Garbage Collection
 ]#
 
@@ -8,13 +9,17 @@
     Turn GC off for this function, use an Area for scratch work, 
     explicitly copy anything that needs to live on the GC heap, and then free the area-owned data.
 
-    @[gc.disable] = GC will not run while this function executes. That’s fast but unsafe.
-    Document.allocate(area) = Allocates in the Area, not on the GC heap.
+    @[gc.disable] = GC will not run inside this function. You’re responsible for not blowing RAM.
 
-    gc.copy(...) = Explicitly copies data from the area into GC-managed memory. 
-    This is the only way data from a GC-off region is allowed to survive on the GC heap.
+    Document.allocate(area) = allocate into the Area instead of the GC heap.
 
-    doc.drop() = Deterministically frees area-owned resources for doc.
+    gc.copy(...) = explicitly move data from the Area into GC-managed memory.
+
+    doc.drop() = deterministic cleanup of Area-backed resources.
+
+    ## Disabling GC for a Function
+    ## Using Areas (Arenas) for Bulk Allocation
+    ## Crossing from Area to GC with gc.copy
 ]#
 
 # GC is disabled inside this function.
@@ -23,29 +28,32 @@
 def build_cache(area: Area) : Map(int, Value)
 
     # Result lives on the GC heap and will survive after this function returns.
-    let cache = Map(int, Value).new
+    items = 1000000
+    cache = Map(int, Value).new
 
-    # Big scratch document allocated inside the area (not tracked by GC).
-    let doc: @own Document = Document.allocate(area)
+    # Temporary document allocated inside the Area (not GC-managed).
+    doc = Document.allocate(area)
 
-    # Heavy, allocation-heavy loop. All intermediates go through `doc`/`area`.
-    1000000.times do |i|
+    i = 0
 
-        # Fill the arena-backed document with data for this key.
+    while i < items
+
+        # Reuse the same area-backed document for each item.
+        doc.reset
         doc.load_from_source(i)
 
-        # Copy only what we actually want to keep into the GC heap.
-        # `gc.copy` is the explicit boundary between area memory and GC memory.
-        cache[i] = gc.copy(doc.to_value)
+        # Convert the document into a GC-managed value by copying.
+        # gc.copy is the explicit boundary from Area memory → GC heap.
+        value = gc.copy(doc.to_value)
+        cache[i] = value
 
-        # reuse the same arena storage for the next iteration
-        doc.reset
+        i += 1
     end
 
-    # Free the area-owned document before we leave.
-    doc.drop()
+    # Explicitly free Area-owned resources held by `doc`.
+    doc.drop
 
-    # `cache` is GC-managed; safe to return even though GC was disabled here.
+    # `cache` is GC-managed and safe to return even though GC was disabled.
     return cache
 end
 
@@ -57,29 +65,49 @@ end
 ]#
 
 # This function demonstrates an explicit GC area (arena).
-# All allocations made through `area` are freed together.
+# This function uses a transient Area (arena) to load a level efficiently.
 @[gc.area]
 def load_level(path: str) : Level
 
-    # Start a new area with an optional capacity hint.
+    # Start a new Area. Optional capacity hint for performance.
     area = gc.begin(capacity: 64 * MB)
 
-    # Allocate big blobs in the area (not GC-managed).
-    let data     = area.allocate(bytes: 1000000)
-    let textures = area.allocate(array: Texture, 256)
+    # Allocate big blobs in the Area (not on the GC heap).
+    data = area.allocate(bytes: 1000000)
+    textures = area.allocate(array: Texture, 256)
 
-    # Fill area-backed buffers from disk or whatever source.
+    # Fill the Area-backed buffers from disk or some other source.
     load_level_data(path, data, textures)
 
-    # You can create a GC-managed Level by copying out the pieces we want to keep.
-    let level: Level = Level.allocate(
+    # Create a GC-managed Level by copying the pieces we want to keep.
+    level = Level.new(
         data: gc.copy(data),
-        meta: gc.copy(textures)
+        textures: gc.copy(textures)
     )
 
-    # Free all area-allocated memory in one shot.
+    # Free everything allocated in this Area in a single operation.
     gc.end(area)
 
     # `level` is now fully GC-managed and safe to return.
     return level
 end
+
+# Zero-copy variant: Level lives in the Area.
+# Caller is responsible for calling gc.end(area) when done.
+@[gc.area]
+def load_level_in_area(path: str) : Tuple(Area, Level)
+    area = gc.begin
+
+    data = area.allocate(bytes: 1000000)
+    textures = area.allocate(array: Texture, 256)
+
+    load_level_data(path, data, textures)
+
+    # Level is built directly in the Area.
+    level = Level.allocate(area, data, textures)
+
+    # Do NOT gc.end(area) here; the caller owns the Area lifetime.
+    return { area, level }
+end
+
+

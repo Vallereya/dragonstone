@@ -1,5 +1,6 @@
 require "spec"
 require "file_utils"
+require "../src/dragonstone"
 
 private def with_tmpdir(&block : String ->)
     base = File.join(Dir.current, "tmp_spec_#{Process.pid}_#{Random.new.rand(1_000_000)}")
@@ -11,7 +12,7 @@ private def with_tmpdir(&block : String ->)
     end
 end
 
-private def expect_net_module_available(backend : BackendMode)
+private def expect_net_module_available(backend : Dragonstone::BackendMode)
     with_tmpdir do |dir|
         script = File.join(dir, "net_ok.ds")
         File.write(script, <<-DS)
@@ -79,10 +80,45 @@ DS
     end
 
     it "exposes net helpers on the native backend" do
-        expect_net_module_available(BackendMode::Native)
+        expect_net_module_available(Dragonstone::BackendMode::Native)
     end
 
     it "exposes net helpers on the core backend" do
-        expect_net_module_available(BackendMode::Core)
+        expect_net_module_available(Dragonstone::BackendMode::Core)
+    end
+
+    it "parses TOML payloads from the stdlib" do
+        with_tmpdir do |dir|
+            script = File.join(dir, "toml_ok.ds")
+            File.write(script, <<-DS)
+use "toml"
+
+sample = "title = \\"TOML\\"\\nactive = true\\npoints = [1, 2, 3]\\n[owner]\\nname = \\"Tom\\""
+data = TOML.parse(sample)
+
+if data["title"].as_s != "TOML" || !data["active"].as_bool || data["points"].as_a[1].as_i != 2 || data["owner"].as_h["name"].as_s != "Tom"
+    raise "toml parse failed"
+end
+
+echo "toml-ok"
+DS
+            result = Dragonstone.run_file(script)
+            result.output.should contain("toml-ok")
+        end
+    end
+
+    it "raises on malformed TOML input" do
+        with_tmpdir do |dir|
+            script = File.join(dir, "toml_err.ds")
+            File.write(script, <<-DS)
+use "toml"
+
+sample = "a = 1\\na = 2"
+TOML.parse(sample)
+DS
+            expect_raises(Dragonstone::RuntimeError) do
+                Dragonstone.run_file(script)
+            end
+        end
     end
 end

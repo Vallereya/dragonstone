@@ -92,13 +92,13 @@ DS
     it "evaluates para literals and allows calling them" do
         source = <<-DS
 greet = ->(name: str) { "Hello, \#{name}!" }
-echo greet.call("Alice")
+echo greet.call("Jalyn")
 
 square = ->(value: int) { value * value }
 echo square.call(6)
 DS
         result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
-        result.output.should eq "Hello, Alice!\n36\n"
+        result.output.should eq "Hello, Jalyn!\n36\n"
     end
 
     it "supports tuple and named tuple literals" do

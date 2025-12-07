@@ -15,8 +15,6 @@
 use "test_use.ds"
 use { Person } from "classes.ds"
 
-# use "./unicode.ds"
-# use { MyModule } from "./resolution.ds"
 use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode.ds"
 use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution.ds"
 

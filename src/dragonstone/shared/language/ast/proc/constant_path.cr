@@ -19,6 +19,10 @@ module Dragonstone
             def tail : Array(String)
                 names[1..] || [] of String
             end
+
+            def to_source : String
+                names.join("::")
+            end
         end
     end
 end

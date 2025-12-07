@@ -1,1 +1,18 @@
 use "modules/native/utilities/file_utilities/module"
+
+File = utilities.file()
+Path = utilities.path()
+
+# File.open("./demo.txt", "r", false)
+# File.read("./demo.txt")
+# File.write("./demo.txt", "content", false)
+# File.append("./demo.txt", "\nextra", true)
+# File.create("./demo.txt", "initial", true)
+# File.delete("./demo.txt")
+
+# Path.create("./bar")
+# Path.normalize("./foo/../bar")
+# Path.parent("foo/bar/baz.ds")
+# Path.base("foo/bar/baz.ds")
+# Path.expand("~/bin")
+# Path.delete("./bar")

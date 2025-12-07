@@ -3,8 +3,11 @@
 # to be ignored from git.
 #
 
+LLVM_CHECKLIST.md
 .tmp
-.crystal-cache
+.crystal_cache
+
+dev/
 
 # Ignore any Output/Build Files.
 dragonstone.exe

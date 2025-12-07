@@ -1,4 +1,5 @@
 require "../ir/program"
+require "../../backend_mode"
 require "../../core/vm/bytecode"
 require "../../native/runtime/values"
 
@@ -24,6 +25,7 @@ module Dragonstone
             abstract def import_constant(name : String, value : ExportValue) : Nil
             abstract def export_namespace : Hash(String, ExportValue)
             abstract def execute(program : IR::Program) : Nil
+            abstract def backend_mode : BackendMode
         end
 
         class Unit

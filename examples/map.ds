@@ -2,6 +2,7 @@
     Maps Example
 ]#
 
+# Example One
 # Map literal with key -> value pairs.
 ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
 
@@ -20,3 +21,22 @@ end
 # Some builtin helpers.
 e! ages.keys
 e! ages.values
+
+
+# Example Two
+greeting = {
+    "greet" -> "Hi, my name is Jalyn.",
+    "from" -> " I'm from the USA!"
+}
+
+echo greeting["greet"] + greeting["from"]    
+
+# Example Three
+# This is adding the `Hash` to a `Map` and adds types.
+person: Hash(str, int) = {
+    "name" -> "Jalyn",
+    "age" -> 30
+}
+
+echo person["name"]                                             # -> Jalyn
+echo person["age"]                                              # -> 30
