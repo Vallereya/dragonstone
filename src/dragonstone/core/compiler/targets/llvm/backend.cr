@@ -543,8 +543,12 @@ module Dragonstone
                                 param_specs << {type: "i8*", source: block_arg, name: "__block"}
                                 params << "i8* #{block_arg}"
                             end
+
+                            llvm_name = func.name == "main" ? "__dragonstone_user_main" : func.name
                             
-                            io << "define #{return_type} @#{func.name}(#{params.join(", ")}) {\n"
+                            io << "define #{return_type} @#{llvm_name}(#{params.join(", ")}) {\n"
+                            # io << "define #{return_type} @#{func.name}(#{params.join(", ")}) {\n"
+
                             io << "entry:\n"
                             
                             param_specs.each do |spec|
@@ -1746,15 +1750,26 @@ module Dragonstone
                             end
                             
                             arg_source = coerced_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
-                            
+
+                            target_name = call.name == "main" ? "__dragonstone_user_main" : call.name
+
                             if signature[:return_type] == "void"
-                                ctx.io << "  call void @#{call.name}(#{arg_source})\n"
+                                ctx.io << "  call void @#{target_name}(#{arg_source})\n"
                                 nil
                             else
                                 reg = ctx.fresh("call")
-                                ctx.io << "  %#{reg} = call #{signature[:return_type]} @#{call.name}(#{arg_source})\n"
+                                ctx.io << "  %#{reg} = call #{signature[:return_type]} @#{target_name}(#{arg_source})\n"
                                 value_ref(signature[:return_type], "%#{reg}")
                             end
+                            
+                            # if signature[:return_type] == "void"
+                            #     ctx.io << "  call void @#{call.name}(#{arg_source})\n"
+                            #     nil
+                            # else
+                            #     reg = ctx.fresh("call")
+                            #     ctx.io << "  %#{reg} = call #{signature[:return_type]} @#{call.name}(#{arg_source})\n"
+                            #     value_ref(signature[:return_type], "%#{reg}")
+                            # end
                         end
                         
                         private def emit_receiver_call(ctx : FunctionContext, method_name : String, receiver : ValueRef, args : Array(ValueRef)) : ValueRef
