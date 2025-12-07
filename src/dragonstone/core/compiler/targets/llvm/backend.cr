@@ -94,11 +94,12 @@ module Dragonstone
                             @function_requires_block = {} of String => Bool
                             @runtime_literals_preregistered = false
                             @runtime_types_emitted = false
-                            @struct_layouts = {} of String => Array(AST::TypeExpression?)
-                            @struct_alias_map = {} of String => String
-                            @struct_stack = [] of String
-                            @emitted_struct_types = Set(String).new
-                            @struct_llvm_lookup = {} of String => String
+                        @struct_layouts = {} of String => Array(AST::TypeExpression?)
+                        @struct_field_indices = {} of String => Hash(String, Int32)
+                        @struct_alias_map = {} of String => String
+                        @struct_stack = [] of String
+                        @emitted_struct_types = Set(String).new
+                        @struct_llvm_lookup = {} of String => String
                             @namespace_stack = [] of String
                             index_struct_types
                         @runtime = RuntimeContext.new(
@@ -197,11 +198,20 @@ module Dragonstone
                             end
                         end
 
+                        private def struct_field_map_for(name : String) : Hash(String, Int32)
+                            @struct_field_indices[name]? || begin
+                                map = {} of String => Int32
+                                @struct_field_indices[name] = map
+                                map
+                            end
+                        end
+
                         private def register_struct_types(node : AST::Node)
                             case node
                             when AST::StructDefinition
                                 full_name = qualify_name(node.name)
                                 struct_fields_for(full_name)
+                                struct_field_map_for(full_name)
                                 @struct_alias_map[node.name] = full_name unless @struct_alias_map.has_key?(node.name)
                                 @struct_stack << full_name
                                 with_namespace(node.name) do
@@ -216,7 +226,9 @@ module Dragonstone
                                 if current = @struct_stack.last?
                                     if node.kind == :property
                                         fields = struct_fields_for(current)
+                                        indices = struct_field_map_for(current)
                                         node.entries.each do |entry|
+                                            indices[entry.name] = fields.size
                                             fields << entry.type_annotation
                                         end
                                     end
@@ -2106,7 +2118,25 @@ module Dragonstone
                             "#{llvm_struct_symbol(struct_name)}_#{method_name}"
                         end
 
+                        private def emit_struct_field_access(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef?
+                            indices = @struct_field_indices[struct_name]?
+                            return nil unless indices
+                            index = indices[method_name]?
+                            return nil unless index
+                            raise "Struct field #{method_name} expects no arguments" unless args.empty?
+                            fields = @struct_layouts[struct_name]? || raise "Unknown struct layout #{struct_name}"
+                            field_type_expr = fields[index]?
+                            field_type = field_type_expr ? llvm_type_of(field_type_expr) : pointer_type_for("%DSValue")
+                            reg = ctx.fresh("field")
+                            struct_type = receiver[:type]
+                            ctx.io << "  %#{reg} = extractvalue #{struct_type} #{receiver[:ref]}, #{index}\n"
+                            value_ref(field_type, "%#{reg}")
+                        end
+
                         private def emit_struct_method_dispatch(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef
+                            if value = emit_struct_field_access(ctx, struct_name, receiver, method_name, args)
+                                return value
+                            end
                             function_symbol = struct_method_symbol(struct_name, method_name)
                             signature = ensure_function_signature(function_symbol)
                             call_args = [receiver] + args
