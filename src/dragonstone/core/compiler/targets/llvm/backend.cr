@@ -62,9 +62,11 @@ module Dragonstone
                             box_i64: String,
                             box_bool: String,
                             box_string: String,
+                            box_float: String,
                             unbox_i32: String,
                             unbox_i64: String,
                             unbox_bool: String,
+                            unbox_float: String,
                             array_literal: String,
                             map_literal: String,
                             block_literal: String,
@@ -94,22 +96,24 @@ module Dragonstone
                             @function_requires_block = {} of String => Bool
                             @runtime_literals_preregistered = false
                             @runtime_types_emitted = false
-                        @struct_layouts = {} of String => Array(AST::TypeExpression?)
-                        @struct_field_indices = {} of String => Hash(String, Int32)
-                        @struct_alias_map = {} of String => String
-                        @struct_stack = [] of String
-                        @emitted_struct_types = Set(String).new
-                        @struct_llvm_lookup = {} of String => String
+                            @struct_layouts = {} of String => Array(AST::TypeExpression?)
+                            @struct_field_indices = {} of String => Hash(String, Int32)
+                            @struct_alias_map = {} of String => String
+                            @struct_stack = [] of String
+                            @emitted_struct_types = Set(String).new
+                            @struct_llvm_lookup = {} of String => String
                             @namespace_stack = [] of String
                             index_struct_types
-                        @runtime = RuntimeContext.new(
-                            box_i32: "dragonstone_runtime_box_i32",
+                            @runtime = RuntimeContext.new(
+                                box_i32: "dragonstone_runtime_box_i32",
                                 box_i64: "dragonstone_runtime_box_i64",
                                 box_bool: "dragonstone_runtime_box_bool",
                                 box_string: "dragonstone_runtime_box_string",
+                                box_float: "dragonstone_runtime_box_float",
                                 unbox_i32: "dragonstone_runtime_unbox_i32",
                                 unbox_i64: "dragonstone_runtime_unbox_i64",
                                 unbox_bool: "dragonstone_runtime_unbox_bool",
+                                unbox_float: "dragonstone_runtime_unbox_float",
                                 array_literal: "dragonstone_runtime_array_literal",
                                 map_literal: "dragonstone_runtime_map_literal",
                                 block_literal: "dragonstone_runtime_block_literal",
@@ -436,6 +440,7 @@ module Dragonstone
                         private def prepare_runtime_literals
                             return if @runtime_literals_preregistered
                             intern_string("%lld\n")
+                            intern_string("%g\n")
                             intern_string("true")
                             intern_string("false")
                             intern_string("nil")
@@ -479,9 +484,11 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:box_i64]}(i64)\n"
                             io << "declare i8* @#{@runtime[:box_bool]}(i1)\n"
                             io << "declare i8* @#{@runtime[:box_string]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:box_float]}(double)\n"
                             io << "declare i32 @#{@runtime[:unbox_i32]}(i8*)\n"
                             io << "declare i64 @#{@runtime[:unbox_i64]}(i8*)\n"
                             io << "declare i1 @#{@runtime[:unbox_bool]}(i8*)\n"
+                            io << "declare double @#{@runtime[:unbox_float]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
                             io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
                             io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -997,6 +1004,8 @@ module Dragonstone
                                 runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
                             when "i1"
                                 runtime_call(ctx, "i1", @runtime[:unbox_bool], [{type: "i8*", ref: value[:ref]}])
+                            when "double"
+                                runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
                             else
                                 value
                             end
@@ -1495,6 +1504,8 @@ module Dragonstone
                                 runtime_call(ctx, "i8*", @runtime[:box_i32], [{type: "i32", ref: value[:ref]}])
                             when "i64"
                                 runtime_call(ctx, "i8*", @runtime[:box_i64], [{type: "i64", ref: value[:ref]}])
+                            when "double"
+                                runtime_call(ctx, "i8*", @runtime[:box_float], [{type: "double", ref: value[:ref]}])
                             when "i1"
                                 runtime_call(ctx, "i8*", @runtime[:box_bool], [{type: "i1", ref: value[:ref]}])
                             when "i8*"
@@ -1716,6 +1727,9 @@ module Dragonstone
                                 ctx.io << "  call i32 @puts(i8* #{display[:ref]})\n"
                             when "i32", "i64"
                                 emit_echo_integer(ctx, value)
+                            when "double"
+                                format_ptr = materialize_string_pointer(ctx, "%g\n")
+                                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
                             when "i1"
                                 true_ptr = materialize_string_pointer(ctx, "true")
                                 false_ptr = materialize_string_pointer(ctx, "false")
@@ -1723,7 +1737,7 @@ module Dragonstone
                                 ctx.io << "  %#{reg} = select i1 #{value[:ref]}, i8* #{true_ptr}, i8* #{false_ptr}\n"
                                 ctx.io << "  call i32 @puts(i8* %#{reg})\n"
                             else
-                                raise "echo currently supports strings, integers, or booleans"
+                                raise "echo currently supports strings, integers, booleans, or doubles"
                             end
                         end
                         
@@ -1743,6 +1757,8 @@ module Dragonstone
                                 coerce_integer(ctx, value, 64)
                             when "i1"
                                 coerce_boolean_exact(ctx, value)
+                            when "double"
+                                ensure_double(ctx, value)
                             else
                                 raise "Cannot convert #{value[:type]} to #{expected}"
                             end
@@ -1849,6 +1865,8 @@ module Dragonstone
                                 reg = ctx.fresh("fpext")
                                 ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
                                 value_ref("double", "%#{reg}")
+                            when "i8*"
+                                runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
                             else
                                 if integer_type?(value[:type])
                                     reg = ctx.fresh("sitofp")

@@ -15,7 +15,8 @@
 typedef enum {
     DS_VALUE_INT32,
     DS_VALUE_INT64,
-    DS_VALUE_BOOL
+    DS_VALUE_BOOL,
+    DS_VALUE_FLOAT
 } DSValueKind;
 
 typedef struct {
@@ -25,6 +26,7 @@ typedef struct {
         int32_t i32;
         int64_t i64;
         bool boolean;
+        double f64;
     } as;
 } DSValue;
 
@@ -242,6 +244,12 @@ void *dragonstone_runtime_box_bool(int32_t value) {
     return box;
 }
 
+void *dragonstone_runtime_box_float(double value) {
+    DSValue *box = ds_new_box(DS_VALUE_FLOAT);
+    box->as.f64 = value;
+    return box;
+}
+
 void *dragonstone_runtime_box_string(void *value) {
     return value;
 }
@@ -424,6 +432,31 @@ int32_t dragonstone_runtime_unbox_bool(void *value) {
     return result ? 1 : 0;
 }
 
+double dragonstone_runtime_unbox_float(void *value) {
+    if (!value) {
+        runtime_stub_log(__func__);
+        return 0.0;
+    }
+    if (!ds_is_boxed(value)) {
+        runtime_stub_log(__func__);
+        return 0.0;
+    }
+    DSValue *box = (DSValue *)value;
+    switch (box->kind) {
+        case DS_VALUE_FLOAT:
+            return box->as.f64;
+        case DS_VALUE_INT64:
+            return (double)box->as.i64;
+        case DS_VALUE_INT32:
+            return (double)box->as.i32;
+        case DS_VALUE_BOOL:
+            return box->as.boolean ? 1.0 : 0.0;
+        default:
+            runtime_stub_log(__func__);
+            return 0.0;
+    }
+}
+
 void *dragonstone_runtime_value_display(void *value) {
     if (!value) {
         return (void *)DS_STR_NIL;
@@ -444,6 +477,11 @@ void *dragonstone_runtime_value_display(void *value) {
         case DS_VALUE_INT64: {
             char buffer[64];
             snprintf(buffer, sizeof(buffer), "%lld", (long long)box->as.i64);
+            return ds_strdup(buffer);
+        }
+        case DS_VALUE_FLOAT: {
+            char buffer[64];
+            snprintf(buffer, sizeof(buffer), "%g", box->as.f64);
             return ds_strdup(buffer);
         }
         default:
@@ -476,6 +514,8 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
                 return left->as.i32 == right->as.i32;
             case DS_VALUE_INT64:
                 return left->as.i64 == right->as.i64;
+            case DS_VALUE_FLOAT:
+                return left->as.f64 == right->as.f64;
             case DS_VALUE_BOOL:
                 return left->as.boolean == right->as.boolean;
             default:
