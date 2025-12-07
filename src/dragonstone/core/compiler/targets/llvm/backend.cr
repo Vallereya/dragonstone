@@ -31,7 +31,7 @@ module Dragonstone
                             
                             String.build do |io|
                                 io << "; ---------------------------------\n"
-                                io << "; Dragonstone LLVM target artifact\n"
+                                io << "; Dragonstone LLVM Target Artifact \n"
                                 io << "; ---------------------------------\n"
                                 unless source.empty?
                                     io << "; Source snapshot\n"
@@ -95,6 +95,8 @@ module Dragonstone
                             @string_literals = {} of String => NamedTuple(name: String, escaped: String, length: Int32)
                             @string_order = [] of String
                             @functions = [] of AST::FunctionDef
+                            @function_names = {} of AST::FunctionDef => String
+                            @function_receivers = {} of AST::FunctionDef => String
                             @function_signatures = {} of String => FunctionSignature
                             @function_requires_block = {} of String => Bool
                             @runtime_literals_preregistered = false
@@ -428,22 +430,67 @@ module Dragonstone
                                 false
                             end
                         end
-                        
+
                         private def collect_functions
+                            @namespace_stack.clear
                             @program.ast.statements.each do |stmt|
-                                if func = stmt.as?(AST::FunctionDef)
-                                    @functions << func
-                                    requires_block = function_body_contains_yield?(func.body)
-                                    @function_requires_block[func.name] = requires_block
-                                    param_types = func.typed_parameters.map { |param| llvm_param_type(param.type) }
-                                    param_types << "i8*" if requires_block
-                                    signature = FunctionSignature.new(
-                                        return_type: llvm_type_of(func.return_type),
-                                        param_types: param_types
-                                    )
-                                    @function_signatures[func.name] = signature
+                                collect_functions_from(stmt)
+                            end
+                            @namespace_stack.clear
+                        end
+
+                        private def collect_functions_from(node : AST::Node)
+                            case node
+                            when AST::StructDefinition
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| collect_functions_from(stmt) }
+                                end
+                            when AST::ClassDefinition, AST::ModuleDefinition
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| collect_functions_from(stmt) }
+                                end
+                            when AST::FunctionDef
+                                register_function(node)
+                            end
+                        end
+
+                        private def register_function(func : AST::FunctionDef)
+                            mangled_name = if @namespace_stack.empty?
+                                func.name == "main" ? "__dragonstone_user_main" : func.name
+                            else
+                                type_name = @namespace_stack.join("::")
+                                struct_method_symbol(type_name, func.name)
+                            end
+
+                            @function_names[func] = mangled_name
+                            @functions << func
+
+                            receiver_type = nil
+                            if !@namespace_stack.empty?
+                                current_scope = @namespace_stack.join("::")
+                                if canonical_struct_name(current_scope)
+                                    receiver_type = llvm_struct_name(current_scope)
+                                    @function_receivers[func] = receiver_type
                                 end
                             end
+
+                            requires_block = function_body_contains_yield?(func.body)
+                            @function_requires_block[mangled_name] = requires_block
+
+                            param_types = func.typed_parameters.map { |param| llvm_param_type(param.type) }
+
+                            if receiver_type
+                                param_types.unshift(receiver_type)
+                            end
+
+                            param_types << "i8*" if requires_block
+                            
+                            signature = FunctionSignature.new(
+                                return_type: llvm_type_of(func.return_type),
+                                param_types: param_types
+                            )
+                            
+                            @function_signatures[mangled_name] = signature
                         end
                         
                         private def prepare_runtime_literals
@@ -527,28 +574,36 @@ module Dragonstone
                         
                         private def emit_function(io : IO, func : AST::FunctionDef)
                             return_type = llvm_type_of(func.return_type)
+
                             ctx = FunctionContext.new(io, return_type)
                             @namespace_stack.clear
-                            
+
+                            llvm_name = @function_names[func]
+
                             param_specs = [] of NamedTuple(type: String, source: String, name: String)
-                            requires_block = @function_requires_block[func.name]? || false
-                            params = func.typed_parameters.map_with_index do |param, index|
+                            params = [] of String
+                            requires_block = @function_requires_block[llvm_name]? || false
+
+                            if receiver_type = @function_receivers[func]?
+                                arg_name = "%self"
+                                params << "#{receiver_type} #{arg_name}"
+                                param_specs << {type: receiver_type, source: arg_name, name: "self"}
+                            end
+
+                            func.typed_parameters.each_with_index do |param, index|
                                 type = llvm_param_type(param.type)
                                 arg_name = "%arg#{index}"
                                 param_specs << {type: type, source: arg_name, name: param.name}
-                                "#{type} #{arg_name}"
+                                params << "#{type} #{arg_name}"
                             end
+
                             if requires_block
                                 block_arg = "%block_arg"
                                 param_specs << {type: "i8*", source: block_arg, name: "__block"}
                                 params << "i8* #{block_arg}"
                             end
-
-                            llvm_name = func.name == "main" ? "__dragonstone_user_main" : func.name
                             
-                            io << "define #{return_type} @#{llvm_name}(#{params.join(", ")}) {\n"
-                            # io << "define #{return_type} @#{func.name}(#{params.join(", ")}) {\n"
-
+                            io << "define #{return_type} @\"#{llvm_name}\"(#{params.join(", ")}) {\n"
                             io << "entry:\n"
                             
                             param_specs.each do |spec|
@@ -562,9 +617,7 @@ module Dragonstone
                             end
                             
                             terminated = generate_block(ctx, func.body)
-                            
                             emit_default_return(ctx) unless terminated
-                            
                             emit_postamble(ctx)
                             io << "}\n"
                         end
@@ -1748,7 +1801,8 @@ module Dragonstone
                         end
                         
                         private def emit_function_call(ctx : FunctionContext, call : AST::MethodCall, args : Array(ValueRef)) : ValueRef?
-                            signature = ensure_function_signature(call.name)
+                            target_name = call.name == "main" ? "__dragonstone_user_main" : call.name
+                            signature = ensure_function_signature(target_name)
                             
                             expected = signature[:param_types].size
                             provided = args.size
@@ -1762,25 +1816,14 @@ module Dragonstone
                             
                             arg_source = coerced_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
 
-                            target_name = call.name == "main" ? "__dragonstone_user_main" : call.name
-
                             if signature[:return_type] == "void"
-                                ctx.io << "  call void @#{target_name}(#{arg_source})\n"
+                                ctx.io << "  call void @\"#{target_name}\"(#{arg_source})\n"
                                 nil
                             else
                                 reg = ctx.fresh("call")
-                                ctx.io << "  %#{reg} = call #{signature[:return_type]} @#{target_name}(#{arg_source})\n"
+                                ctx.io << "  %#{reg} = call #{signature[:return_type]} @\"#{target_name}\"(#{arg_source})\n"
                                 value_ref(signature[:return_type], "%#{reg}")
                             end
-                            
-                            # if signature[:return_type] == "void"
-                            #     ctx.io << "  call void @#{call.name}(#{arg_source})\n"
-                            #     nil
-                            # else
-                            #     reg = ctx.fresh("call")
-                            #     ctx.io << "  %#{reg} = call #{signature[:return_type]} @#{call.name}(#{arg_source})\n"
-                            #     value_ref(signature[:return_type], "%#{reg}")
-                            # end
                         end
                         
                         private def emit_receiver_call(ctx : FunctionContext, method_name : String, receiver : ValueRef, args : Array(ValueRef)) : ValueRef
@@ -2133,6 +2176,7 @@ module Dragonstone
                                 ptr = materialize_string_pointer(ctx, segment)
                                 value_ref("i8*", ptr, constant: true)
                             end
+                            
                             buffer = allocate_pointer_buffer(ctx, refs) || raise("Constant path segments missing buffer")
                             runtime_call(ctx, "i8*", @runtime[:constant_lookup], [
                                 {type: "i64", ref: segments.size.to_s},
@@ -2151,6 +2195,7 @@ module Dragonstone
                         private def constant_symbol?(name : String) : Bool
                             if info = @analysis.symbol_table.lookup(name)
                                 case info.kind
+                                    
                                 when Language::Sema::SymbolKind::Constant,
                                      Language::Sema::SymbolKind::Type,
                                      Language::Sema::SymbolKind::Module
@@ -2236,9 +2281,11 @@ module Dragonstone
 
                         private def emit_struct_new(ctx : FunctionContext, struct_name : String, args : Array(ValueRef)) : ValueRef
                             fields = @struct_layouts[struct_name]? || raise "Unknown struct #{struct_name}"
+
                             if args.size != fields.size
                                 raise "Struct #{struct_name} expects #{fields.size} arguments but got #{args.size}"
                             end
+
                             struct_type = llvm_struct_name(struct_name)
                             current_ref = "zeroinitializer"
                             args.each_with_index do |arg, index|
@@ -2250,6 +2297,7 @@ module Dragonstone
                                 ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{coerced[:type]} #{coerced[:ref]}, #{index}\n"
                                 current_ref = "%#{reg}"
                             end
+
                             if current_ref == "zeroinitializer"
                                 value_ref(struct_type, current_ref, constant: true)
                             else
@@ -2294,25 +2342,30 @@ module Dragonstone
                             if value = emit_struct_field_access(ctx, struct_name, receiver, method_name, args)
                                 return value
                             end
+                            
                             function_symbol = struct_method_symbol(struct_name, method_name)
                             signature = ensure_function_signature(function_symbol)
                             call_args = [receiver] + args
                             expected_params = signature[:param_types]
+
                             if expected_params.size != call_args.size
                                 raise "Struct method #{function_symbol} expects #{expected_params.size} arguments but got #{call_args.size}"
                             end
+
                             coerced_args = call_args.map_with_index do |value, index|
                                 expected_type = expected_params[index]
                                 value[:type] == expected_type ? value : ensure_value_type(ctx, value, expected_type)
                             end
+
                             arg_source = coerced_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
                             return_type = signature[:return_type]
+
                             if return_type == "void"
-                                ctx.io << "  call void @#{function_symbol}(#{arg_source})\n"
+                                ctx.io << "  call void @\"#{function_symbol}\"(#{arg_source})\n"
                                 value_ref("i8*", "null", constant: true)
                             else
                                 reg = ctx.fresh("structcall")
-                                ctx.io << "  %#{reg} = call #{return_type} @#{function_symbol}(#{arg_source})\n"
+                                ctx.io << "  %#{reg} = call #{return_type} @\"#{function_symbol}\"(#{arg_source})\n"
                                 value_ref(return_type, "%#{reg}")
                             end
                         end
