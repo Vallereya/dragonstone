@@ -753,12 +753,18 @@ module Dragonstone
                                 raise "Unsupported expression #{node.class}"
                             end
                         end
-                        
+
                         private def generate_unary_expression(ctx : FunctionContext, node : AST::UnaryOp) : ValueRef
                             operand = generate_expression(ctx, node.operand)
-                            
+
                             case node.operator
                             when :-
+                                if operand[:type] == "double" || operand[:type] == "float"
+                                    reg = ctx.fresh("fneg")
+                                    ctx.io << "  %#{reg} = fneg double #{operand[:ref]}\n"
+                                    return value_ref("double", "%#{reg}")
+                                end
+
                                 bits = bits_for_type(operand[:type])
                                 raise "Cannot apply unary minus to boolean values" if bits == 1
                                 bits = 64 if bits == 0
@@ -1619,12 +1625,17 @@ module Dragonstone
                             ctx.io << "  %#{reg} = load #{slot[:type]}, #{slot[:type]}* #{slot[:ptr]}\n"
                             value_ref(slot[:type], "%#{reg}")
                         end
-                        
+
                         private def emit_binary_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
-                            if float_operation?(lhs, rhs)
+                            if float_type?(lhs[:type]) || float_type?(rhs[:type])
                                 return emit_float_op(ctx, operator, lhs, rhs)
                             end
-                            
+
+                            if struct_name = struct_name_for_value(lhs)
+                                method_name = operator.to_s
+                                return emit_struct_method_dispatch(ctx, struct_name, lhs, method_name, [rhs])
+                            end
+
                             case operator
                             when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>"
                                 target_bits = integer_operation_width(lhs, rhs)

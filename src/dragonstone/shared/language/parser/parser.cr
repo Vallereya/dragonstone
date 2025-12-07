@@ -70,6 +70,29 @@ module Dragonstone
             :BEGIN
         ]
 
+        OVERLOADABLE_OPERATORS = [
+            :PLUS,
+            :MINUS,
+            :MULTIPLY,
+            :DIVIDE,
+            :MODULO,
+            :POWER,
+            :SHIFT_LEFT,
+            :SHIFT_RIGHT,
+            :BIT_AND,
+            :BIT_OR,
+            :BIT_XOR,
+            :BIT_NOT,
+            :EQUALS,
+            :NOT_EQUALS,
+            :LESS,
+            :LESS_EQUAL,
+            :GREATER,
+            :GREATER_EQUAL,
+            :SPACESHIP,
+            :CASE_EQUALS
+        ]
+
         PRECEDENCE = {
             assignment: 10,
             conditional: 20,
@@ -1537,7 +1560,8 @@ module Dragonstone
 
         private def expect_method_name : Token
             token = current_token
-            if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type)
+            # if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type)
+            if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type) || OVERLOADABLE_OPERATORS.includes?(token.type)
                 advance
                 token
             else
