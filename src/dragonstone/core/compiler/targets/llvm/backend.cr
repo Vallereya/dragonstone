@@ -1660,6 +1660,12 @@ module Dragonstone
                             block_value = block_node ? generate_block_literal(ctx, block_node) : nil
                             arg_values = args.map { |arg| generate_expression(ctx, arg) }
                             if receiver = call.receiver
+                                if struct_name = resolve_struct_reference(receiver)
+                                    if call.name == "new"
+                                        raise "Struct constructors do not accept blocks" if block_value
+                                        return emit_struct_new(ctx, struct_name, arg_values)
+                                    end
+                                end
                                 receiver_value = generate_expression(ctx, receiver)
                                 if call.name == "call" && receiver_value[:type] == "i8*"
                                     return invoke_block(ctx, receiver_value, arg_values)
@@ -1991,10 +1997,16 @@ module Dragonstone
                             case type
                             when "i1", "i32", "i64"
                                 "0"
+                            when "double", "float"
+                                "0.0"
                             when "i8*"
                                 "null"
                             else
-                                "0"
+                                if type.starts_with?("%")
+                                    "zeroinitializer"
+                                else
+                                    "0"
+                                end
                             end
                         end
                         
@@ -2134,6 +2146,41 @@ module Dragonstone
 
                         private def struct_method_symbol(struct_name : String, method_name : String) : String
                             "#{llvm_struct_symbol(struct_name)}_#{method_name}"
+                        end
+
+                        private def resolve_struct_reference(node : AST::Node) : String?
+                            name = case node
+                                when AST::ConstantPath
+                                    node.names.join("::")
+                                when AST::Variable
+                                    node.name
+                                else
+                                    return nil
+                                end
+                            canonical_struct_name(name)
+                        end
+
+                        private def emit_struct_new(ctx : FunctionContext, struct_name : String, args : Array(ValueRef)) : ValueRef
+                            fields = @struct_layouts[struct_name]? || raise "Unknown struct #{struct_name}"
+                            if args.size != fields.size
+                                raise "Struct #{struct_name} expects #{fields.size} arguments but got #{args.size}"
+                            end
+                            struct_type = llvm_struct_name(struct_name)
+                            current_ref = "zeroinitializer"
+                            args.each_with_index do |arg, index|
+                                target_type_expr = fields[index]
+                                target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                                coerced = ensure_value_type(ctx, arg, target_type)
+                                reg = ctx.fresh("structinit")
+                                base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
+                                ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{coerced[:type]} #{coerced[:ref]}, #{index}\n"
+                                current_ref = "%#{reg}"
+                            end
+                            if current_ref == "zeroinitializer"
+                                value_ref(struct_type, current_ref, constant: true)
+                            else
+                                value_ref(struct_type, current_ref)
+                            end
                         end
 
                         private def emit_struct_field_access(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef?
