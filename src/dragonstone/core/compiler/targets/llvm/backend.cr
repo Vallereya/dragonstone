@@ -2020,11 +2020,26 @@ module Dragonstone
 
                         private def emit_struct_method_dispatch(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef
                             function_symbol = struct_method_symbol(struct_name, method_name)
+                            signature = ensure_function_signature(function_symbol)
                             call_args = [receiver] + args
-                            arg_source = call_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
-                            reg = ctx.fresh("structcall")
-                            ctx.io << "  %#{reg} = call i8* @#{function_symbol}(#{arg_source})\n"
-                            value_ref("i8*", "%#{reg}")
+                            expected_params = signature[:param_types]
+                            if expected_params.size != call_args.size
+                                raise "Struct method #{function_symbol} expects #{expected_params.size} arguments but got #{call_args.size}"
+                            end
+                            coerced_args = call_args.map_with_index do |value, index|
+                                expected_type = expected_params[index]
+                                value[:type] == expected_type ? value : ensure_value_type(ctx, value, expected_type)
+                            end
+                            arg_source = coerced_args.map { |value| "#{value[:type]} #{value[:ref]}" }.join(", ")
+                            return_type = signature[:return_type]
+                            if return_type == "void"
+                                ctx.io << "  call void @#{function_symbol}(#{arg_source})\n"
+                                value_ref("i8*", "null", constant: true)
+                            else
+                                reg = ctx.fresh("structcall")
+                                ctx.io << "  %#{reg} = call #{return_type} @#{function_symbol}(#{arg_source})\n"
+                                value_ref(return_type, "%#{reg}")
+                            end
                         end
 
                     private def qualify_name(name : String) : String
