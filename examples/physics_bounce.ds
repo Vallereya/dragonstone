@@ -1,0 +1,39 @@
+#[
+    Physics Bounce/Time Example
+
+    #! THIS ONLY WORKS WITH THE LLVM BACKEND !#
+]#
+
+struct Vec3
+    property x: float
+    property y: float
+    property z: float
+end
+
+def main
+    position = Vec3.new(0.0, 100.0, 0.0)
+    velocity = Vec3.new(1.5, 0.0, 0.0)
+    gravity = Vec3.new(0.0, -9.8, 0.0)
+    dt = 0.1
+
+    i = 0
+    while i < 10
+        velocity = Vec3.new(
+            velocity.x + (gravity.x * dt),
+            velocity.y + (gravity.y * dt),
+            velocity.z + (gravity.z * dt)
+        )
+
+        position = Vec3.new(
+            position.x + (velocity.x * dt),
+            position.y + (velocity.y * dt),
+            position.z + (velocity.z * dt)
+        )
+
+        echo "Tick #{i}: Height = #{position.y}"
+        
+        i = i + 1
+    end
+end
+
+main

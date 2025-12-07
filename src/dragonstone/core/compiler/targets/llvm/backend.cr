@@ -5,6 +5,8 @@ require "set"
 require "../../build_options"
 require "../shared/helpers"
 require "../shared/program_serializer"
+require "../../../../shared/language/lexer/lexer"
+require "../../../../shared/language/parser/parser"
 
 module Dragonstone
     module Core
@@ -82,7 +84,8 @@ module Dragonstone
                             index_set: String,
                             case_compare: String,
                             yield_missing_block: String,
-                            display_value: String
+                            display_value: String,
+                            interpolated_string: String
                         )
                         
                         @string_counter = 0
@@ -129,7 +132,8 @@ module Dragonstone
                                 index_set: "dragonstone_runtime_index_set",
                                 case_compare: "dragonstone_runtime_case_compare",
                                 yield_missing_block: "dragonstone_runtime_yield_missing_block",
-                                display_value: "dragonstone_runtime_value_display"
+                                display_value: "dragonstone_runtime_value_display",
+                                interpolated_string: "dragonstone_runtime_interpolated_string"
                             )
                         end
                         
@@ -349,6 +353,11 @@ module Dragonstone
                                 end
                             when AST::YieldExpression
                                 node.arguments.each { |arg| collect_strings_from_node(arg) }
+                            when AST::InterpolatedString
+                                node.parts.each do |part|
+                                    type, content = part
+                                    intern_string(content) if type == :string
+                                end
                             end
                         end
                         
@@ -505,6 +514,7 @@ module Dragonstone
                             io << "declare i1 @#{@runtime[:case_compare]}(i8*, i8*)\n"
                             io << "declare void @#{@runtime[:yield_missing_block]}()\n"
                             io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:interpolated_string]}(i64, i8**)\n"
                             io << "declare i8* @malloc(i64)\n\n"
                         end
                         
@@ -725,6 +735,8 @@ module Dragonstone
                                 generate_tuple_literal(ctx, node)
                             when AST::NamedTupleLiteral
                                 generate_named_tuple_literal(ctx, node)
+                            when AST::InterpolatedString
+                                generate_interpolated_string(ctx, node)
                             when AST::IndexAccess
                                 generate_index_access(ctx, node)
                             when AST::IndexAssignment
@@ -1153,6 +1165,11 @@ module Dragonstone
                                 scan_capture_statements(node.block, available, local_bindings, ordered, seen)
                             when AST::YieldExpression
                                 node.arguments.each { |arg| scan_capture_node(arg, available, local_bindings, ordered, seen) }
+                            when AST::InterpolatedString
+                                node.normalized_parts.each do |type, content|
+                                    next unless type == :expression
+                                    scan_capture_node(interpolation_expression(content), available, local_bindings, ordered, seen)
+                                end
                             when AST::BlockLiteral, AST::FunctionDef, AST::FunctionLiteral,
                                  AST::ClassDefinition, AST::StructDefinition, AST::ModuleDefinition, AST::EnumDefinition
                                 # nested scopes – skip
@@ -1235,7 +1252,8 @@ module Dragonstone
                                  AST::BeginExpression,
                                  AST::ConstantPath,
                                  AST::TupleLiteral,
-                                 AST::NamedTupleLiteral
+                                 AST::NamedTupleLiteral,
+                                 AST::InterpolatedString
                                 true
                             else
                                 false
@@ -1303,6 +1321,29 @@ module Dragonstone
                                 {type: "i64", ref: len_literal.to_s},
                                 {type: "i8**", ref: keys_buffer},
                                 {type: "i8**", ref: values_buffer}
+                            ])
+                        end
+
+                        private def generate_interpolated_string(ctx : FunctionContext, node : AST::InterpolatedString) : ValueRef
+                            parts = node.normalized_parts
+                            return value_ref("i8*", materialize_string_pointer(ctx, ""), constant: true) if parts.empty?
+
+                            segments = [] of ValueRef
+                            parts.each do |type, content|
+                                if type == :string
+                                    segments << value_ref("i8*", materialize_string_pointer(ctx, content), constant: true)
+                                else
+                                    expression_value = generate_expression(ctx, interpolation_expression(content))
+                                    segments << ensure_string_pointer(ctx, expression_value)
+                                end
+                            end
+
+                            return segments.first if segments.size == 1
+
+                            buffer = allocate_pointer_buffer(ctx, segments) || raise "Interpolated string segments missing buffer"
+                            runtime_call(ctx, "i8*", @runtime[:interpolated_string], [
+                                {type: "i64", ref: segments.size.to_s},
+                                {type: "i8**", ref: buffer}
                             ])
                         end
                         
@@ -1478,6 +1519,8 @@ module Dragonstone
                                 value_ref("i32", value.to_s, constant: true)
                             when Int64
                                 value_ref("i64", value.to_s, constant: true)
+                            when Float64, Float32
+                                value_ref("double", value.to_s, constant: true)
                             when Bool
                                 value_ref("i1", value ? "1" : "0", constant: true)
                             when String
@@ -1800,6 +1843,11 @@ module Dragonstone
                         private def coerce_integer(ctx : FunctionContext, value : ValueRef, target_bits : Int32) : ValueRef
                             if integer_type?(value[:type])
                                 adjust_integer_width(ctx, value, target_bits)
+                            elsif float_type?(value[:type])
+                                double_value = ensure_double(ctx, value)
+                                reg = ctx.fresh("fptosi")
+                                ctx.io << "  %#{reg} = fptosi double #{double_value[:ref]} to i#{target_bits}\n"
+                                value_ref("i#{target_bits}", "%#{reg}")
                             elsif value[:type] == "i8*"
                                 unboxed = runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
                                 target_bits == 32 ? truncate_integer(ctx, unboxed, 32) : unboxed
@@ -2181,6 +2229,24 @@ module Dragonstone
                             else
                                 value_ref(struct_type, current_ref)
                             end
+                        end
+
+                        private def ensure_string_pointer(ctx : FunctionContext, value : ValueRef) : ValueRef
+                            return value if value[:type] == "i8*"
+                            boxed = box_value(ctx, value)
+                            runtime_call(ctx, "i8*", @runtime[:display_value], [{type: "i8*", ref: boxed[:ref]}])
+                        end
+
+                        private def interpolation_expression(content)
+                            return content if content.is_a?(AST::Node)
+                            parse_interpolation_expression(content.to_s)
+                        end
+
+                        private def parse_interpolation_expression(source : String) : AST::Node
+                            lexer = Lexer.new(source)
+                            tokens = lexer.tokenize
+                            parser = Parser.new(tokens)
+                            parser.parse_expression_entry
                         end
 
                         private def emit_struct_field_access(ctx : FunctionContext, struct_name : String, receiver : ValueRef, method_name : String, args : Array(ValueRef)) : ValueRef?

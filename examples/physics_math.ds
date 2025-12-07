@@ -1,3 +1,9 @@
+#[
+    Physics Math Example
+
+    #! THIS ONLY WORKS WITH THE LLVM BACKEND !#
+]#
+
 struct Vec3
     property x: float
     property y: float
@@ -5,5 +11,15 @@ struct Vec3
 end
 
 def add_vecs(a: Vec3, b: Vec3) -> Vec3
-    Vec3.new(a.x + b.x, a.y + b.y, a.z + b.z)
+    return Vec3.new(a.x + b.x, a.y + b.y, a.z + b.z)
 end
+
+v1 = Vec3.new(10.0, 20.0, 30.0)
+v2 = Vec3.new(5.5, 5.5, 5.5)
+
+result = add_vecs(v1, v2)
+
+echo "Result Vector:"
+echo result.x
+echo result.y
+echo result.z

@@ -227,6 +227,33 @@ static char *ds_join_segments(int64_t length, void **segments) {
     return buffer;
 }
 
+static char *ds_concat_segments(int64_t length, void **segments) {
+    if (length <= 0) {
+        char *buffer = (char *)ds_alloc(1);
+        buffer[0] = '\0';
+        return buffer;
+    }
+    size_t total = 0;
+    for (int64_t i = 0; i < length; ++i) {
+        const char *segment = segments ? (const char *)segments[i] : "";
+        if (segment) {
+            total += strlen(segment);
+        }
+    }
+    char *buffer = (char *)ds_alloc(total + 1);
+    char *cursor = buffer;
+    for (int64_t i = 0; i < length; ++i) {
+        const char *segment = segments ? (const char *)segments[i] : "";
+        if (segment) {
+            size_t len = strlen(segment);
+            memcpy(cursor, segment, len);
+            cursor += len;
+        }
+    }
+    *cursor = '\0';
+    return buffer;
+}
+
 void *dragonstone_runtime_box_i32(int32_t value) {
     DSValue *box = ds_new_box(DS_VALUE_INT32);
     box->as.i32 = value;
@@ -312,6 +339,10 @@ void *dragonstone_runtime_alloc_instance(void *class_handle, int64_t field_bytes
     DSObject *object = (DSObject *)ds_alloc(total);
     object->klass = (DSClass *)class_handle;
     return object;
+}
+
+void *dragonstone_runtime_interpolated_string(int64_t length, void **segments) {
+    return ds_concat_segments(length, segments);
 }
 
 void *dragonstone_runtime_method_invoke(void *receiver, void *method_name, int64_t argc, void **argv) {
