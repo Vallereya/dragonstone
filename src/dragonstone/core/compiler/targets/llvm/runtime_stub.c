@@ -17,7 +17,8 @@ typedef enum {
     DS_VALUE_INT32,
     DS_VALUE_INT64,
     DS_VALUE_BOOL,
-    DS_VALUE_FLOAT
+    DS_VALUE_FLOAT,
+    DS_VALUE_STRUCT
 } DSValueKind;
 
 typedef struct {
@@ -28,6 +29,7 @@ typedef struct {
         int64_t i64;
         bool boolean;
         double f64;
+        void* ptr;
     } as;
 } DSValue;
 
@@ -516,6 +518,9 @@ void *dragonstone_runtime_value_display(void *value) {
             snprintf(buffer, sizeof(buffer), "%g", box->as.f64);
             return ds_strdup(buffer);
         }
+        case DS_VALUE_STRUCT: {
+            return ds_strdup("{Struct}");
+        }
         default:
             return (void *)DS_STR_NIL;
     }
@@ -561,4 +566,40 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
 
 void dragonstone_runtime_yield_missing_block(void) {
     runtime_stub_fatal("dragonstone_runtime_yield_missing_block", "missing block for yield");
+}
+
+void* dragonstone_runtime_box_struct(void* data, int64_t size) {
+    DSValue* box = ds_new_box(DS_VALUE_STRUCT);
+    void* heap_copy = ds_alloc((size_t)size);
+    memcpy(heap_copy, data, (size_t)size);
+
+    box->as.ptr = heap_copy;
+    return box;
+}
+
+void* dragonstone_runtime_unbox_struct(void* value) {
+    if (!value || !ds_is_boxed(value)) return NULL;
+    DSValue* box = (DSValue*)value;
+    if (box->kind != DS_VALUE_STRUCT) return NULL;
+    
+    return box->as.ptr;
+}
+
+void* dragonstone_runtime_array_push(void* array_ptr, void* value) {
+    if (!array_ptr) return NULL;
+    
+    DSArray* array = (DSArray*)array_ptr;
+    
+    int64_t new_length = array->length + 1;
+    void** new_items = (void**)realloc(array->items, sizeof(void*) * new_length);
+    
+    if (!new_items) {
+        runtime_stub_fatal("dragonstone_runtime_array_push", "out of memory");
+    }
+    
+    array->items = new_items;
+    array->items[array->length] = value;
+    array->length = new_length;
+    
+    return array_ptr;
 }

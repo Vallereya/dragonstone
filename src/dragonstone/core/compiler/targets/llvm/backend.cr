@@ -85,7 +85,10 @@ module Dragonstone
                             case_compare: String,
                             yield_missing_block: String,
                             display_value: String,
-                            interpolated_string: String
+                            interpolated_string: String,
+                            box_struct: String,
+                            unbox_struct: String,
+                            array_push: String,
                         )
                         
                         @string_counter = 0
@@ -135,7 +138,10 @@ module Dragonstone
                                 case_compare: "dragonstone_runtime_case_compare",
                                 yield_missing_block: "dragonstone_runtime_yield_missing_block",
                                 display_value: "dragonstone_runtime_value_display",
-                                interpolated_string: "dragonstone_runtime_interpolated_string"
+                                interpolated_string: "dragonstone_runtime_interpolated_string",
+                                box_struct: "dragonstone_runtime_box_struct",
+                                unbox_struct: "dragonstone_runtime_unbox_struct",
+                                array_push: "dragonstone_runtime_array_push",
                             )
                         end
                         
@@ -563,6 +569,9 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:interpolated_string]}(i64, i8**)\n"
                             io << "declare i8* @malloc(i64)\n\n"
+                            io << "declare i8* @#{@runtime[:box_struct]}(i8*, i64)\n"
+                            io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
                         end
                         
                         private def emit_functions(io : IO)
@@ -677,6 +686,10 @@ module Dragonstone
                                 false
                             when AST::Assignment
                                 value = generate_expression(ctx, stmt.value.as(AST::Node))
+                                if type_expr = stmt.type_annotation
+                                    target_type = llvm_type_of(type_expr)
+                                    value = ensure_value_type(ctx, value, target_type)
+                                end
                                 if operator = stmt.operator
                                     current = load_local(ctx, stmt.name)
                                     value = emit_binary_op(ctx, operator, current, value)
@@ -1605,6 +1618,25 @@ module Dragonstone
                         end
                         
                         private def box_value(ctx : FunctionContext, value : ValueRef) : ValueRef
+                            type = value[:type]
+                            if type.starts_with?("%")
+                                temp_ptr = ctx.fresh("box_temp")
+                                ctx.io << "  %#{temp_ptr} = alloca #{type}\n"
+                                ctx.io << "  store #{type} #{value[:ref]}, #{type}* %#{temp_ptr}\n"
+
+                                raw_ptr = ctx.fresh("box_raw")
+                                ctx.io << "  %#{raw_ptr} = bitcast #{type}* %#{temp_ptr} to i8*\n"
+
+                                size_ptr = ctx.fresh("size_ptr")
+                                ctx.io << "  %#{size_ptr} = getelementptr #{type}, #{type}* null, i32 1\n"
+                                size_int = ctx.fresh("size")
+                                ctx.io << "  %#{size_int} = ptrtoint #{type}* %#{size_ptr} to i64\n"
+
+                                reg = ctx.fresh("boxed_struct")
+                                ctx.io << "  %#{reg} = call i8* @#{@runtime[:box_struct]}(i8* %#{raw_ptr}, i64 %#{size_int})\n"
+                                return value_ref("i8*", "%#{reg}")
+                            end
+
                             case value[:type]
                             when "i32"
                                 runtime_call(ctx, "i8*", @runtime[:box_i32], [{type: "i32", ref: value[:ref]}])
@@ -1687,6 +1719,26 @@ module Dragonstone
 
                             if float_type?(lhs[:type]) || float_type?(rhs[:type])
                                 return emit_float_op(ctx, operator, lhs, rhs)
+                            end
+
+                            if operator == :<<
+                                if lhs[:type] == "i8*"
+                                    rhs_boxed = box_value(ctx, rhs)
+                                    runtime_call(ctx, "i8*", @runtime[:array_push], [
+                                        {type: "i8*", ref: lhs[:ref]},
+                                        {type: "i8*", ref: rhs_boxed[:ref]}
+                                    ])
+                                    return lhs
+                                else
+                                    target_bits = integer_operation_width(lhs, rhs)
+                                    lhs_val = coerce_integer(ctx, lhs, target_bits)
+                                    rhs_val = coerce_integer(ctx, rhs, target_bits)
+
+                                    reg = ctx.fresh("shl")
+                                    type = "i#{target_bits}"
+                                    ctx.io << "  %#{reg} = shl #{type} #{lhs_val[:ref]}, #{rhs_val[:ref]}\n"
+                                    return value_ref(type, "%#{reg}")
+                                end
                             end
 
                             case operator
@@ -1867,6 +1919,18 @@ module Dragonstone
                         
                         private def ensure_value_type(ctx : FunctionContext, value : ValueRef, expected : String) : ValueRef
                             return value if value[:type] == expected
+
+                            if expected.starts_with?("%") && value[:type] == "i8*"
+                                data_ptr = runtime_call(ctx, "i8*", @runtime[:unbox_struct], [{type: "i8*", ref: value[:ref]}])
+
+                                typed_ptr = ctx.fresh("struct_ptr")
+                                ctx.io << "  %#{typed_ptr} = bitcast i8* #{data_ptr[:ref]} to #{expected}*\n"
+
+                                reg = ctx.fresh("unboxed")
+                                ctx.io << "  %#{reg} = load #{expected}, #{expected}* %#{typed_ptr}\n"
+
+                                return value_ref(expected, "%#{reg}")
+                            end
 
                             case expected
                             when "i32"
@@ -2176,7 +2240,7 @@ module Dragonstone
                                 ptr = materialize_string_pointer(ctx, segment)
                                 value_ref("i8*", ptr, constant: true)
                             end
-                            
+
                             buffer = allocate_pointer_buffer(ctx, refs) || raise("Constant path segments missing buffer")
                             runtime_call(ctx, "i8*", @runtime[:constant_lookup], [
                                 {type: "i64", ref: segments.size.to_s},

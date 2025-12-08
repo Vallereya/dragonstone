@@ -65,4 +65,24 @@ These runs I'm going to start making after any new implementations, updates or c
 
         Summary:
         <2% overhead at scale
+
++    Tested on 2025-12-07:
+        1 Billion Iterations; Through the llvm compiler.
+
+        Interpreter Time:       ~223.71 seconds (3.7 minutes)
+        LLVM Compiler Time:     1.23 seconds
+        Results:                ~182x Faster
+
+        Raw Results:
+        Days              : 0
+        Hours             : 0
+        Minutes           : 0
+        Seconds           : 1
+        Milliseconds      : 232
+        Ticks             : 12326265
+        TotalDays         : 1.42665104166667E-05
+        TotalHours        : 0.00034239625
+        TotalMinutes      : 0.020543775
+        TotalSeconds      : 1.2326265
+        TotalMilliseconds : 1232.6265 
 ```

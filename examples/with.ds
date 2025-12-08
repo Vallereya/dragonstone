@@ -2,6 +2,7 @@
     With Example
 ]#
 
+# Example One
 struct Point
     property x: int
     property y: int
@@ -17,3 +18,16 @@ with point
     echo x
     echo y
 end
+
+# Example Two
+struct Point
+    property x: int
+    property y: int
+
+    def initialize(@x: int, @y: int)
+    
+    end
+end
+
+point = Point.new(10, 20)
+echo "x: #{point.x}, y: #{point.y}"
