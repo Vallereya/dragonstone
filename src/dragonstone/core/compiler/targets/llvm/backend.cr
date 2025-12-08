@@ -688,6 +688,10 @@ module Dragonstone
                                 false
                             when AST::DebugPrint
                                 value = generate_expression(ctx, stmt.expression)
+                                prefix_str = "#{stmt.expression.to_source} # => "
+                                format_ptr = materialize_string_pointer(ctx, "%s")
+                                prefix_ptr = materialize_string_pointer(ctx, prefix_str)
+                                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{prefix_ptr})\n"
                                 emit_echo(ctx, value)
                                 false
                             when AST::Assignment

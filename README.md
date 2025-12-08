@@ -17,12 +17,12 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ### Building from Source using Bash (All Platforms)
 1. Clone this repository.
 2. Change directory to this project.
-3. Run `shards build` to build *(this gets placed in `./bin`)*.
+3. Run `shards build` to build.
 
 ### Building from Source using Terminal or Powershell (Windows Only)
 1. Clone this repository.
 2. Change directory to this project.
-3. Run `shards build` to build *(this gets placed in `./bin`)*.
+3. Run `shards build` to build *(this gets placed in `./bin/build`)*.
 4. Run `.\bin\dragonstone.bat --rebuild-exe` *(this rebuilds the project with the `--release` flag and adds the dragonstone icon)*.
 5. <font color="color:#5E06EE;">(Optional)</font> Run `.\bin\dragonstone.bat` to add `.\bin` to your users PATH environmental variable, allowing you to run `dragonstone` from anywhere. Restart your terminal after this step.
 

@@ -26,7 +26,14 @@ if ($null -eq $DragonstoneArgs) {
 $scriptPath   = $PSCommandPath
 $scriptRoot   = Split-Path -Parent $scriptPath
 $projectRoot  = Split-Path -Parent $scriptRoot
-$exePath      = Join-Path $scriptRoot 'dragonstone.exe'
+
+# $exePath      = Join-Path $scriptRoot 'dragonstone.exe'
+$buildDir     = Join-Path $scriptRoot 'build'
+if (-not (Test-Path -Path $buildDir)) {
+    New-Item -ItemType Directory -Path $buildDir | Out-Null
+}
+$exePath      = Join-Path $buildDir 'dragonstone.exe'
+
 $sourceEntry  = Join-Path $projectRoot 'bin/dragonstone'
 
 $resourceScript = $null
@@ -255,13 +262,13 @@ function EnsureDragonstoneExecutable {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $resourceLinkArg)
             Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
-        } elseif ($script:shards) {
-            Write-Host "Building with shards..."
-            if ($resourceLinkArg) {
-                Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
-                Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
-            }
-            & $script:shards.Path 'build'
+        # } elseif ($script:shards) {
+        #     Write-Host "Building with shards..."
+        #     if ($resourceLinkArg) {
+        #         Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
+        #         Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
+        #     }
+        #     & $script:shards.Path 'build'
         } else {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release')
             Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"

@@ -171,7 +171,7 @@
 + Add a simple networking and toml stdlibs, and adjust the path/file utilities.
 + Implement abstract classes and abstract def.
 - Extend the LLVM backend be able to compile all current examples.
-- 
+- Support for annotations via `@[...]`, this will allow use to use it later.
 ```
 
 ###     <h2 align="center">         Phase Four
@@ -180,7 +180,6 @@
 ```diff
 - Implement support for concurrency.
 - Implement optional Garbage Collection (c-like or crystal-like).
-- Support for annotations via `@[...]`.
 
 - Setup a proper build/release pipeline.
 - Set CI + cross-platform builds (Linux/macOS/Windows).
