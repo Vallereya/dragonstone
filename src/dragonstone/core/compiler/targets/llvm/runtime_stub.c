@@ -274,7 +274,7 @@ static char *ds_strdup(const char *input) {
     return copy;
 }
 
-void *dragonstone_runtime_value_display(void *value) {
+static char *ds_format_value(void *value, bool quote_strings) {
     if (!value) return (void *)DS_STR_NIL_VAL;
     
     if (ds_is_boxed(value)) {
@@ -307,7 +307,28 @@ void *dragonstone_runtime_value_display(void *value) {
             }
         }
     }
-    return value;
+
+    char *str = (char *)value;
+
+    if (quote_strings) {
+        size_t len = strlen(str);
+        char *quoted = (char *)ds_alloc(len + 3); // "" + \0
+        quoted[0] = '"';
+        strcpy(quoted + 1, str);
+        quoted[len + 1] = '"';
+        quoted[len + 2] = '\0';
+        return quoted;
+    }
+
+    return ds_strdup(str);
+}
+
+void *dragonstone_runtime_value_display(void *value) {
+    return ds_format_value(value, true);
+}
+
+void *dragonstone_runtime_to_string(void *value) {
+    return ds_format_value(value, false);
 }
 
 void *dragonstone_runtime_box_i32(int32_t v) { DSValue *b = ds_new_box(DS_VALUE_INT32); b->as.i32 = v; return b; }

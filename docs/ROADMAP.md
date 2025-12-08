@@ -167,25 +167,22 @@
 #####   <h6 align="center">         `v0.1.2 -> v0.1.3`
 
 ```diff
-+ Reformat the stdlib.
-+ Add a simple networking and toml stdlibs, and adjust the path/file utilities.
 + Implement abstract classes and abstract def.
-- Extend the LLVM backend be able to compile all current examples.
-- Support for annotations via `@[...]`, this will allow use to use it later.
++ Support for annotations via `@[...]`, this will allow use to use it later.
++ Reformat the stdlib and adjust the path/file utilities.
++ Add a simple networking stdlib.
++ Add a simple toml stdlib.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-- Implement support for concurrency.
-- Implement optional Garbage Collection (c-like or crystal-like).
-
-- Setup a proper build/release pipeline.
-- Set CI + cross-platform builds (Linux/macOS/Windows).
-- Maximize portability/native cross-platform.
-- VM unwind stack w/ exception objects, make a method cache w/ fallback path.
-- Implement optional Borrow Checker/Ownership (rust-like).
+- Extend the LLVM backend be able to compile all current examples.
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -206,43 +203,43 @@
 
 ```diff
 - Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
-- Start work for the `forge` package manager.
-- Add dev more commands/flags and setup micro-benchmarks, verify parser & bytecode coverage for all operators.
-- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
-- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Two
 #####   <h6 align="center">         `v0.1.6 -> v0.1.7`
 
 ```diff
-- Fix FFI and make sure to do some boilerplate code avoidance.
-- Expand the bindings of the 3-Way Interop, so Dragonstone can call more.
-- Start C lib with something basic.
-- Start Crystal lib with something basic.
-- Start Ruby lib with something basic.
+- 
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Three
 #####   <h6 align="center">         `v0.1.7 -> v0.1.8`
 
 ```diff
-- Expand C lib.
-- Expand Crystal lib.
-- Expand Ruby lib.
-- C, Crystal, and Ruby libs expanded into stdlib, they are made separate then added as an stdlib.
-- Expand the stdlib and port any stdlib to dragonstone if there is any not.
+- 
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.8 -> v0.1.9`
 
 ```diff
-- Begin Bootstrapping.
-- Remove donors so everything runs on dragonstone.
-- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI).
-- Freeze current grammar subset if needed on C side, and finish target build outs for the compiler.
-- Fix `--backend` flags.
+- 
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Five

@@ -17,6 +17,20 @@ module Dragonstone
                     nil
                 end
             end
+
+            def to_source(io : IO)
+                io << "when "
+                @conditions.each_with_index do |cond, index|
+                    io << ", " if index > 0
+                    cond.to_source(io)
+                end
+                io << "\n"
+                
+                @block.each do |node|
+                    node.to_source(io)
+                    io << "\n"
+                end
+            end
         end
     end
 end

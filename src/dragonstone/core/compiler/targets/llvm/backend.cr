@@ -89,6 +89,7 @@ module Dragonstone
                             box_struct: String,
                             unbox_struct: String,
                             array_push: String,
+                            to_string: String,
                         )
                         
                         @string_counter = 0
@@ -142,6 +143,7 @@ module Dragonstone
                                 box_struct: "dragonstone_runtime_box_struct",
                                 unbox_struct: "dragonstone_runtime_unbox_struct",
                                 array_push: "dragonstone_runtime_array_push",
+                                to_string: "dragonstone_runtime_to_string",
                             )
                         end
                         
@@ -261,6 +263,8 @@ module Dragonstone
                                     intern_string(value) if value.is_a?(String)
                                 end
                             when AST::DebugPrint
+                                intern_string("%s")
+                                intern_string("#{node.expression.to_source} # => ")
                                 collect_strings_from_node(node.expression)
                             when AST::Variable
                                 intern_string(node.name) if constant_symbol?(node.name)
@@ -569,6 +573,7 @@ module Dragonstone
                             io << "declare i1 @#{@runtime[:case_compare]}(i8*, i8*)\n"
                             io << "declare void @#{@runtime[:yield_missing_block]}()\n"
                             io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:interpolated_string]}(i64, i8**)\n"
                             io << "declare i8* @malloc(i64)\n\n"
                             io << "declare i8* @#{@runtime[:box_struct]}(i8*, i64)\n"
@@ -692,7 +697,7 @@ module Dragonstone
                                 format_ptr = materialize_string_pointer(ctx, "%s")
                                 prefix_ptr = materialize_string_pointer(ctx, prefix_str)
                                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{prefix_ptr})\n"
-                                emit_echo(ctx, value)
+                                emit_echo(ctx, value, inspect: true)
                                 false
                             when AST::Assignment
                                 value = generate_expression(ctx, stmt.value.as(AST::Node))
@@ -1826,7 +1831,7 @@ module Dragonstone
                                 raise "echo expects exactly one argument" unless args.size == 1
                                 raise "echo does not accept a block" if block_node
                                 arg_val = generate_expression(ctx, args.first)
-                                emit_echo(ctx, arg_val)
+                                emit_echo(ctx, arg_val, inspect: false)
                                 return nil
                             end
                             
@@ -1900,10 +1905,11 @@ module Dragonstone
                             ])
                         end
                         
-                        private def emit_echo(ctx : FunctionContext, value : ValueRef)
+                        private def emit_echo(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
                             case value[:type]
                             when "i8*"
-                                display = runtime_call(ctx, "i8*", @runtime[:display_value], [{type: "i8*", ref: value[:ref]}])
+                                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                                display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
                                 ctx.io << "  call i32 @puts(i8* #{display[:ref]})\n"
                             when "i32", "i64"
                                 emit_echo_integer(ctx, value)
