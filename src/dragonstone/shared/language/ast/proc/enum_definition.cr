@@ -19,6 +19,15 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_enum_definition(self)
             end
+
+            # def to_source : String
+            #     String.build do |io|
+            #         io << name
+            #         if v = value
+            #             io << " = " << v.to_source
+            #         end
+            #     end
+            # end
         end
     end
 end

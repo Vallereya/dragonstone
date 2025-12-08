@@ -260,6 +260,8 @@ module Dragonstone
                                 if value = node.value
                                     intern_string(value) if value.is_a?(String)
                                 end
+                            when AST::DebugPrint
+                                collect_strings_from_node(node.expression)
                             when AST::Variable
                                 intern_string(node.name) if constant_symbol?(node.name)
                             when AST::MethodCall
@@ -683,6 +685,10 @@ module Dragonstone
                             case stmt
                             when AST::MethodCall
                                 generate_method_call(ctx, stmt)
+                                false
+                            when AST::DebugPrint
+                                value = generate_expression(ctx, stmt.expression)
+                                emit_echo(ctx, value)
                                 false
                             when AST::Assignment
                                 value = generate_expression(ctx, stmt.value.as(AST::Node))

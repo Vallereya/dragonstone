@@ -170,16 +170,18 @@
 + Reformat the stdlib.
 + Add a simple networking and toml stdlibs, and adjust the path/file utilities.
 + Implement abstract classes and abstract def.
-
-- Implement support for concurrency.
-- Implement optional Garbage Collection (c-like or crystal-like).
-- Support for annotations via `@[...]`.
+- Extend the LLVM backend be able to compile all current examples.
+- 
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
+- Implement support for concurrency.
+- Implement optional Garbage Collection (c-like or crystal-like).
+- Support for annotations via `@[...]`.
+
 - Setup a proper build/release pipeline.
 - Set CI + cross-platform builds (Linux/macOS/Windows).
 - Maximize portability/native cross-platform.

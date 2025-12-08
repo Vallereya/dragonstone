@@ -18,7 +18,8 @@ typedef enum {
     DS_VALUE_INT64,
     DS_VALUE_BOOL,
     DS_VALUE_FLOAT,
-    DS_VALUE_STRUCT
+    DS_VALUE_STRUCT,
+    DS_VALUE_ARRAY
 } DSValueKind;
 
 typedef struct {
@@ -38,60 +39,21 @@ typedef struct {
     void **items;
 } DSArray;
 
-typedef struct {
-    int64_t length;
-    void **keys;
-    void **values;
-} DSMap;
+static DSValue *ds_new_box(DSValueKind kind);
+static char *ds_strdup(const char *input);
+void *dragonstone_runtime_value_display(void *value);
 
-typedef struct {
-    void *function;
-    void *environment;
-} DSBlockHandle;
-
-typedef struct {
-    char *name;
-    void *value;
-} DSConstantEntry;
-
-typedef struct DSClass DSClass;
-
-struct DSClass {
-    const char *name;
-    DSClass *parent;
-    void **vtable;
-    size_t vtable_size;
-    size_t instance_size;
-};
-
-typedef struct {
-    DSClass *klass;
-} DSObject;
-
-static DSConstantEntry *g_constant_table = NULL;
-static size_t g_constant_count = 0;
-static size_t g_constant_capacity = 0;
-static const char DS_STR_NIL[] = "nil";
-static const char DS_STR_TRUE[] = "true";
-static const char DS_STR_FALSE[] = "false";
-
-static void runtime_stub_log(const char *fn_name) {
-    fprintf(stderr, "[dragonstone][runtime] %s invoked.\n", fn_name);
-}
-
-static void runtime_stub_hit(const char *fn_name) {
-    runtime_stub_log(fn_name);
-}
-
-static NORETURN void runtime_stub_fatal(const char *fn_name, const char *message) {
-    fprintf(stderr, "[dragonstone][runtime] %s failed: %s\n", fn_name, message);
-    abort();
-}
+void *dragonstone_runtime_box_i32(int32_t v);
+void *dragonstone_runtime_box_i64(int64_t v);
+void *dragonstone_runtime_box_bool(int32_t v);
+void *dragonstone_runtime_box_float(double v);
+void *dragonstone_runtime_array_push(void *array_val, void *value);
 
 static void *ds_alloc(size_t size) {
     void *buffer = calloc(1, size);
     if (!buffer) {
-        runtime_stub_fatal("ds_alloc", "out of memory");
+        fprintf(stderr, "[fatal] Out of memory\n");
+        abort();
     }
     return buffer;
 }
@@ -104,475 +66,260 @@ static DSValue *ds_new_box(DSValueKind kind) {
 }
 
 static bool ds_is_boxed(void *value) {
-    if (!value) {
-        return false;
-    }
+    if (!value) return false;
     DSValue *box = (DSValue *)value;
     return box->magic == DS_BOX_MAGIC;
 }
 
-static bool ds_unbox_int(void *value, int64_t *out) {
-    if (!value || !out) {
-        return false;
-    }
-    if (!ds_is_boxed(value)) {
-        return false;
-    }
-    DSValue *box = (DSValue *)value;
-    switch (box->kind) {
-        case DS_VALUE_INT32:
-            *out = (int64_t)box->as.i32;
-            return true;
-        case DS_VALUE_INT64:
-            *out = box->as.i64;
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool ds_unbox_bool(void *value, bool *out) {
-    if (!value || !out) {
-        return false;
-    }
-    if (!ds_is_boxed(value)) {
-        return false;
-    }
-    DSValue *box = (DSValue *)value;
-    if (box->kind != DS_VALUE_BOOL) {
-        return false;
-    }
-    *out = box->as.boolean;
-    return true;
-}
-
-static DSArray *ds_new_array(int64_t length, void **elements) {
-    DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
-    array->length = length;
-    if (length > 0) {
-        array->items = (void **)ds_alloc(sizeof(void *) * (size_t)length);
-        for (int64_t i = 0; i < length; ++i) {
-            array->items[i] = elements ? elements[i] : NULL;
-        }
-    } else {
-        array->items = NULL;
-    }
-    return array;
-}
-
-static DSMap *ds_new_map(int64_t length, void **keys, void **values) {
-    DSMap *map = (DSMap *)ds_alloc(sizeof(DSMap));
-    map->length = length;
-    if (length > 0) {
-        map->keys = (void **)ds_alloc(sizeof(void *) * (size_t)length);
-        map->values = (void **)ds_alloc(sizeof(void *) * (size_t)length);
-        for (int64_t i = 0; i < length; ++i) {
-            map->keys[i] = keys ? keys[i] : NULL;
-            map->values[i] = values ? values[i] : NULL;
-        }
-    } else {
-        map->keys = NULL;
-        map->values = NULL;
-    }
-    return map;
-}
-
-static void ds_constants_grow(void) {
-    size_t new_capacity = g_constant_capacity == 0 ? 8 : g_constant_capacity * 2;
-    DSConstantEntry *entries = (DSConstantEntry *)realloc(g_constant_table, new_capacity * sizeof(DSConstantEntry));
-    if (!entries) {
-        runtime_stub_fatal("dragonstone_runtime_define_constant", "constant table allocation failed");
-    }
-    g_constant_table = entries;
-    for (size_t i = g_constant_capacity; i < new_capacity; ++i) {
-        g_constant_table[i].name = NULL;
-        g_constant_table[i].value = NULL;
-    }
-    g_constant_capacity = new_capacity;
-}
-
-static char *ds_strdup(const char *input) {
-    if (!input) {
-        return NULL;
-    }
-    size_t len = strlen(input);
-    char *copy = (char *)ds_alloc(len + 1);
-    memcpy(copy, input, len + 1);
-    return copy;
-}
-
-static char *ds_join_segments(int64_t length, void **segments) {
-    if (length <= 0) {
-        return NULL;
-    }
-    size_t total = 0;
-    for (int64_t i = 0; i < length; ++i) {
-        const char *segment = segments ? (const char *)segments[i] : "";
-        if (segment) {
-            total += strlen(segment);
-        }
-        if (i + 1 < length) {
-            total += 2; // "::"
-        }
-    }
-    char *buffer = (char *)ds_alloc(total + 1);
-    buffer[0] = '\0';
-    for (int64_t i = 0; i < length; ++i) {
-        const char *segment = segments ? (const char *)segments[i] : "";
-        if (segment) {
-            strcat(buffer, segment);
-        }
-        if (i + 1 < length) {
-            strcat(buffer, "::");
-        }
-    }
-    return buffer;
-}
-
 static char *ds_concat_segments(int64_t length, void **segments) {
-    if (length <= 0) {
-        char *buffer = (char *)ds_alloc(1);
-        buffer[0] = '\0';
-        return buffer;
-    }
-    size_t total = 0;
+    if (length <= 0) return ds_strdup("");
+    
+    size_t total_len = 0;
     for (int64_t i = 0; i < length; ++i) {
-        const char *segment = segments ? (const char *)segments[i] : "";
-        if (segment) {
-            total += strlen(segment);
-        }
+        if (segments[i]) total_len += strlen((const char*)segments[i]);
     }
-    char *buffer = (char *)ds_alloc(total + 1);
-    char *cursor = buffer;
+    
+    char *result = (char *)ds_alloc(total_len + 1);
+    char *cursor = result;
     for (int64_t i = 0; i < length; ++i) {
-        const char *segment = segments ? (const char *)segments[i] : "";
-        if (segment) {
-            size_t len = strlen(segment);
-            memcpy(cursor, segment, len);
+        if (segments[i]) {
+            size_t len = strlen((const char*)segments[i]);
+            memcpy(cursor, segments[i], len);
             cursor += len;
         }
     }
     *cursor = '\0';
-    return buffer;
+    return result;
 }
 
-void *dragonstone_runtime_box_i32(int32_t value) {
-    DSValue *box = ds_new_box(DS_VALUE_INT32);
-    box->as.i32 = value;
+static bool ds_compare_strings(const char *lhs, const char *rhs) {
+    if (!lhs || !rhs) return false;
+    return strcmp(lhs, rhs) == 0;
+}
+
+static DSValue *ds_create_array_box(int64_t length, void **elements) {
+    DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
+    array->length = length;
+    if (length > 0) {
+        array->items = (void **)ds_alloc(sizeof(void *) * (size_t)length);
+        if (elements) {
+            for (int64_t i = 0; i < length; ++i) {
+                array->items[i] = elements[i];
+            }
+        }
+    } else {
+        array->items = NULL;
+    }
+    
+    DSValue *box = ds_new_box(DS_VALUE_ARRAY);
+    box->as.ptr = array;
     return box;
 }
 
-void *dragonstone_runtime_box_i64(int64_t value) {
-    DSValue *box = ds_new_box(DS_VALUE_INT64);
-    box->as.i64 = value;
-    return box;
-}
-
-void *dragonstone_runtime_box_bool(int32_t value) {
-    DSValue *box = ds_new_box(DS_VALUE_BOOL);
-    box->as.boolean = value != 0;
-    return box;
-}
-
-void *dragonstone_runtime_box_float(double value) {
-    DSValue *box = ds_new_box(DS_VALUE_FLOAT);
-    box->as.f64 = value;
-    return box;
-}
-
-void *dragonstone_runtime_box_string(void *value) {
-    return value;
-}
-
-void *dragonstone_runtime_array_literal(int64_t length, void **elements) {
-    return ds_new_array(length, elements);
-}
-
-void *dragonstone_runtime_map_literal(int64_t length, void **keys, void **values) {
-    return ds_new_map(length, keys, values);
-}
-
-void *dragonstone_runtime_tuple_literal(int64_t length, void **elements) {
-    return ds_new_array(length, elements);
-}
-
-void *dragonstone_runtime_named_tuple_literal(int64_t length, void **keys, void **values) {
-    return ds_new_map(length, keys, values);
-}
-
-void *dragonstone_runtime_block_literal(void *fn_ptr, void *env_ptr) {
-    if (!fn_ptr) {
-        return NULL;
-    }
-    DSBlockHandle *handle = (DSBlockHandle *)ds_alloc(sizeof(DSBlockHandle));
-    handle->function = fn_ptr;
-    handle->environment = env_ptr;
-    return handle;
-}
-
-void *dragonstone_runtime_block_invoke(void *block_handle, int64_t argc, void **argv) {
-    if (!block_handle) {
-        runtime_stub_fatal("dragonstone_runtime_block_invoke", "null block handle");
-    }
-    DSBlockHandle *handle = (DSBlockHandle *)block_handle;
-    if (!handle->function) {
-        runtime_stub_fatal("dragonstone_runtime_block_invoke", "missing function pointer");
-    }
-    if (argc < 0) {
-        runtime_stub_fatal("dragonstone_runtime_block_invoke", "negative argument count");
-    }
-    if (argc > 0 && !argv) {
-        runtime_stub_fatal("dragonstone_runtime_block_invoke", "argument buffer missing");
-    }
-    typedef void *(*BlockFn)(void *, int64_t, void **);
-    BlockFn fn = (BlockFn)handle->function;
-    return fn(handle->environment, argc, argv);
-}
-
-void *dragonstone_runtime_alloc_instance(void *class_handle, int64_t field_bytes) {
-    if (!class_handle) {
-        runtime_stub_fatal("dragonstone_runtime_alloc_instance", "class pointer missing");
-    }
-    if (field_bytes < 0) {
-        runtime_stub_fatal("dragonstone_runtime_alloc_instance", "negative field size");
-    }
-    size_t payload = (size_t)field_bytes;
-    size_t total = sizeof(DSObject) + payload;
-    DSObject *object = (DSObject *)ds_alloc(total);
-    object->klass = (DSClass *)class_handle;
-    return object;
+static DSArray *ds_unwrap_array(void *value) {
+    if (!value || !ds_is_boxed(value)) return NULL;
+    DSValue *box = (DSValue *)value;
+    if (box->kind != DS_VALUE_ARRAY) return NULL;
+    return (DSArray *)box->as.ptr;
 }
 
 void *dragonstone_runtime_interpolated_string(int64_t length, void **segments) {
     return ds_concat_segments(length, segments);
 }
 
-void *dragonstone_runtime_method_invoke(void *receiver, void *method_name, int64_t argc, void **argv) {
-    (void)receiver;
-    (void)method_name;
-    (void)argc;
-    (void)argv;
-    runtime_stub_hit(__func__);
-    return NULL;
-}
-
-void **dragonstone_runtime_block_env_allocate(int64_t length) {
-    if (length <= 0) {
-        return NULL;
-    }
-    size_t count = (size_t)length;
-    void **buffer = (void **)ds_alloc(sizeof(void *) * count);
-    return buffer;
-}
-
-void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
-    char *name = ds_join_segments(length, segments);
-    if (!name) {
-        return NULL;
-    }
-    for (size_t i = 0; i < g_constant_count; ++i) {
-        if (g_constant_table[i].name && strcmp(g_constant_table[i].name, name) == 0) {
-            free(name);
-            return g_constant_table[i].value;
-        }
-    }
-    free(name);
-    return NULL;
-}
-
-void dragonstone_runtime_rescue_placeholder(void) {
-    runtime_stub_fatal("dragonstone_runtime_rescue_placeholder", "rescue clauses are not implemented");
-}
-
-void *dragonstone_runtime_define_constant(void *name_ptr, void *value) {
-    const char *name = (const char *)name_ptr;
-    if (!name || !*name) {
-        runtime_stub_fatal("dragonstone_runtime_define_constant", "constant name is missing");
-    }
-    for (size_t i = 0; i < g_constant_count; ++i) {
-        if (g_constant_table[i].name && strcmp(g_constant_table[i].name, name) == 0) {
-            g_constant_table[i].value = value;
-            return value;
-        }
-    }
-    if (g_constant_count == g_constant_capacity) {
-        ds_constants_grow();
-    }
-    g_constant_table[g_constant_count].name = ds_strdup(name);
-    g_constant_table[g_constant_count].value = value;
-    ++g_constant_count;
-    return value;
-}
-
-void *dragonstone_runtime_index_get(void *object, void *index_value) {
-    if (!object) {
-        return NULL;
-    }
-    DSArray *array = (DSArray *)object;
-    int64_t index = 0;
-    if (!ds_unbox_int(index_value, &index)) {
-        runtime_stub_log("dragonstone_runtime_index_get");
-        return NULL;
-    }
-    if (index < 0 || index >= array->length) {
-        return NULL;
-    }
-    return array->items ? array->items[index] : NULL;
-}
-
-void *dragonstone_runtime_index_set(void *object, void *index_value, void *value) {
-    if (!object) {
-        return NULL;
-    }
-    DSArray *array = (DSArray *)object;
-    int64_t index = 0;
-    if (!ds_unbox_int(index_value, &index)) {
-        runtime_stub_log("dragonstone_runtime_index_set");
-        return NULL;
-    }
-    if (index < 0 || index >= array->length) {
-        return NULL;
-    }
-    if (array->items) {
-        array->items[index] = value;
-    }
-    return value;
-}
-
-int32_t dragonstone_runtime_unbox_i32(void *value) {
-    int64_t result = 0;
-    if (!ds_unbox_int(value, &result)) {
-        runtime_stub_log(__func__);
-        return 0;
-    }
-    return (int32_t)result;
-}
-
-int64_t dragonstone_runtime_unbox_i64(void *value) {
-    int64_t result = 0;
-    if (!ds_unbox_int(value, &result)) {
-        runtime_stub_log(__func__);
-        return 0;
-    }
-    return result;
-}
-
-int32_t dragonstone_runtime_unbox_bool(void *value) {
-    bool result = false;
-    if (!ds_unbox_bool(value, &result)) {
-        runtime_stub_log(__func__);
-        return 0;
-    }
-    return result ? 1 : 0;
-}
-
-double dragonstone_runtime_unbox_float(void *value) {
-    if (!value) {
-        runtime_stub_log(__func__);
-        return 0.0;
-    }
-    if (!ds_is_boxed(value)) {
-        runtime_stub_log(__func__);
-        return 0.0;
-    }
-    DSValue *box = (DSValue *)value;
-    switch (box->kind) {
-        case DS_VALUE_FLOAT:
-            return box->as.f64;
-        case DS_VALUE_INT64:
-            return (double)box->as.i64;
-        case DS_VALUE_INT32:
-            return (double)box->as.i32;
-        case DS_VALUE_BOOL:
-            return box->as.boolean ? 1.0 : 0.0;
-        default:
-            runtime_stub_log(__func__);
-            return 0.0;
-    }
-}
-
-void *dragonstone_runtime_value_display(void *value) {
-    if (!value) {
-        return (void *)DS_STR_NIL;
-    }
-    if (!ds_is_boxed(value)) {
-        return value;
-    }
-
-    DSValue *box = (DSValue *)value;
-    switch (box->kind) {
-        case DS_VALUE_BOOL:
-            return (void *)(box->as.boolean ? DS_STR_TRUE : DS_STR_FALSE);
-        case DS_VALUE_INT32: {
-            char buffer[32];
-            snprintf(buffer, sizeof(buffer), "%d", box->as.i32);
-            return ds_strdup(buffer);
-        }
-        case DS_VALUE_INT64: {
-            char buffer[64];
-            snprintf(buffer, sizeof(buffer), "%lld", (long long)box->as.i64);
-            return ds_strdup(buffer);
-        }
-        case DS_VALUE_FLOAT: {
-            char buffer[64];
-            snprintf(buffer, sizeof(buffer), "%g", box->as.f64);
-            return ds_strdup(buffer);
-        }
-        case DS_VALUE_STRUCT: {
-            return ds_strdup("{Struct}");
-        }
-        default:
-            return (void *)DS_STR_NIL;
-    }
-}
-
-static bool ds_compare_strings(const char *lhs, const char *rhs) {
-    if (!lhs || !rhs) {
-        return false;
-    }
-    return strcmp(lhs, rhs) == 0;
-}
-
 _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
-    if (lhs == rhs) {
-        return true;
-    }
-    if (!lhs || !rhs) {
-        return false;
-    }
+    if (lhs == rhs) return true;
+    
     if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
         DSValue *left = (DSValue *)lhs;
         DSValue *right = (DSValue *)rhs;
-        if (left->kind != right->kind) {
-            return false;
-        }
+        if (left->kind != right->kind) return false;
+        
         switch (left->kind) {
-            case DS_VALUE_INT32:
-                return left->as.i32 == right->as.i32;
-            case DS_VALUE_INT64:
-                return left->as.i64 == right->as.i64;
-            case DS_VALUE_FLOAT:
-                return left->as.f64 == right->as.f64;
-            case DS_VALUE_BOOL:
-                return left->as.boolean == right->as.boolean;
-            default:
-                return false;
+            case DS_VALUE_INT32: return left->as.i32 == right->as.i32;
+            case DS_VALUE_INT64: return left->as.i64 == right->as.i64;
+            case DS_VALUE_FLOAT: return left->as.f64 == right->as.f64;
+            case DS_VALUE_BOOL:  return left->as.boolean == right->as.boolean;
+            case DS_VALUE_ARRAY: return left->as.ptr == right->as.ptr;
+            default: return false;
         }
     }
-    const char *left_str = (const char *)lhs;
-    const char *right_str = (const char *)rhs;
-    return ds_compare_strings(left_str, right_str);
+    
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return ds_compare_strings((const char*)lhs, (const char*)rhs);
+    }
+
+    return false;
 }
 
-void dragonstone_runtime_yield_missing_block(void) {
-    runtime_stub_fatal("dragonstone_runtime_yield_missing_block", "missing block for yield");
+void *dragonstone_runtime_array_literal(int64_t length, void **elements) {
+    return ds_create_array_box(length, elements);
 }
+
+void *dragonstone_runtime_array_push(void *array_val, void *value) {
+    DSArray *array = ds_unwrap_array(array_val);
+    if (!array) {
+        fprintf(stderr, "[runtime] array_push called on non-array\n");
+        return array_val;
+    }
+    
+    int64_t new_len = array->length + 1;
+    void **new_items = (void **)realloc(array->items, sizeof(void *) * new_len);
+    if (!new_items) abort();
+    
+    array->items = new_items;
+    array->items[array->length] = value;
+    array->length = new_len;
+    
+    return array_val;
+}
+
+void *dragonstone_runtime_index_get(void *object, void *index_value) {
+    DSArray *array = ds_unwrap_array(object);
+    if (!array) return NULL;
+    
+    int64_t idx = 0;
+    if (ds_is_boxed(index_value)) {
+        DSValue *ibox = (DSValue *)index_value;
+        if (ibox->kind == DS_VALUE_INT32) idx = ibox->as.i32;
+        else if (ibox->kind == DS_VALUE_INT64) idx = ibox->as.i64;
+    } else {
+        return NULL;
+    }
+    
+    if (idx < 0) idx = array->length + idx;
+    if (idx < 0 || idx >= array->length) return NULL;
+    
+    return array->items[idx];
+}
+
+void *dragonstone_runtime_index_set(void *object, void *index_value, void *value) {
+    DSArray *array = ds_unwrap_array(object);
+    if (!array) return NULL;
+
+    int64_t idx = 0;
+    if (ds_is_boxed(index_value)) {
+        DSValue *ibox = (DSValue *)index_value;
+        if (ibox->kind == DS_VALUE_INT32) idx = ibox->as.i32;
+        else if (ibox->kind == DS_VALUE_INT64) idx = ibox->as.i64;
+    }
+    
+    if (idx < 0) idx = array->length + idx;
+    
+    if (idx >= array->length) {
+        int64_t new_len = idx + 1;
+        void **new_items = realloc(array->items, sizeof(void*) * new_len);
+        if(!new_items) abort();
+        for(int64_t i = array->length; i < new_len; i++) new_items[i] = NULL;
+        
+        array->items = new_items;
+        array->length = new_len;
+    }
+    
+    if (idx >= 0) {
+        array->items[idx] = value;
+    }
+    return value;
+}
+
+void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, int64_t argc, void **argv) {
+    const char *method = (const char *)method_name_ptr;
+    
+    if (ds_is_boxed(receiver)) {
+        DSValue *box = (DSValue *)receiver;
+        
+        if (box->kind == DS_VALUE_ARRAY) {
+            DSArray *arr = (DSArray *)box->as.ptr;
+            
+            if (strcmp(method, "length") == 0 || strcmp(method, "size") == 0 || strcmp(method, "count") == 0) {
+                return (void *)dragonstone_runtime_box_i64(arr->length);
+            }
+            if (strcmp(method, "first") == 0) {
+                if (arr->length == 0) return NULL;
+                return arr->items[0];
+            }
+            if (strcmp(method, "last") == 0) {
+                if (arr->length == 0) return NULL;
+                return arr->items[arr->length - 1];
+            }
+            if (strcmp(method, "empty") == 0 || strcmp(method, "empty?") == 0) {
+                return (void *)dragonstone_runtime_box_bool(arr->length == 0);
+            }
+            if (strcmp(method, "pop") == 0) {
+                if (arr->length == 0) return NULL;
+                void *val = arr->items[arr->length - 1];
+                arr->length--; 
+                return val;
+            }
+            if (strcmp(method, "push") == 0 || strcmp(method, "<<") == 0) {
+                if (argc > 0) dragonstone_runtime_array_push(receiver, argv[0]);
+                return receiver;
+            }
+        }
+    }
+    
+    fprintf(stderr, "[runtime] Method not found: %s\n", method);
+    return NULL;
+}
+
+static const char DS_STR_NIL_VAL[] = "nil";
+static const char DS_STR_TRUE_VAL[] = "true";
+static const char DS_STR_FALSE_VAL[] = "false";
+
+static char *ds_strdup(const char *input) {
+    if (!input) return NULL;
+    size_t len = strlen(input);
+    char *copy = (char *)ds_alloc(len + 1);
+    memcpy(copy, input, len + 1);
+    return copy;
+}
+
+void *dragonstone_runtime_value_display(void *value) {
+    if (!value) return (void *)DS_STR_NIL_VAL;
+    
+    if (ds_is_boxed(value)) {
+        DSValue *box = (DSValue *)value;
+        switch (box->kind) {
+            case DS_VALUE_INT32: {
+                char buf[32]; snprintf(buf, 32, "%d", box->as.i32); return ds_strdup(buf);
+            }
+            case DS_VALUE_INT64: {
+                char buf[64]; snprintf(buf, 64, "%lld", (long long)box->as.i64); return ds_strdup(buf);
+            }
+            case DS_VALUE_BOOL: return (void*)(box->as.boolean ? DS_STR_TRUE_VAL : DS_STR_FALSE_VAL);
+            case DS_VALUE_FLOAT: {
+                char buf[64]; snprintf(buf, 64, "%g", box->as.f64); return ds_strdup(buf);
+            }
+            case DS_VALUE_STRUCT: return ds_strdup("{Struct}");
+            case DS_VALUE_ARRAY: {
+                DSArray *arr = (DSArray *)box->as.ptr;
+                if (arr->length == 0) return ds_strdup("[]");
+                
+                char *buffer = (char *)ds_alloc(1024 * 16); 
+                strcpy(buffer, "[");
+                for (int64_t i = 0; i < arr->length; ++i) {
+                    void *str_ptr = dragonstone_runtime_value_display(arr->items[i]);
+                    strcat(buffer, (char *)str_ptr);
+                    if (i < arr->length - 1) strcat(buffer, ", ");
+                }
+                strcat(buffer, "]");
+                return buffer;
+            }
+        }
+    }
+    return value;
+}
+
+void *dragonstone_runtime_box_i32(int32_t v) { DSValue *b = ds_new_box(DS_VALUE_INT32); b->as.i32 = v; return b; }
+void *dragonstone_runtime_box_i64(int64_t v) { DSValue *b = ds_new_box(DS_VALUE_INT64); b->as.i64 = v; return b; }
+void *dragonstone_runtime_box_bool(int32_t v) { DSValue *b = ds_new_box(DS_VALUE_BOOL); b->as.boolean = v; return b; }
+void *dragonstone_runtime_box_float(double v) { DSValue *b = ds_new_box(DS_VALUE_FLOAT); b->as.f64 = v; return b; }
+void *dragonstone_runtime_box_string(void *v) { return v; }
 
 void* dragonstone_runtime_box_struct(void* data, int64_t size) {
     DSValue* box = ds_new_box(DS_VALUE_STRUCT);
     void* heap_copy = ds_alloc((size_t)size);
     memcpy(heap_copy, data, (size_t)size);
-
     box->as.ptr = heap_copy;
     return box;
 }
@@ -581,25 +328,22 @@ void* dragonstone_runtime_unbox_struct(void* value) {
     if (!value || !ds_is_boxed(value)) return NULL;
     DSValue* box = (DSValue*)value;
     if (box->kind != DS_VALUE_STRUCT) return NULL;
-    
     return box->as.ptr;
 }
 
-void* dragonstone_runtime_array_push(void* array_ptr, void* value) {
-    if (!array_ptr) return NULL;
-    
-    DSArray* array = (DSArray*)array_ptr;
-    
-    int64_t new_length = array->length + 1;
-    void** new_items = (void**)realloc(array->items, sizeof(void*) * new_length);
-    
-    if (!new_items) {
-        runtime_stub_fatal("dragonstone_runtime_array_push", "out of memory");
-    }
-    
-    array->items = new_items;
-    array->items[array->length] = value;
-    array->length = new_length;
-    
-    return array_ptr;
-}
+int32_t dragonstone_runtime_unbox_i32(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_INT32) return ((DSValue*)v)->as.i32; return 0; }
+int64_t dragonstone_runtime_unbox_i64(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_INT64) return ((DSValue*)v)->as.i64; return 0; }
+int32_t dragonstone_runtime_unbox_bool(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_BOOL) return ((DSValue*)v)->as.boolean; return 0; }
+
+double dragonstone_runtime_unbox_float(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_FLOAT) return ((DSValue*)v)->as.f64; return 0.0; }
+
+void *dragonstone_runtime_map_literal(int64_t l, void **k, void **v) { return NULL; }
+void *dragonstone_runtime_tuple_literal(int64_t l, void **e) { return NULL; }
+void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v) { return NULL; }
+void *dragonstone_runtime_block_literal(void *f, void *e) { return NULL; }
+void *dragonstone_runtime_block_invoke(void *h, int64_t c, void **v) { return NULL; }
+void **dragonstone_runtime_block_env_allocate(int64_t l) { return calloc(l, sizeof(void*)); }
+void *dragonstone_runtime_constant_lookup(int64_t l, void **s) { return NULL; }
+void dragonstone_runtime_rescue_placeholder(void) { abort(); }
+void *dragonstone_runtime_define_constant(void *n, void *v) { return v; }
+void dragonstone_runtime_yield_missing_block(void) { abort(); }
