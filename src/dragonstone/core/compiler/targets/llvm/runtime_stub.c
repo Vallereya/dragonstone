@@ -26,7 +26,10 @@ typedef enum {
     DS_VALUE_INSTANCE,
     DS_VALUE_MAP,
     DS_VALUE_BLOCK,
-    DS_VALUE_RANGE
+    DS_VALUE_RANGE,
+    DS_VALUE_TUPLE,
+    DS_VALUE_NAMED_TUPLE,
+    DS_VALUE_ENUM
 } DSValueKind;
 
 typedef struct {
@@ -70,9 +73,16 @@ typedef struct DSMethod {
     struct DSMethod *next;
 } DSMethod;
 
+typedef struct DSConstant {
+    char *name;
+    void *value;
+    struct DSConstant *next;
+} DSConstant;
+
 typedef struct DSClass {
     char *name;
     DSMethod *methods;
+    DSConstant *constants;
     struct DSClass *next;
 } DSClass;
 
@@ -85,6 +95,23 @@ typedef struct {
     int64_t to;
     bool exclusive;
 } DSRange;
+
+typedef struct {
+    int64_t length;
+    void **items;
+} DSTuple;
+
+typedef struct {
+    int64_t length;
+    char **keys;
+    void **values;
+} DSNamedTuple;
+
+typedef struct {
+    DSClass *klass;
+    int64_t value;
+    char *name;
+} DSEnum;
 
 static DSClass *global_classes = NULL;
 
@@ -282,6 +309,36 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 snprintf(buf, 128, "%lld%s%lld", (long long)rng->from, rng->exclusive ? "..." : "..", (long long)rng->to);
                 return ds_strdup(buf);
             }
+            case DS_VALUE_TUPLE: {
+                DSTuple *tup = (DSTuple *)box->as.ptr;
+                char *buffer = (char *)ds_alloc(1024 * 16);
+                strcpy(buffer, "{");
+                for (int64_t i = 0; i < tup->length; ++i) {
+                    void *str_ptr = dragonstone_runtime_value_display(tup->items[i]);
+                    strcat(buffer, (char *)str_ptr);
+                    if (i < tup->length - 1) strcat(buffer, ", ");
+                }
+                strcat(buffer, "}");
+                return buffer;
+            }
+            case DS_VALUE_NAMED_TUPLE: {
+                DSNamedTuple *nt = (DSNamedTuple *)box->as.ptr;
+                char *buffer = (char *)ds_alloc(1024 * 16);
+                strcpy(buffer, "{");
+                for (int64_t i = 0; i < nt->length; ++i) {
+                    strcat(buffer, nt->keys[i]);
+                    strcat(buffer, ": ");
+                    void *str_ptr = dragonstone_runtime_value_display(nt->values[i]);
+                    strcat(buffer, (char *)str_ptr);
+                    if (i < nt->length - 1) strcat(buffer, ", ");
+                }
+                strcat(buffer, "}");
+                return buffer;
+            }
+            case DS_VALUE_ENUM: {
+                DSEnum *e = (DSEnum *)box->as.ptr;
+                return ds_strdup(e->name);
+            }
         }
     }
 
@@ -385,6 +442,13 @@ static void *ds_call_method(void *func_ptr, void *receiver, int64_t argc, void *
 void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, int64_t argc, void **argv, void *block_val) {
     const char *method = (const char *)method_name_ptr;
 
+    if (ds_is_boxed(receiver) && ((DSValue*)receiver)->kind == DS_VALUE_ENUM) {
+        DSEnum *e = (DSEnum *)((DSValue*)receiver)->as.ptr;
+        if (strcmp(method, "value") == 0) {
+            return dragonstone_runtime_box_i64(e->value);
+        }
+    }
+
     if (!ds_is_boxed(receiver)) {
         char *str = (char *)receiver;
         
@@ -412,11 +476,36 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
     if (box->kind == DS_VALUE_CLASS) {
         DSClass *cls = (DSClass *)box->as.ptr;
         if (strcmp(method, "new") == 0) {
+            if (argc == 1) {
+                int64_t search_val = dragonstone_runtime_unbox_i64(argv[0]);
+                DSConstant *curr = cls->constants;
+                while (curr) {
+                    if (ds_is_boxed(curr->value)) {
+                        DSValue *v = (DSValue*)curr->value;
+                        if (v->kind == DS_VALUE_ENUM) {
+                            DSEnum *e = (DSEnum*)v->as.ptr;
+                            if (e->value == search_val) return curr->value;
+                        }
+                    }
+                    curr = curr->next;
+                }
+                return NULL; 
+            }
             DSInstance *inst = (DSInstance *)ds_alloc(sizeof(DSInstance));
             inst->klass = cls;
             DSValue *inst_box = ds_new_box(DS_VALUE_INSTANCE);
             inst_box->as.ptr = inst;
             return inst_box;
+        }
+        if (strcmp(method, "each") == 0 && block_val) {
+            DSConstant *curr = cls->constants;
+            void *args[1];
+            while (curr) {
+                args[0] = curr->value;
+                dragonstone_runtime_block_invoke(block_val, 1, args);
+                curr = curr->next;
+            }
+            return NULL;
         }
     }
 
@@ -536,6 +625,7 @@ void *dragonstone_runtime_define_class(void *name_ptr) {
     DSClass *cls = (DSClass *)ds_alloc(sizeof(DSClass));
     cls->name = ds_strdup(name);
     cls->methods = NULL;
+    cls->constants = NULL;
     cls->next = global_classes;
     global_classes = cls;
     DSValue *box = ds_new_box(DS_VALUE_CLASS);
@@ -556,15 +646,46 @@ void dragonstone_runtime_define_method(void *class_box_ptr, void *name_ptr, void
     cls->methods = m;
 }
 
+void dragonstone_runtime_define_enum_member(void *class_box_ptr, void *name_ptr, int64_t value) {
+    if (!ds_is_boxed(class_box_ptr)) return;
+    DSValue *box = (DSValue *)class_box_ptr;
+    if (box->kind != DS_VALUE_CLASS) return;
+    DSClass *cls = (DSClass *)box->as.ptr;
+    char *name = (char *)name_ptr;
+
+    DSEnum *e = (DSEnum *)ds_alloc(sizeof(DSEnum));
+    e->klass = cls;
+    e->value = value;
+    e->name = ds_strdup(name);
+    
+    DSValue *val_box = ds_new_box(DS_VALUE_ENUM);
+    val_box->as.ptr = e;
+
+    DSConstant *c = (DSConstant *)ds_alloc(sizeof(DSConstant));
+    c->name = ds_strdup(name);
+    c->value = val_box;
+    c->next = cls->constants;
+    cls->constants = c;
+}
+
 void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
     if (length == 0) return NULL;
     const char *name = (const char *)segments[0];
     DSClass *curr = global_classes;
     while (curr) {
         if (strcmp(curr->name, name) == 0) {
-            DSValue *box = ds_new_box(DS_VALUE_CLASS);
-            box->as.ptr = curr;
-            return box;
+            if (length == 1) {
+                DSValue *box = ds_new_box(DS_VALUE_CLASS);
+                box->as.ptr = curr;
+                return box;
+            } else if (length == 2) {
+                const char *member = (const char *)segments[1];
+                DSConstant *c = curr->constants;
+                while (c) {
+                    if (strcmp(c->name, member) == 0) return c->value;
+                    c = c->next;
+                }
+            }
         }
         curr = curr->next;
     }
@@ -619,6 +740,10 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
     if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
         return strcmp((const char*)lhs, (const char*)rhs) == 0;
     }
+    if (ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return false; 
+    }
+    
     return false;
 }
 
@@ -638,6 +763,26 @@ void *dragonstone_runtime_range_literal(int64_t from, int64_t to, bool exclusive
 void *dragonstone_runtime_index_get(void *object, void *index_value) {
     if (!ds_is_boxed(object)) return NULL;
     DSValue *obj_box = (DSValue *)object;
+
+    if (obj_box->kind == DS_VALUE_TUPLE) {
+        DSTuple *tuple = (DSTuple *)obj_box->as.ptr;
+        int64_t idx = dragonstone_runtime_unbox_i64(index_value);
+        if (idx < 0 || idx >= tuple->length) return NULL;
+        return tuple->items[idx];
+    }
+
+    if (obj_box->kind == DS_VALUE_NAMED_TUPLE) {
+        DSNamedTuple *nt = (DSNamedTuple *)obj_box->as.ptr;
+        char *key = (char *)index_value;
+        if (ds_is_boxed(index_value)) return NULL;
+
+        for (int64_t i = 0; i < nt->length; i++) {
+            if (strcmp(nt->keys[i], key) == 0) {
+                return nt->values[i];
+            }
+        }
+        return NULL;
+    }
 
     if (obj_box->kind == DS_VALUE_ARRAY) {
         DSArray *array = (DSArray *)obj_box->as.ptr;
@@ -718,8 +863,25 @@ void *dragonstone_runtime_index_set(void *object, void *index_value, void *value
     return value;
 }
 
-void *dragonstone_runtime_tuple_literal(int64_t l, void **e) { return NULL; }
-void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v) { return NULL; }
+void *dragonstone_runtime_tuple_literal(int64_t l, void **e) {
+    DSTuple *tup = (DSTuple *)ds_alloc(sizeof(DSTuple));
+    tup->length = l;
+    tup->items = e;
+    DSValue *box = ds_new_box(DS_VALUE_TUPLE);
+    box->as.ptr = tup;
+    return box;
+}
+
+void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v) {
+    DSNamedTuple *nt = (DSNamedTuple *)ds_alloc(sizeof(DSNamedTuple));
+    nt->length = l;
+    nt->keys = (char **)k;
+    nt->values = v;
+    DSValue *box = ds_new_box(DS_VALUE_NAMED_TUPLE);
+    box->as.ptr = nt;
+    return box;
+}
+
 void **dragonstone_runtime_block_env_allocate(int64_t l) { return calloc(l, sizeof(void*)); }
 void dragonstone_runtime_rescue_placeholder(void) { abort(); }
 void *dragonstone_runtime_define_constant(void *n, void *v) { return v; }

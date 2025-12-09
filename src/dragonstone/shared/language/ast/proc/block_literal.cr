@@ -14,6 +14,17 @@ module Dragonstone
                 visitor.visit_block_literal(self)
             end
 
+            # def to_source : String
+            #     params = if typed_parameters.empty?
+            #         ""
+            #     else
+            #         "| #{typed_parameters.map(&.to_source).join(", ")} | "
+            #     end
+
+            #     body_source = body.map(&.to_source).join("; ")
+            #     "{ #{params}#{body_source} }"
+            # end
+
             def to_source(io : IO)
                 io << "{ "
                 

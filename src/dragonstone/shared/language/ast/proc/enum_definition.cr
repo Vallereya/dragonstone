@@ -20,14 +20,24 @@ module Dragonstone
                 visitor.visit_enum_definition(self)
             end
 
-            # def to_source : String
-            #     String.build do |io|
-            #         io << name
-            #         if v = value
-            #             io << " = " << v.to_source
-            #         end
-            #     end
-            # end
+           def to_source(io : IO)
+                io << "enum " << name
+                if vn = value_name
+                    io << "(" << vn
+                    if vt = value_type
+                        io << ": "
+                        vt.to_source(io)
+                    end
+                    io << ")"
+                end
+                io << "\n"
+                members.each do |member|
+                    io << "    "
+                    member.to_source(io)
+                    io << "\n"
+                end
+                io << "end"
+            end
         end
     end
 end

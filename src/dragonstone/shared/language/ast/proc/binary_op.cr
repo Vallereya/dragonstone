@@ -16,6 +16,10 @@ module Dragonstone
                 visitor.visit_binary_op(self)
             end
 
+            # def to_source : String
+            #     "#{left.to_source} #{operator} #{right.to_source}"
+            # end
+
             def to_source(io : IO)
                 @left.to_source(io)
                 io << " " << @operator << " "

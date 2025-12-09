@@ -12,6 +12,11 @@ module Dragonstone
                 visitor.visit_map_literal(self)
             end
 
+            # def to_source : String
+            #     inner = entries.map { |(key, value)| "#{key.to_source} -> #{value.to_source}" }.join(", ")
+            #     "{#{inner}}"
+            # end
+
             def to_source(io : IO)
                 io << "{"
                 @entries.each_with_index do |(key, value), index|

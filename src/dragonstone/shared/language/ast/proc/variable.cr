@@ -14,6 +14,11 @@ module Dragonstone
                 visitor.visit_variable(self)
             end
 
+            # def to_source : String
+            #     return name unless type_annotation
+            #     "#{name}: #{type_annotation.not_nil!.to_source}"
+            # end
+
             def to_source(io : IO)
                 io << name
                 if type = @type_annotation

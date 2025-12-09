@@ -2,7 +2,9 @@ module Dragonstone
     module AST
         abstract class TypeExpression
             getter location : Location?
+
             def initialize(@location : Location? = nil)
+
             end
 
             def to_source : String
@@ -11,6 +13,7 @@ module Dragonstone
                 end
             end
 
+            # abstract def to_source : String
             abstract def to_source(io : IO)
         end
 
@@ -20,6 +23,10 @@ module Dragonstone
             def initialize(@name : String, location : Location? = nil)
                 super(location: location)
             end
+
+            # def to_source : String
+            #     @name
+            # end
 
             def to_source(io : IO)
                 io << @name
@@ -33,6 +40,11 @@ module Dragonstone
             def initialize(@name : String, @arguments : Array(TypeExpression), location : Location? = nil)
                 super(location: location)
             end
+
+            # def to_source : String
+            #     arg_source = @arguments.map(&.to_source).join(", ")
+            #     "#{@name}(#{arg_source})"
+            # end
 
             def to_source(io : IO)
                 io << @name
@@ -52,6 +64,10 @@ module Dragonstone
                 super(location: location)
             end
 
+            # def to_source : String
+            #     @members.map(&.to_source).join(" | ")
+            # end
+
             def to_source(io : IO)
                 @members.each_with_index do |member, index|
                     io << " | " if index > 0
@@ -66,6 +82,10 @@ module Dragonstone
             def initialize(@inner : TypeExpression, location : Location? = nil)
                 super(location: location)
             end
+
+            # def to_source : String
+            #     "#{@inner.to_source}?"
+            # end
 
             def to_source(io : IO)
                 @inner.to_source(io)
@@ -97,6 +117,10 @@ module Dragonstone
             end
 
             def to_source : String
+                # param_name = instance_var_name ? "@#{instance_var_name}" : name
+                # return param_name unless type
+                # "#{param_name}: #{type.not_nil!.to_source}"
+
                 String.build do |io|
                     to_source(io)
                 end

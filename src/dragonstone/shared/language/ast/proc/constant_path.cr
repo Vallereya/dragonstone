@@ -23,6 +23,10 @@ module Dragonstone
             def to_source : String
                 names.join("::")
             end
+
+            def to_source(io : IO)
+                io << names.join("::")
+            end
         end
     end
 end

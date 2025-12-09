@@ -16,6 +16,24 @@ module Dragonstone
                 visitor.visit_method_call(self)
             end
 
+            # def to_source : String
+            #     base = if receiver
+            #         "#{receiver.not_nil!.to_source}.#{name}"
+            #     else
+            #         name
+            #     end
+            #     return base if arguments.empty?
+            #     block_arg = arguments.last.is_a?(BlockLiteral) ? arguments.last.as(BlockLiteral) : nil
+            #     regular_args = block_arg ? arguments[0...-1] : arguments
+            #     source = if regular_args.empty?
+            #         base
+            #     else
+            #         args = regular_args.map(&.to_source).join(", ")
+            #         "#{base}(#{args})"
+            #     end
+            #     block_arg ? "#{source} #{block_arg.to_source}" : source
+            # end
+
             def to_source(io : IO)
                 if recv = @receiver
                     recv.to_source(io)

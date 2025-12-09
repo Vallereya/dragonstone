@@ -33,7 +33,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
 
 ###### **(Windows Alternative)**
-3. Run `shards build --release` for a standard build, this is without any icons/resources.
+3. Run `shards build --release` for a standard build, without any icons/resources.
 
 <br>
 

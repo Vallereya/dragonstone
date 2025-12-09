@@ -12,6 +12,10 @@ module Dragonstone
                 visitor.visit_literal(self)
             end
 
+            # def to_source : String
+            #     value.inspect
+            # end
+
             def to_source(io : IO)
                 io << value.inspect
             end

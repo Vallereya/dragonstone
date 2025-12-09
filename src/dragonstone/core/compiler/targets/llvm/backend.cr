@@ -7,6 +7,7 @@ require "../shared/helpers"
 require "../shared/program_serializer"
 require "../../../../shared/language/lexer/lexer"
 require "../../../../shared/language/parser/parser"
+require "../../../../shared/runtime/symbol"
 
 module Dragonstone
     module Core
@@ -93,6 +94,7 @@ module Dragonstone
                             to_string: String,
                             define_class: String,
                             define_method: String,
+                            define_enum_member: String,
                         )
                         
                         @string_counter = 0
@@ -156,6 +158,7 @@ module Dragonstone
                                 to_string: "dragonstone_runtime_to_string",
                                 define_class: "dragonstone_runtime_define_class",
                                 define_method: "dragonstone_runtime_define_method",
+                                define_enum_member: "dragonstone_runtime_define_enum_member",
                             )
                         end
                         
@@ -247,6 +250,9 @@ module Dragonstone
                                 with_namespace(node.name) do
                                     node.body.each { |stmt| collect_globals_from(stmt) }
                                 end
+                            when AST::EnumDefinition
+                                full_name = qualify_name(node.name)
+                                @globals << full_name
                             else
                                 # Recurse if container.
                             end
@@ -324,7 +330,21 @@ module Dragonstone
                             case node
                             when AST::Literal
                                 if value = node.value
-                                    intern_string(value) if value.is_a?(String)
+                                    case value
+                                    when String
+                                        intern_string(value)
+                                    when ::Char, ::Symbol
+                                        intern_string(value.to_s)
+                                    when SymbolValue
+                                        intern_string(value.name)
+                                    end
+                                end
+                            when AST::TupleLiteral
+                                node.elements.each { |elem| collect_strings_from_node(elem) }
+                            when AST::NamedTupleLiteral
+                                node.entries.each do |entry|
+                                    intern_string(entry.name)
+                                    collect_strings_from_node(entry.value)
                                 end
                             when AST::DebugPrint
                                 intern_string("%s")
@@ -388,6 +408,14 @@ module Dragonstone
                             when AST::ConstantDeclaration
                                 intern_string(qualify_name(node.name))
                                 collect_strings_from_node(node.value)
+                            when AST::EnumDefinition
+                                intern_string(qualify_name(node.name))
+                                node.members.each do |member|
+                                    intern_string(member.name)
+                                    if val = member.value
+                                        collect_strings_from_node(val)
+                                    end
+                                end
                             when AST::ClassDefinition
                                 intern_string(qualify_name(node.name))
                                 with_namespace(node.name) do
@@ -402,16 +430,6 @@ module Dragonstone
                                 intern_string(qualify_name(node.name))
                                 with_namespace(node.name) do
                                     node.body.each { |stmt| collect_strings_from_node(stmt) }
-                                end
-                            when AST::EnumDefinition
-                                intern_string(qualify_name(node.name))
-                                with_namespace(node.name) do
-                                    node.members.each do |member|
-                                        intern_string(qualify_name(member.name))
-                                        if value = member.value
-                                            collect_strings_from_node(value)
-                                        end
-                                    end
                                 end
                             when AST::IndexAccess
                                 collect_strings_from_node(node.object)
@@ -648,6 +666,7 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
                             io << "declare i8* @#{@runtime[:define_class]}(i8*)\n"
                             io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*)\n"
+                            io << "declare void @#{@runtime[:define_enum_member]}(i8*, i8*, i64)\n"
                         end
                         
                         private def emit_functions(io : IO)
@@ -876,6 +895,9 @@ module Dragonstone
                                 false
                             when AST::ConstantDeclaration
                                 generate_constant_declaration(ctx, stmt)
+                                false
+                            when AST::EnumDefinition
+                                generate_enum_definition(ctx, stmt)
                                 false
                             when AST::StructDefinition
                                 generate_struct_definition(ctx, stmt)
@@ -1570,6 +1592,43 @@ module Dragonstone
                             end
                             false
                         end
+
+                        private def generate_enum_definition(ctx : FunctionContext, node : AST::EnumDefinition) : Bool
+                            full_name = qualify_name(node.name)
+                            name_ptr = materialize_string_pointer(ctx, full_name)
+                            
+                            reg = ctx.fresh("enum")
+                            ctx.io << "  %#{reg} = call i8* @#{@runtime[:define_class]}(i8* #{name_ptr})\n"
+                            
+                            if @globals.includes?(full_name)
+                                global_name = mangle_global_name(full_name)
+                                ctx.io << "  store i8* %#{reg}, i8** @#{global_name}\n"
+                            end
+
+                            counter_ptr = ctx.fresh("enum_ctr")
+                            ctx.io << "  %#{counter_ptr} = alloca i64\n"
+                            ctx.io << "  store i64 0, i64* %#{counter_ptr}\n"
+
+                            node.members.each do |member|
+                                member_name = materialize_string_pointer(ctx, member.name)
+                                
+                                val_reg = if val_node = member.value
+                                    v = generate_expression(ctx, val_node)
+                                    coerce_integer(ctx, v, 64)
+                                else
+                                    loaded = ctx.fresh("enum_load")
+                                    ctx.io << "  %#{loaded} = load i64, i64* %#{counter_ptr}\n"
+                                    value_ref("i64", "%#{loaded}")
+                                end
+
+                                ctx.io << "  call void @#{@runtime[:define_enum_member]}(i8* %#{reg}, i8* #{member_name}, i64 #{val_reg[:ref]})\n"
+                                next_val = ctx.fresh("enum_next")
+                                ctx.io << "  %#{next_val} = add i64 #{val_reg[:ref]}, 1\n"
+                                ctx.io << "  store i64 %#{next_val}, i64* %#{counter_ptr}\n"
+                            end
+                            
+                            false
+                        end
                         
                         private def generate_index_access(ctx : FunctionContext, node : AST::IndexAccess) : ValueRef
                             object = ensure_pointer(ctx, generate_expression(ctx, node.object))
@@ -1767,6 +1826,15 @@ module Dragonstone
                                 value_ref("i1", value ? "1" : "0", constant: true)
                             when String
                                 ptr = materialize_string_pointer(ctx, value)
+                                value_ref("i8*", ptr)
+                            when ::Char
+                                ptr = materialize_string_pointer(ctx, value.to_s)
+                                value_ref("i8*", ptr)
+                            when ::Symbol
+                                ptr = materialize_string_pointer(ctx, value.to_s)
+                                value_ref("i8*", ptr)
+                            when SymbolValue
+                                ptr = materialize_string_pointer(ctx, value.name)
                                 value_ref("i8*", ptr)
                             when Nil
                                 value_ref("i8*", "null", constant: true)
@@ -2023,7 +2091,7 @@ module Dragonstone
                             
                             requires_block = @function_requires_block[call.name]? || false
                             call_args = arg_values.dup
-                            
+
                             if requires_block
                                 block_argument = block_value ||
                                 value_ref("i8*", "null", constant: true)

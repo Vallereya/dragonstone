@@ -13,6 +13,14 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_enum_member(self)
             end
+
+            def to_source(io : IO)
+                io << name
+                if v = value
+                    io << " = "
+                    v.to_source(io)
+                end
+            end
         end
     end
 end

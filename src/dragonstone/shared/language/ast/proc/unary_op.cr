@@ -14,6 +14,10 @@ module Dragonstone
                 visitor.visit_unary_op(self)
             end
 
+            # def to_source : String
+            #     "#{operator}#{operand.to_source}"
+            # end
+
             def to_source(io : IO)
                 io << @operator
                 @operand.to_source(io)

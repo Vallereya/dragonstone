@@ -16,6 +16,11 @@ module Dragonstone
                 visitor.visit_index_access(self)
             end
 
+            # def to_source : String
+            #     suffix = nil_safe ? "?" : ""
+            #     "#{object.to_source}[#{index.to_source}]#{suffix}"
+            # end
+
             def to_source(io : IO)
                 @object.to_source(io)
                 io << "["
