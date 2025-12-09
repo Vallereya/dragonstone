@@ -64,7 +64,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Build and Run Files via the Compiler with a target.
 ```bash
     # Supported Target Flags: bytecode, llvm, c, crystal, and ruby
-    # I may extend this in the future for Python and JavaScript targets.
+    # I may extend this in the future for Python and JavaScript targets, or even more.
     dragonstone build --target bytecode examples/hello_world.ds
 
     # Build and immediately execute the produced artifacts.

@@ -16,5 +16,5 @@ powershell.exe -NoProfile -Command ^
     "  Write-Host \"Added $target to user PATH. Restart your shell to pick it up.\";" ^
     "}"
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ABS_DIR%dragonstone.ps1" --% %*
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ABS_DIR%dragonstone.ps1" %*
 endlocal & exit /b %ERRORLEVEL%

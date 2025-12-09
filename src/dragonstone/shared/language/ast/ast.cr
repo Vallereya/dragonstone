@@ -20,7 +20,13 @@ module Dragonstone
             abstract def accept(visitor)
 
             def to_source : String
-                raise NotImplementedError.new("#{self.class} must implement #to_source")
+                String.build do |io|
+                    to_source(io)
+                end
+            end
+
+            def to_source(io : IO)
+                raise NotImplementedError.new("#{self.class} must implement #to_source(io : IO)")
             end
         end
 

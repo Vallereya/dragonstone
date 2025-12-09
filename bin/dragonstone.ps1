@@ -140,7 +140,7 @@ function CompileDragonstoneResource {
     }
 
     if (-not (Test-Path -Path $ScriptPath -PathType Leaf)) {
-        Write-Warning "WARNING: Resource script not found at: $ScriptPath"
+        Write-Warning "WARNING: Resource not found at: $ScriptPath"
         return $null
     }
 
@@ -155,11 +155,11 @@ function CompileDragonstoneResource {
     }
 
     if (-not $tool) {
-        Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the custom icon.'
+        Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the resource.'
         return $null
     }
 
-    Write-Host "Found resource compiler: $($tool.Name)"
+    # Write-Host "Found resource compiler: $($tool.Name)"
 
     $extension = '.res'
     if ($tool.Name -notlike 'llvm-rc*') {
@@ -173,21 +173,27 @@ function CompileDragonstoneResource {
         New-Item -ItemType Directory -Path $outputDir | Out-Null
     }
 
+    if (Test-Path -Path $outputPath -PathType Leaf) {
+        Remove-Item -Path $outputPath -Force -ErrorAction SilentlyContinue
+    }
+
     $rcDir = Split-Path -Parent $ScriptPath
     $rcFileName = Split-Path -Leaf $ScriptPath
     $originalLocation = Get-Location
-    
-    Write-Host "Compiling resource from directory: $rcDir"
-    Write-Host "Using Resource file: $rcFileName"
+
+    Write-Host "Compiling, please wait..."
+
+    # Write-Host "Compiling resource from directory: $rcDir"
+    # Write-Host "Using Resource file: $rcFileName"
     
     try {
         Set-Location $rcDir
         
         if ($tool.Name -like 'llvm-rc*') {
-            Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
+            # Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
             & $tool.Path '-fo' $outputPath $rcFileName
         } else {
-            Write-Host "Running: $($tool.Name) $rcFileName -O coff -o $outputPath"
+            # Write-Host "Running: $($tool.Name) $rcFileName -O coff -o $outputPath"
             & $tool.Path $rcFileName '-O' 'coff' '-o' $outputPath
         }
 
@@ -199,7 +205,7 @@ function CompileDragonstoneResource {
             throw "WARNING: Resource compilation appeared to succeed but output file not found at: $outputPath"
         }
 
-        Write-Host "Successfully compiled icon resource: $outputPath"
+        # Write-Host "Successfully compiled icon resource: $outputPath"
         return $outputPath
     } catch {
         Write-Warning "ERROR: Resource compilation failed: $($_.Exception.Message)"
@@ -225,13 +231,13 @@ function EnsureDragonstoneExecutable {
         return $exeExists
     }
 
-    Write-Host 'Building Dragonstone...'
+    Write-Host 'Building Dragonstone.....'
 
     $resourcePath = $null
-    if ($resourceScript) {
-        Write-Host "Running resource script: $resourceScript"
-    } else {
-        Write-Host 'WARNING: The dragonstone.rc resource script was found; But, continuing without embedding an icon to the dragonstone.exe'
+    if (-not $resourceScript) {
+    #     Write-Host "Running resource script: $resourceScript"
+    # } else {
+        Write-Host 'WARNING: The dragonstone.rc resource script was found; But, continuing without adding resource to dragonstone.exe'
     }
 
     try {
@@ -250,8 +256,8 @@ function EnsureDragonstoneExecutable {
         $resourceLinkArg = $resourcePath
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
 
-        Write-Host "Resource object file: $resourceLinkArg"
-        Write-Host "Passing resource to linker: $resourceLinkArg"
+        # Write-Host "Resource object file: $resourceLinkArg"
+        # Write-Host "Passing resource to linker: $resourceLinkArg"
 
         $env:CRFLAGS = "--link-flags `"$resourceLinkArg`""
         $envFlagSet = $true
@@ -260,7 +266,7 @@ function EnsureDragonstoneExecutable {
     try {
         if ($resourceLinkArg -and $script:crystal) {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $resourceLinkArg)
-            Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
         # } elseif ($script:shards) {
         #     Write-Host "Building with shards..."
@@ -271,7 +277,7 @@ function EnsureDragonstoneExecutable {
         #     & $script:shards.Path 'build'
         } else {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release')
-            Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
         }
 

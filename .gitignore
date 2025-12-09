@@ -3,12 +3,6 @@
 # to be ignored from git.
 #
 
-LLVM_CHECKLIST.md
-.tmp
-.crystal_cache
-
-dev/
-
 # Ignore any Output/Build Files.
 dragonstone.exe
 dragonstone.pdb
@@ -31,6 +25,10 @@ release
 
 # Ignore any Output/Build Cache from testing.
 .cache
+
+# Ignore my self-hosting/bootstrap compiler builds and notes.
+LLVM_CHECKLIST.md
+dev/
 
 # Ignore any IDE folders.
 .vscode

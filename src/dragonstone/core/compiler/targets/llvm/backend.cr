@@ -25,7 +25,6 @@ module Dragonstone
                             BuildArtifact.new(target: Target::LLVM, object_path: artifact_path)
                         end
                         
-                        
                         private def build_content(program : ::Dragonstone::IR::Program, source : String, summary_lines : Array(String)) : String
                             generator = IRGenerator.new(program)
                             
@@ -90,6 +89,8 @@ module Dragonstone
                             unbox_struct: String,
                             array_push: String,
                             to_string: String,
+                            define_class: String,
+                            define_method: String,
                         )
                         
                         @string_counter = 0
@@ -103,6 +104,7 @@ module Dragonstone
                             @function_receivers = {} of AST::FunctionDef => String
                             @function_signatures = {} of String => FunctionSignature
                             @function_requires_block = {} of String => Bool
+                            @function_namespaces = {} of AST::FunctionDef => Array(String)
                             @runtime_literals_preregistered = false
                             @runtime_types_emitted = false
                             @struct_layouts = {} of String => Array(AST::TypeExpression?)
@@ -112,7 +114,11 @@ module Dragonstone
                             @emitted_struct_types = Set(String).new
                             @struct_llvm_lookup = {} of String => String
                             @namespace_stack = [] of String
+                            @globals = Set(String).new
+                            @pending_blocks = [] of String
+                            
                             index_struct_types
+                            
                             @runtime = RuntimeContext.new(
                                 box_i32: "dragonstone_runtime_box_i32",
                                 box_i64: "dragonstone_runtime_box_i64",
@@ -144,18 +150,26 @@ module Dragonstone
                                 unbox_struct: "dragonstone_runtime_unbox_struct",
                                 array_push: "dragonstone_runtime_array_push",
                                 to_string: "dragonstone_runtime_to_string",
+                                define_class: "dragonstone_runtime_define_class",
+                                define_method: "dragonstone_runtime_define_method",
                             )
                         end
                         
                         def generate(io : IO)
                             collect_strings
+                            collect_globals
                             collect_functions
                             prepare_runtime_literals
                             emit_string_constants(io)
+                            emit_globals(io)
                             emit_runtime_types(io)
                             declare_runtime(io)
                             emit_functions(io)
                             emit_entrypoint(io)
+                            
+                            @pending_blocks.each do |block_code|
+                                io << block_code
+                            end
                         end
                         
                         private class FunctionContext
@@ -198,6 +212,50 @@ module Dragonstone
                                 collect_strings_from_node(stmt)
                             end
                             @namespace_stack.clear
+                        end
+
+                        private def collect_globals
+                            @namespace_stack.clear
+                            @program.ast.statements.each do |stmt|
+                                collect_globals_from(stmt)
+                            end
+                            @namespace_stack.clear
+                        end
+
+                        private def collect_globals_from(node : AST::Node)
+                            case node
+                            when AST::ModuleDefinition, AST::ClassDefinition
+                                full_name = qualify_name(node.name)
+                                @globals << full_name
+
+                                with_namespace(node.name) do
+                                    node.body.each do |stmt|
+                                        if stmt.is_a?(AST::Assignment)
+                                            full_name = qualify_name(stmt.name)
+                                            @globals << full_name
+                                        end
+                                        collect_globals_from(stmt)
+                                    end
+                                end
+                            when AST::StructDefinition
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| collect_globals_from(stmt) }
+                                end
+                            else
+                                # Recurse if container.
+                            end
+                        end
+
+                        private def mangle_global_name(name : String) : String
+                            "ds_global_#{name.gsub("::", "_")}"
+                        end
+
+                        private def emit_globals(io : IO)
+                            @globals.each do |name|
+                                global_symbol = mangle_global_name(name)
+                                io << "@#{global_symbol} = private global i8* null\n"
+                            end
+                            io << "\n" unless @globals.empty?
                         end
 
                         private def index_struct_types
@@ -405,15 +463,13 @@ module Dragonstone
                                     false
                                 end
                             when AST::IfStatement
-                                node_contains_yield?(node.condition) ||
-                                    nodes_contain_yield?(node.then_block) ||
+                                node_contains_yield?(node.condition) || nodes_contain_yield?(node.then_block) ||
                                     node.elsif_blocks.any? { |clause| node_contains_yield?(clause) } ||
                                     (node.else_block ? nodes_contain_yield?(node.else_block.not_nil!) : false)
                             when AST::ElsifClause
                                 node_contains_yield?(node.condition) || nodes_contain_yield?(node.block)
                             when AST::UnlessStatement
-                                node_contains_yield?(node.condition) ||
-                                    nodes_contain_yield?(node.body) ||
+                                node_contains_yield?(node.condition) || nodes_contain_yield?(node.body) ||
                                     (node.else_block ? nodes_contain_yield?(node.else_block.not_nil!) : false)
                             when AST::WhileStatement
                                 node_contains_yield?(node.condition) || nodes_contain_yield?(node.block)
@@ -475,6 +531,7 @@ module Dragonstone
                             end
 
                             @function_names[func] = mangled_name
+                            @function_namespaces[func] = @namespace_stack.dup
                             @functions << func
 
                             receiver_type = nil
@@ -563,7 +620,7 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:named_tuple_literal]}(i64, i8**, i8**)\n"
                             io << "declare i8* @#{@runtime[:block_literal]}(i8*, i8*)\n"
                             io << "declare i8* @#{@runtime[:block_invoke]}(i8*, i64, i8**)\n"
-                            io << "declare i8* @#{@runtime[:method_invoke]}(i8*, i8*, i64, i8**)\n"
+                            io << "declare i8* @#{@runtime[:method_invoke]}(i8*, i8*, i64, i8**, i8*)\n"
                             io << "declare i8** @#{@runtime[:block_env_alloc]}(i64)\n"
                             io << "declare i8* @#{@runtime[:constant_lookup]}(i64, i8**)\n"
                             io << "declare void @#{@runtime[:rescue_placeholder]}()\n\n"
@@ -579,6 +636,8 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:box_struct]}(i8*, i64)\n"
                             io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
+                            io << "declare i8* @#{@runtime[:define_class]}(i8*)\n"
+                            io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*)\n"
                         end
                         
                         private def emit_functions(io : IO)
@@ -592,7 +651,7 @@ module Dragonstone
                             return_type = llvm_type_of(func.return_type)
 
                             ctx = FunctionContext.new(io, return_type)
-                            @namespace_stack.clear
+                            @namespace_stack = @function_namespaces[func].dup
 
                             llvm_name = @function_names[func]
 
@@ -706,10 +765,18 @@ module Dragonstone
                                     value = ensure_value_type(ctx, value, target_type)
                                 end
                                 if operator = stmt.operator
-                                    current = load_local(ctx, stmt.name)
+                                    current = generate_variable_reference(ctx, stmt.name)
                                     value = emit_binary_op(ctx, operator, current, value)
                                 end
-                                store_local(ctx, stmt.name, value)
+                                
+                                full_name = qualify_name(stmt.name)
+                                if @globals.includes?(full_name)
+                                    boxed = box_value(ctx, value)
+                                    global_name = mangle_global_name(full_name)
+                                    ctx.io << "  store i8* #{boxed[:ref]}, i8** @#{global_name}\n"
+                                else
+                                    store_local(ctx, stmt.name, value)
+                                end
                                 false
                             when AST::ReturnStatement
                                 if value_node = stmt.value
@@ -737,6 +804,26 @@ module Dragonstone
                             when AST::WhileStatement
                                 generate_while_statement(ctx, stmt)
                             when AST::FunctionDef
+                                if !@namespace_stack.empty?
+                                    class_name = @namespace_stack.join("::")
+                                    if @globals.includes?(class_name)
+                                        global_name = mangle_global_name(class_name)
+                                        cls_reg = ctx.fresh("cls")
+                                        ctx.io << "  %#{cls_reg} = load i8*, i8** @#{global_name}\n"
+                                        
+                                        method_name_ptr = materialize_string_pointer(ctx, stmt.name)
+                                        llvm_name = @function_names[stmt]
+                                        
+                                        signature = @function_signatures[llvm_name]
+                                        param_types_str = signature[:param_types].join(", ")
+                                        func_type = "#{signature[:return_type]} (#{param_types_str})*"
+                                        
+                                        func_ptr = ctx.fresh("func")
+                                        ctx.io << "  %#{func_ptr} = bitcast #{func_type} @\"#{llvm_name}\" to i8*\n"
+                                        
+                                        ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
+                                    end
+                                end
                                 false
                             when AST::ArrayLiteral
                                 generate_array_literal(ctx, stmt)
@@ -1053,7 +1140,7 @@ module Dragonstone
                             block_io << "  ret i8* null\n" unless terminated
                             block_io << "}\n\n"
                             
-                            ctx.io << block_io.to_s
+                            @pending_blocks << block_io.to_s
                             
                             reg = ctx.fresh("block")
                             ctx.io << "  %#{reg} = call i8* @#{@runtime[:block_literal]}(i8* bitcast (#{fn_type} (i8*, i64, i8**)* @#{fn_name} to i8*), i8* #{env_pointer[:ref]})\n"
@@ -1062,7 +1149,6 @@ module Dragonstone
                         
                         private def attach_block_captures(ctx : FunctionContext, captures : Array(BlockCaptureInfo))
                             return if captures.empty?
-                            
                             env_base = "%#{ctx.fresh("closureenv")}"
                             ctx.io << "  #{env_base} = bitcast i8* %closure to i8**\n"
                             
@@ -1116,7 +1202,6 @@ module Dragonstone
                         
                         private def collect_block_captures(ctx : FunctionContext, block : AST::BlockLiteral) : Array(BlockCaptureInfo)
                             return [] of BlockCaptureInfo if ctx.locals.empty?
-                            
                             locals = ctx.locals
                             local_bindings = Set(String).new
                             block.typed_parameters.each { |param| local_bindings << param.name }
@@ -1263,9 +1348,8 @@ module Dragonstone
                                 end
                             when AST::BlockLiteral, AST::FunctionDef, AST::FunctionLiteral,
                                  AST::ClassDefinition, AST::StructDefinition, AST::ModuleDefinition, AST::EnumDefinition
-                                # nested scopes – skip
                             else
-                                # nodes not explicitly handled either have no children or do not introduce captures
+                                # unhandled node types.
                             end
                         end
                         
@@ -1418,7 +1502,6 @@ module Dragonstone
                         private def generate_interpolated_string(ctx : FunctionContext, node : AST::InterpolatedString) : ValueRef
                             parts = node.normalized_parts
                             return value_ref("i8*", materialize_string_pointer(ctx, ""), constant: true) if parts.empty?
-
                             segments = [] of ValueRef
                             parts.each do |type, content|
                                 if type == :string
@@ -1555,7 +1638,6 @@ module Dragonstone
                         
                         private def generate_case_condition(ctx : FunctionContext, clause : AST::WhenClause, case_value : ValueRef?) : ValueRef
                             return value_ref("i1", "0", constant: true) if clause.conditions.empty?
-                            
                             result = nil
                             clause.conditions.each do |condition|
                                 condition_value = if case_value
@@ -1634,6 +1716,17 @@ module Dragonstone
                         
                         private def box_value(ctx : FunctionContext, value : ValueRef) : ValueRef
                             type = value[:type]
+                            
+                            if type == "%DSValue*" || type == "%DSObject*"
+                                if type == "i8*"
+                                    return value
+                                else
+                                    cast = ctx.fresh("anycast")
+                                    ctx.io << "  %#{cast} = bitcast #{type} #{value[:ref]} to i8*\n"
+                                    return value_ref("i8*", "%#{cast}")
+                                end
+                            end
+
                             if type.starts_with?("%")
                                 temp_ptr = ctx.fresh("box_temp")
                                 ctx.io << "  %#{temp_ptr} = alloca #{type}\n"
@@ -1832,7 +1925,7 @@ module Dragonstone
                                 raise "echo does not accept a block" if block_node
                                 arg_val = generate_expression(ctx, args.first)
                                 emit_echo(ctx, arg_val, inspect: false)
-                                return nil
+                                return value_ref("i8*", "null", constant: true) 
                             end
                             
                             block_value = block_node ? generate_block_literal(ctx, block_node) : nil
@@ -1852,7 +1945,7 @@ module Dragonstone
                                     raise "Struct methods do not support blocks yet" if block_value
                                     return emit_struct_method_dispatch(ctx, struct_name, receiver_value, call.name, arg_values)
                                 end
-                                return emit_receiver_call(ctx, call.name, receiver_value, arg_values)
+                                return emit_receiver_call(ctx, call.name, receiver_value, arg_values, block_value)
                             end
                             
                             requires_block = @function_requires_block[call.name]? || false
@@ -1893,15 +1986,19 @@ module Dragonstone
                             end
                         end
                         
-                        private def emit_receiver_call(ctx : FunctionContext, method_name : String, receiver : ValueRef, args : Array(ValueRef)) : ValueRef
+                        private def emit_receiver_call(ctx : FunctionContext, method_name : String, receiver : ValueRef, args : Array(ValueRef), block_value : ValueRef? = nil) : ValueRef
                             boxed = args.map { |arg| box_value(ctx, arg) }
                             buffer = allocate_pointer_buffer(ctx, boxed) || "null"
                             name_ptr = materialize_string_pointer(ctx, method_name)
+                            
+                            block_arg = block_value ? block_value[:ref] : "null"
+                            
                             runtime_call(ctx, "i8*", @runtime[:method_invoke], [
                                 {type: "i8*", ref: receiver[:ref]},
                                 {type: "i8*", ref: name_ptr},
                                 {type: "i64", ref: args.size.to_s},
-                                {type: "i8**", ref: buffer}
+                                {type: "i8**", ref: buffer},
+                                {type: "i8*", ref: block_arg}
                             ])
                         end
                         
@@ -2265,6 +2362,14 @@ module Dragonstone
                         end
 
                         private def generate_variable_reference(ctx : FunctionContext, name : String) : ValueRef
+                            full_name = qualify_name(name)
+                            if @globals.includes?(full_name)
+                                reg = ctx.fresh("load_global")
+                                global_name = mangle_global_name(full_name)
+                                ctx.io << "  %#{reg} = load i8*, i8** @#{global_name}\n"
+                                return value_ref("i8*", "%#{reg}")
+                            end
+
                             if constant_symbol?(name)
                                 emit_constant_lookup(ctx, [name])
                             else
@@ -2275,7 +2380,6 @@ module Dragonstone
                         private def constant_symbol?(name : String) : Bool
                             if info = @analysis.symbol_table.lookup(name)
                                 case info.kind
-                                    
                                 when Language::Sema::SymbolKind::Constant,
                                      Language::Sema::SymbolKind::Type,
                                      Language::Sema::SymbolKind::Module
@@ -2289,7 +2393,17 @@ module Dragonstone
                         end
 
                         private def generate_class_definition(ctx : FunctionContext, node : AST::ClassDefinition) : Bool
-                            emit_namespace_placeholder(ctx, node.name)
+                            full_name = qualify_name(node.name)
+                            name_ptr = materialize_string_pointer(ctx, full_name)
+                            
+                            reg = ctx.fresh("class")
+                            ctx.io << "  %#{reg} = call i8* @#{@runtime[:define_class]}(i8* #{name_ptr})\n"
+                            
+                            if @globals.includes?(full_name)
+                                global_name = mangle_global_name(full_name)
+                                ctx.io << "  store i8* %#{reg}, i8** @#{global_name}\n"
+                            end
+
                             with_namespace(node.name) do
                                 generate_block(ctx, node.body)
                             end
@@ -2386,9 +2500,8 @@ module Dragonstone
                         end
 
                         private def ensure_string_pointer(ctx : FunctionContext, value : ValueRef) : ValueRef
-                            return value if value[:type] == "i8*"
                             boxed = box_value(ctx, value)
-                            runtime_call(ctx, "i8*", @runtime[:display_value], [{type: "i8*", ref: boxed[:ref]}])
+                            runtime_call(ctx, "i8*", @runtime[:to_string], [{type: "i8*", ref: boxed[:ref]}])
                         end
 
                         private def interpolation_expression(content)

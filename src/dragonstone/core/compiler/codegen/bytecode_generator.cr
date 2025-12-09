@@ -997,7 +997,8 @@ module Dragonstone
             end_jumps = [] of Int32
 
             node.when_clauses.each do |clause|
-                condition_jumps = [] of Int32
+                body_entry_jumps = [] of Int32
+
                 clause.conditions.each do |condition|
                     if has_expression
                         emit(OPC::DUP)
@@ -1006,20 +1007,30 @@ module Dragonstone
                     else
                         compile_expression(condition)
                     end
-                    condition_jumps << emit(OPC::JMPF, 0)
+                    
+                    skip_jump = emit(OPC::JMPF, 0)
+                    body_entry_jumps << emit(OPC::JMP, 0)
+                    patch_jump(skip_jump, current_ip)
                 end
+
+                next_clause_jump = emit(OPC::JMP, 0)
+
+                body_start = current_ip
+                body_entry_jumps.each { |pos| patch_jump(pos, body_start) }
 
                 emit(OPC::POP) if has_expression
                 compile_block(clause.block)
                 emit_nil
                 end_jumps << emit(OPC::JMP, 0)
-                condition_jumps.each { |pos| patch_jump(pos, current_ip) }
+
+                patch_jump(next_clause_jump, current_ip)
             end
 
             emit(OPC::POP) if has_expression
             if node.else_block
                 compile_block(node.else_block.not_nil!)
             end
+
             emit_nil
             end_jumps.each { |pos| patch_jump(pos, current_ip) }
         end
