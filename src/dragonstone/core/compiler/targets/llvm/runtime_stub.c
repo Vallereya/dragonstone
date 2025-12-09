@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 #if defined(_MSC_VER)
 #define NORETURN __declspec(noreturn)
@@ -24,7 +25,8 @@ typedef enum {
     DS_VALUE_CLASS,
     DS_VALUE_INSTANCE,
     DS_VALUE_MAP,
-    DS_VALUE_BLOCK
+    DS_VALUE_BLOCK,
+    DS_VALUE_RANGE
 } DSValueKind;
 
 typedef struct {
@@ -78,6 +80,12 @@ typedef struct {
     DSClass *klass;
 } DSInstance;
 
+typedef struct {
+    int64_t from;
+    int64_t to;
+    bool exclusive;
+} DSRange;
+
 static DSClass *global_classes = NULL;
 
 static const char DS_STR_NIL_VAL[] = "nil";
@@ -128,6 +136,12 @@ void *dragonstone_runtime_box_i64(int64_t v);
 void *dragonstone_runtime_box_bool(int32_t v);
 void *dragonstone_runtime_array_push(void *array_val, void *value);
 void *dragonstone_runtime_block_invoke(void *block_val, int64_t argc, void **argv);
+
+void dragonstone_runtime_raise(void *message_ptr) {
+    const char *msg = (const char *)message_ptr;
+    fprintf(stderr, "Runtime Error: %s\n", msg ? msg : "Unknown error");
+    abort();
+}
 
 static DSValue *ds_create_array_box(int64_t length, void **elements) {
     DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
@@ -190,9 +204,24 @@ void* dragonstone_runtime_unbox_struct(void* value) {
 }
 
 int32_t dragonstone_runtime_unbox_i32(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_INT32) return ((DSValue*)v)->as.i32; return 0; }
-int64_t dragonstone_runtime_unbox_i64(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_INT64) return ((DSValue*)v)->as.i64; return 0; }
+int64_t dragonstone_runtime_unbox_i64(void *v) {
+    if (!ds_is_boxed(v)) return 0;
+    DSValue *box = (DSValue *)v;
+    if (box->kind == DS_VALUE_INT64) return box->as.i64;
+    if (box->kind == DS_VALUE_INT32) return (int64_t)box->as.i32;
+    return 0;
+}
+
 int32_t dragonstone_runtime_unbox_bool(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_BOOL) return ((DSValue*)v)->as.boolean; return 0; }
-double dragonstone_runtime_unbox_float(void *v) { if(ds_is_boxed(v) && ((DSValue*)v)->kind == DS_VALUE_FLOAT) return ((DSValue*)v)->as.f64; return 0.0; }
+
+double dragonstone_runtime_unbox_float(void *v) {
+    if (!ds_is_boxed(v)) return 0.0;
+    DSValue *box = (DSValue *)v;
+    if (box->kind == DS_VALUE_FLOAT) return box->as.f64;
+    if (box->kind == DS_VALUE_INT32) return (double)box->as.i32;
+    if (box->kind == DS_VALUE_INT64) return (double)box->as.i64;
+    return 0.0;
+}
 
 static char *ds_format_value(void *value, bool quote_strings) {
     if (!value) return (void *)DS_STR_NIL_VAL;
@@ -247,6 +276,12 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 return buffer;
             }
             case DS_VALUE_BLOCK: return ds_strdup("{Block}");
+            case DS_VALUE_RANGE: {
+                DSRange *rng = (DSRange *)box->as.ptr;
+                char buf[128];
+                snprintf(buf, 128, "%lld%s%lld", (long long)rng->from, rng->exclusive ? "..." : "..", (long long)rng->to);
+                return ds_strdup(buf);
+            }
         }
     }
 
@@ -351,6 +386,24 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
     const char *method = (const char *)method_name_ptr;
 
     if (!ds_is_boxed(receiver)) {
+        char *str = (char *)receiver;
+        
+        if (strcmp(method, "length") == 0 || strcmp(method, "size") == 0) {
+            return dragonstone_runtime_box_i64(strlen(str));
+        }
+        
+        if (strcmp(method, "upcase") == 0) {
+            char *copy = ds_strdup(str);
+            for (int i = 0; copy[i]; i++) copy[i] = toupper(copy[i]);
+            return copy;
+        }
+        
+        if (strcmp(method, "downcase") == 0) {
+            char *copy = ds_strdup(str);
+            for (int i = 0; copy[i]; i++) copy[i] = tolower(copy[i]);
+            return copy;
+        }
+
         return NULL; 
     }
 
@@ -440,6 +493,28 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                 curr = curr->next;
             }
             return receiver;
+        }
+    }
+
+    if (box->kind == DS_VALUE_RANGE) {
+        DSRange *rng = (DSRange *)box->as.ptr;
+        if (strcmp(method, "each") == 0) {
+            if (!block_val) return receiver;
+            int64_t current = rng->from;
+            int64_t end = rng->to;
+            void *args[1];
+
+            if (current <= end) {
+                while (current < end || (!rng->exclusive && current == end)) {
+                    args[0] = dragonstone_runtime_box_i64(current);
+                    dragonstone_runtime_block_invoke(block_val, 1, args);
+                    current++;
+                }
+            }
+            return receiver;
+        }
+        if (strcmp(method, "to_a") == 0) {
+            return NULL;
         }
     }
 
@@ -533,6 +608,11 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
             case DS_VALUE_INSTANCE: return left->as.ptr == right->as.ptr;
             case DS_VALUE_CLASS: return left->as.ptr == right->as.ptr;
             case DS_VALUE_MAP: return left->as.ptr == right->as.ptr;
+            case DS_VALUE_RANGE: {
+                DSRange *l = (DSRange *)left->as.ptr;
+                DSRange *r = (DSRange *)right->as.ptr;
+                return l->from == r->from && l->to == r->to && l->exclusive == r->exclusive;
+            }
             default: return false;
         }
     }
@@ -544,6 +624,16 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
 
 void *dragonstone_runtime_array_literal(int64_t length, void **elements) { return ds_create_array_box(length, elements); }
 void *dragonstone_runtime_map_literal(int64_t length, void **keys, void **values) { return ds_create_map_box(length, keys, values); }
+
+void *dragonstone_runtime_range_literal(int64_t from, int64_t to, bool exclusive) {
+    DSRange *rng = (DSRange *)ds_alloc(sizeof(DSRange));
+    rng->from = from;
+    rng->to = to;
+    rng->exclusive = exclusive;
+    DSValue *box = ds_new_box(DS_VALUE_RANGE);
+    box->as.ptr = rng;
+    return box;
+}
 
 void *dragonstone_runtime_index_get(void *object, void *index_value) {
     if (!ds_is_boxed(object)) return NULL;

@@ -1,14 +1,34 @@
-<# 
+<#
+    .NOTES
+        Command Usage:
+            Rebuild: `dragonstone.ps1 --rebuild`
+            Clean: `dragonstone.ps1 --clean`
 
-Commands, I need to remember to rebuild if needed.
+    .SYNOPSIS
+        PowerShell launcher script for Dragonstone.
 
-    Using either commands will add an icon to dragonstone.exe:
-        powershell -ExecutionPolicy Bypass -File .\bin\dragonstone.ps1 --rebuild-exe
-        dragonstone.bat --rebuild-exe
+    .DESCRIPTION
+        This script ensures that the Dragonstone executable is built and up to date,
+        then launches it with any provided arguments. It can also display environment
+        variables related to Dragonstone.
 
-    Using the normal crystal/shards build command does not add icon to dragonstone.exe:
-        shards build
+    .EXAMPLE
+        dragonstone.bat --rebuild
 
+        or
+
+        dragonstone.ps1 --rebuild
+
+        This rebuilds the Dragonstone executable with resources.
+
+    .EXAMPLE
+        dragonstone.bat --clean
+
+        or
+
+        dragonstone.ps1 --clean
+
+        This removes all build artifacts.
 #>
 
 param(
@@ -26,18 +46,17 @@ if ($null -eq $DragonstoneArgs) {
 $scriptPath   = $PSCommandPath
 $scriptRoot   = Split-Path -Parent $scriptPath
 $projectRoot  = Split-Path -Parent $scriptRoot
-
-# $exePath      = Join-Path $scriptRoot 'dragonstone.exe'
 $buildDir     = Join-Path $scriptRoot 'build'
+
 if (-not (Test-Path -Path $buildDir)) {
     New-Item -ItemType Directory -Path $buildDir | Out-Null
 }
+
 $exePath      = Join-Path $buildDir 'dragonstone.exe'
-
 $sourceEntry  = Join-Path $projectRoot 'bin/dragonstone'
-
 $resourceScript = $null
 $resourceOutputBase = $null
+
 $resourceSearchRoots = @(
     (Join-Path $projectRoot 'resources'),
     (Join-Path $scriptRoot 'resources')
@@ -86,6 +105,7 @@ function Show-DragonstoneEnv {
     $Keys = NormalizeArray $Keys
 
     $keyCount = @($Keys).Count
+
     if ($keyCount -eq 0) {
         $Keys = @('DRAGONSTONE_HOME', 'DRAGONSTONE_BIN')
     }
@@ -95,6 +115,55 @@ function Show-DragonstoneEnv {
         if ($null -ne $value) {
             Write-Output "$key=$value"
         }
+    }
+}
+
+function Clean-DragonstoneArtifacts {
+    Write-Host "Cleaning build..........."
+    
+    $itemsToClean = @(
+        @{
+            Path = (Join-Path $scriptRoot 'build')
+            Type = 'Directory'
+            Description = 'build directory'
+        },
+        @{
+            Path = (Join-Path $scriptRoot 'resources/dragonstone.o')
+            Type = 'File'
+            Description = 'dragonstone.o'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/core/runtime/include/dragonstone/core/version.h')
+            Type = 'File'
+            Description = 'version.h'
+        }
+    )
+    
+    $cleanedCount = 0
+
+    foreach ($item in $itemsToClean) {
+        if (Test-Path -Path $item.Path) {
+            try {
+                if ($item.Type -eq 'Directory') {
+                    Remove-Item -Path $item.Path -Recurse -Force -ErrorAction Stop
+                } else {
+                    Remove-Item -Path $item.Path -Force -ErrorAction Stop
+                }
+
+                Write-Host "  Removed: $($item.Description)"
+
+                $cleanedCount++
+
+            } catch {
+                Write-Warning "  Failed to remove build file: $($item.Description): $($_.Exception.Message)"
+            }
+        }
+    }
+    
+    if ($cleanedCount -eq 0) {
+        Write-Host "  No build files found to clean."
+    } else {
+        Write-Host "Cleaned $cleanedCount files(s)."
     }
 }
 
@@ -110,6 +179,7 @@ function Get-RelativePath {
 
     try {
         $base = $BasePath
+
         if (-not ($base.EndsWith([System.IO.Path]::DirectorySeparatorChar) -or $base.EndsWith([System.IO.Path]::AltDirectorySeparatorChar))) {
             $base += [System.IO.Path]::DirectorySeparatorChar
         }
@@ -146,6 +216,7 @@ function CompileDragonstoneResource {
 
     $tool = $null
     $toolNames = @('windres', 'x86_64-w64-mingw32-windres', 'llvm-rc')
+
     foreach ($name in $toolNames) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
         if ($command) {
@@ -162,6 +233,7 @@ function CompileDragonstoneResource {
     # Write-Host "Found resource compiler: $($tool.Name)"
 
     $extension = '.res'
+
     if ($tool.Name -notlike 'llvm-rc*') {
         $extension = '.o'
     }
@@ -169,6 +241,7 @@ function CompileDragonstoneResource {
     $outputPath = "$OutputBase$extension"
 
     $outputDir = Split-Path -Parent $outputPath
+
     if (-not (Test-Path -Path $outputDir)) {
         New-Item -ItemType Directory -Path $outputDir | Out-Null
     }
@@ -219,6 +292,7 @@ function EnsureDragonstoneExecutable {
     param([switch] $Force)
 
     $exeExists = Test-Path -Path $exePath -PathType Leaf
+
     if (-not $Force -and $exeExists) {
         return $true
     }
@@ -234,6 +308,7 @@ function EnsureDragonstoneExecutable {
     Write-Host 'Building Dragonstone.....'
 
     $resourcePath = $null
+
     if (-not $resourceScript) {
     #     Write-Host "Running resource script: $resourceScript"
     # } else {
@@ -252,6 +327,7 @@ function EnsureDragonstoneExecutable {
 
     $envFlagSet = $false
     $resourceLinkArg = $null
+
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
@@ -303,10 +379,20 @@ function EnsureDragonstoneExecutable {
 $forceRebuild = $false
 
 $argCount = @($DragonstoneArgs).Count
+
 if ($argCount -gt 0) {
     $firstArg = $DragonstoneArgs[0].ToLowerInvariant()
-    if ($firstArg -eq '--rebuild-exe') {
+    
+    # Handles the `--clean` flag.
+    if ($firstArg -eq '--clean') {
+        Clean-DragonstoneArtifacts
+        exit 0
+    }
+    
+    # Handles the `--rebuild-exe` flag.
+    if ($firstArg -eq '--rebuild') {
         $forceRebuild = $true
+
         if ($argCount -gt 1) {
             $DragonstoneArgs = $DragonstoneArgs[1..($argCount - 1)]
         } else {
@@ -316,11 +402,14 @@ if ($argCount -gt 0) {
 }
 
 $argCount = @($DragonstoneArgs).Count
+
 if ($argCount -gt 0 -and $DragonstoneArgs[0].ToLowerInvariant() -eq 'env') {
     $requested = @()
+
     if ($argCount -gt 1) { 
         $requested = $DragonstoneArgs[1..($argCount - 1)]
     }
+    
     Show-DragonstoneEnv $requested
     exit 0
 }

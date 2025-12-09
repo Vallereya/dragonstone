@@ -17,7 +17,7 @@ y = 5
 result = "#{x} + #{y} = #{x + y}"
 echo result
 
-# String methods
+# String methods.
 text = "hello world"
 e! text.upcase
 e! text.downcase

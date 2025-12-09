@@ -1,36 +1,52 @@
 <p align="center">
     <div align="center"> <img src="./docs/0_Index/logos/dragonstone-logo-type.png" width="500"/> </div>
 </p>
+
+## <p align="center"> ![status](https://img.shields.io/badge/⚠️-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE)
+
+## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
+Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language (*some compile targets are still a work in progress*), it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+<br>
 <br>
 
-## What is Dragonstone?
-Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+## ⚙️ Project Setup
+### *Requirements*
+1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed (*1.17.1+*).
+2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
+3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*).
+<br>
+<br>
 
-*<font color="color:#5E06EE;">This language is a work in progress. At this stage, much can still be changed.*</font>
-
-## Project Setup
-### Requirements
-1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed. (1.17.1 or higher are the only versions verified)
-    - (optional) The Crystal Programming Language also installs [LLVM/Clang](https://releases.llvm.org/), but I recommend you also install your own version of it. This just ensures there's no issues if targeting `dragonstone build --target crystal`, `dragonstone build --target c`, or `dragonstone build --target llvm`.
-2. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) needs to be installed if you want to use `dragonstone build --target ruby`. (3.4.6 or higher are the only versions verified)
-
-### Building from Source using Bash (All Platforms)
+### *To Build from Source*
+###### **(Linux/MacOS/Windows)**
 1. Clone this repository.
-2. Change directory to this project.
-3. Run `shards build` to build.
+2. `cd` to the project directory.
+3. Run `shards build --release`
+<br>
+<br>
 
-### Building from Source using Terminal or Powershell (Windows Only)
+### *To Build from Source*
+###### **(Windows Recommended)**
 1. Clone this repository.
-2. Change directory to this project.
-3. Run `shards build` to build *(this gets placed in `./bin/build`)*.
-4. Run `.\bin\dragonstone.bat --rebuild-exe` *(this rebuilds the project with the `--release` flag and adds the dragonstone icon)*.
-5. <font color="color:#5E06EE;">(Optional)</font> Run `.\bin\dragonstone.bat` to add `.\bin` to your users PATH environmental variable, allowing you to run `dragonstone` from anywhere. Restart your terminal after this step.
+2. `cd` to the project directory.
+3. Run `.\bin\dragonstone.bat --rebuild`
+    - This builds with the icons/resources and adds `.\bin` to your user PATH Environmental Variables.
+    - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
+<br>
+<br>
 
-**Note**: You can also just use `shards build` on Windows for a standard build but this will not use the `--release` flag unless specified otherwise, this will make dragonstone compile/interpret usage significantly slower. <br>
+###### **(Windows Alternative)**
+3. Run `shards build --release` for a standard build, this is without icon/resources.
+<br>
+<br>
 
-**Note**: Also on Windows you can just use the installer listed in releases. <br>
+> **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files about 3x slower.
 
-## Usage
+> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will removed the build files, then you can use `.\bin\dragonstone.bat --rebuild` again.
+
+> **Tip for Windows Users:** An installer is also available in the [Releases](https://github.com/Vallereya/dragonstone/releases) section.
+
+## 🧪 Usage
 #### Run Files via Interpreter. 
 ```bash
     # On PATH:
@@ -81,8 +97,8 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     ./scripts/backend_ci.sh spec --backend core
 ```
 
-## Examples
-#### Example of output using `echo`:
+## ✨ Examples
+#### Example of a sting output using `echo`:
 ```crystal
     echo "Hello World!"
 ```
@@ -104,6 +120,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Example of a String.
 ```crystal
     name = "Ringo"
+
     echo name
 ```
 
@@ -131,6 +148,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     person = Person.new
     person.greet
 ```
+
 ###### Also Ascii and Unicode are supported.
 ```crystal
     class 🔥
@@ -182,6 +200,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Example of a String with types.
 ```crystal
     name: str = "Peet"
+
     echo name
 ```
 
@@ -190,6 +209,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     a: int = 10
     b: int = 10
     numbers = a + b
+
     echo numbers
 ```
 
@@ -202,6 +222,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     😱("V")
 ```
 
+###### With this example using a bit more complex features.
 ```crystal
     class Person
         property name: str
@@ -233,6 +254,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     echo "x: #{point.x}, y: #{point.y}"
 ```
 
+###### With this example showing `with`.
 ```crystal
     struct Point
         property x: int
@@ -247,8 +269,15 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     end
 ```
 
-#### Example of using other files with `use`.
-###### (from ./examples/test_use.ds), and using the `con` keyword again.
+#### Example of using/importing other files with `use`.
+###### From (./examples/use.ds)
+```crystal
+    use "test_use.ds"
+
+    echo add(magic, 8)
+```
+
+###### What's being grabbed from (./examples/test_use.ds), and using the `con` keyword again.
 ```crystal
     con magic = 42
 
@@ -257,29 +286,23 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     end
 ```
 
-###### (from ./examples/use.ds)
-```crystal
-    use "test_use.ds"
-
-    echo add(magic, 8)
-```
-
 ###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
 ###### **WARNING**: There is a current bug I made when I split the interpreter that I need to fix with imports, right now you need to specify `dragonstone run --backend native` and with the import specify the `.ds` when running a file with imports, but the `.ds` is not needed if importing something from the stdlib.
 ```crystal
-    # Both by file and selectively.
+    # Both by file and selectively using `from` with it.
     use "test_use.ds"
     use { Person } from "classes.ds"
 
-    # Any both by file and selectively via a url, I used `cdn.jsdelivr.net` because it was the only thing I could find that would grab the examples from GitHub.
-    # I have also already started working on a dragonstone package manager, called `forge`, so we can expect that soon as well. 
+    # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
+    # because it was the only thing I could find that would grab the examples from GitHub.
+    # I have also already started working on a dragonstone package manager, called `forge`,
+    # so we can expect that soon as well. 
     use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode.ds"
     use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution.ds"
 ```
 
-#### Two examples of `para`, the Dragonstone version of a Proc.
+#### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
-
 ```crystal
 greet = ->(name: str) {
     "Hello, #{name}!" 
@@ -288,6 +311,7 @@ greet = ->(name: str) {
 echo greet.call("Jalyn")
 ```
 
+###### Another bit more complex `para`.
 ```crystal
 square: para(int, int) = ->(x: int) { x * x }
 
@@ -296,7 +320,6 @@ echo square.call(6)
 
 #### Examples the interop (some done but still a work in progress).
 ###### This calling convention will change when I expand the FFI.
-
 ```crystal
     # Call puts from Ruby
     ffi.call_ruby("puts", ["Hello from Ruby!"])
@@ -323,39 +346,51 @@ echo square.call(6)
 
 #### See the `examples/` directory for more sample `.ds` files.
 
-## Benchmark Information
+## ⚡ Benchmark Information
 - When using `--release` flag.
 - <2% overhead at scale.
 - Near identical for loops vs single.
 
 You can run these yourself from the `./scripts` directory.
 
-### 1 Billion Single Loop Iteration Benchmark (Interpreter)
-```bash
-    ~4.47 million iterations/second
-    ~0.224 microseconds per iteration
-
-    Iterations:     223,712 ms
-    Actual Time:    223.71 seconds (3.73 minutes)
-```
-
 ### 1 Billion Nested Loop Iteration Benchmark (Interpreter)
 ```bash
-    ~4.43 million iterations/second
-    ~0.226 microseconds per iteration
+    ~4.47   billion iterations/seconds
+    ~224    ns
 
-    Iterations:     225,810 ms
-    Actual Time:    225.81 seconds (3.76 minutes)
+    Iterations:             4.47M/s
+    Actual Time:            3.73 minutes
+```
+
+### 1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)
+```bash
+    ~812    billion iterations/seconds
+    ~1.23   ns
+
+    Iterations:             812M/s
+    LLVM Compiler Time:     1.23 seconds
+    Results:                ~182x Faster
 ```
 
 ### Comparison Context
-For 1 billion iterations of this benchmark:
+For 1 billion iterations of this benchmark (Interpreter):
 ```bash
     Ruby v2.X.X         = ~15-30 minutes    (varies by version)
     Python v3.X.X       = ~5-15 minutes     (varies by version)
  -> Dragonstone         = ~3.7 minutes
     Lua                 = ~1-2 minutes
     JavaScript          = ~10-30 seconds    (using V8)
+```
+
+For 1 billion iterations of this benchmark (Compiler/LLVM):
+```bash
+    C                   = ~0.5-1.5 seconds
+    Rust                = ~0.5-1.5 seconds
+ -> Dragonstone LLVM    = ~1.23 seconds
+    GO                  = ~1-2 seconds
+    Java                = ~2-5 seconds      (using JIT)
+    PyPy                = ~10-20 seconds    (using JIT)
+    Node.js             = ~10-30 seconds    (using V8)
 ```
 
 <!-- ## NOTE: Regarding `EDEN`
@@ -373,12 +408,17 @@ Now, what is `EDEN`? Well, it's an AI development engine for developing AI insid
 ## NOTE: Regarding AI-Assisted Development
 LLM, hereafter "AI", code is not being using in the development of either of these projects (`EDEN` predates LLMs anyways), my use of AI is strictly via questions, code review, in some cases code completion, and with unit testing. Any code that *has* been generated by AI, I have tested, know how it works, and rewrote to fit my own standards and for the standards required for the scope of these projects. I bring this up because after reading about `EDEN` you may wonder about if AI has been used within these projects. -->
 
-## Contact
+## 📝 Contact
     Project:
         www.github.com/vallereya
 
-## License
-*© 2025 Vallereya* <br>
-All rights reserved. <br> <br>
-*Code and Contributions have **Apache-2.0 License** agreed upon by all copyright holders. <br>
-See **LICENSE** for more information.* <br>
+## ⚖️ License
+*© 2025 Vallereya*
+<br>
+All rights reserved.
+<br>
+
+*Code and Contributions have **Apache-2.0 License** agreed upon by all copyright holders.
+<br>
+See **LICENSE** for more information.*
+<br>

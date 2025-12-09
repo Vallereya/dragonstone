@@ -96,5 +96,30 @@ echo "\n"
 # target = "./tests/test.toml"
 # echo "\n#{File.read(target)}"
 
+
+
+
+
+greeting = {
+    "greet" -> "Hi, my name is Jalyn.",
+    "from" -> " I'm from the USA!"
+}
+
+echo greeting["greet"] + greeting["from"]    
+
+# Example Three
+# This is adding the `Hash` to a `Map` and adds types.
+person: Hash(str, int) = {
+    "name" -> "Jalyn",
+    "age" -> 30
+}
+
+echo person["name"]                                             # -> Jalyn
+echo person["age"]                                              # -> 30
+
+
+
+
+
 echo "\n"
 echo "Ending Test File"
