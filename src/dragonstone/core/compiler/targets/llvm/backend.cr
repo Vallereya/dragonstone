@@ -182,6 +182,7 @@ module Dragonstone
                             getter locals : Hash(String, NamedTuple(ptr: String, type: String, heap: Bool))
                             getter ensure_stack : Array(Array(AST::Node))
                             getter postamble : String::Builder
+                            getter with_stack : Array(ValueRef)
                             property block_slot : NamedTuple(ptr: String, type: String)?
                             
                             def initialize(@io : IO, @return_type : String)
@@ -190,6 +191,7 @@ module Dragonstone
                                 @locals = {} of String => NamedTuple(ptr: String, type: String, heap: Bool)
                                 @ensure_stack = [] of Array(AST::Node)
                                 @postamble = String::Builder.new
+                                @with_stack = [] of ValueRef
                                 @block_slot = nil
                             end
                             
@@ -890,6 +892,8 @@ module Dragonstone
                             when AST::YieldExpression
                                 generate_yield_expression(ctx, stmt)
                                 false
+                            when AST::WithExpression
+                                generate_with_expression(ctx, stmt)
                             when AST::RaiseExpression
                                 generate_raise_expression(ctx, stmt)
                                 true
@@ -1688,6 +1692,32 @@ module Dragonstone
                             
                             result || value_ref("i1", "0", constant: true)
                         end
+
+                        private def generate_with_expression(ctx : FunctionContext, node : AST::WithExpression) : Bool
+                            receiver_val = generate_expression(ctx, node.receiver)
+                            ctx.with_stack << receiver_val
+                            generate_block(ctx, node.body)
+                            ctx.with_stack.pop
+                            false
+                        end
+
+                        private def resolve_implicit_receiver(ctx : FunctionContext, name : String) : ValueRef?
+                            ctx.with_stack.reverse_each do |receiver|
+                                if struct_name = struct_name_for_value(receiver)
+                                    method_symbol = struct_method_symbol(struct_name, name)
+
+                                    if @function_signatures.has_key?(method_symbol)
+                                        return receiver
+                                    end
+
+                                    if @struct_field_indices[struct_name]?.try(&.has_key?(name))
+                                        return receiver
+                                    end
+                                end
+                            end
+
+                            nil
+                        end
                         
                         private def generate_yield_expression(ctx : FunctionContext, node : AST::YieldExpression) : ValueRef
                             block_pointer = load_block_pointer(ctx)
@@ -1993,13 +2023,21 @@ module Dragonstone
                             
                             requires_block = @function_requires_block[call.name]? || false
                             call_args = arg_values.dup
+                            
                             if requires_block
-                                block_argument = block_value || value_ref("i8*", "null", constant: true)
+                                block_argument = block_value ||
+                                value_ref("i8*", "null", constant: true)
                                 call_args << block_argument
                             elsif block_value
-                                raise "Function #{call.name} does not accept a block"
+                                raise "Function 
+                                #{call.name} does not accept a block"
                             end
                             
+                            if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
+                                struct_name = struct_name_for_value(implicit_receiver).not_nil!
+                                return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
+                            end
+
                             emit_function_call(ctx, call, call_args)
                         end
                         
@@ -2436,17 +2474,25 @@ module Dragonstone
 
                         private def generate_variable_reference(ctx : FunctionContext, name : String) : ValueRef
                             full_name = qualify_name(name)
+
                             if @globals.includes?(full_name)
                                 reg = ctx.fresh("load_global")
+             
                                 global_name = mangle_global_name(full_name)
                                 ctx.io << "  %#{reg} = load i8*, i8** @#{global_name}\n"
                                 return value_ref("i8*", "%#{reg}")
+    
                             end
 
                             if constant_symbol?(name)
                                 emit_constant_lookup(ctx, [name])
-                            else
+                            elsif ctx.locals.has_key?(name)
                                 load_local(ctx, name)
+                            elsif receiver = resolve_implicit_receiver(ctx, name)
+                                struct_name = struct_name_for_value(receiver).not_nil!
+                                emit_struct_method_dispatch(ctx, struct_name, receiver, name, [] of ValueRef)
+                            else
+                                raise "Undefined local #{name}"
                             end
                         end
 

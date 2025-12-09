@@ -22,6 +22,87 @@
     ## Crossing from Area to GC with gc.copy
 ]#
 
+#[
+    #! Garbage Collection and Borrow Checker
+
+    FOR TESTING AN IDEA:
+    GARBAGE COLLECTION AND 
+    BORROW CHECKER VIA ANNOTATIONS
+
+    # TODO: Need Good Garbage Collection Implementation.
+    # TODO: Need Good Borrow Checker Implementation.
+]#
+ 
+
+# # with both gc and bc.
+# @[gc.disable && bc.enable]
+# def Load(area: Area) : Level
+#     let doc: @own Document = Document.allocate(area)
+    
+#     do
+#         let editor: &mut Document = &mut doc
+#         editor.append("Hello")
+#     end
+
+#     alias data = doc.data
+#     alias meta = doc.meta
+
+#     let level: Level = Level.allocate(
+#         data: gc.copy(data),
+#         meta: gc.copy(meta)
+#     )
+
+#     doc.drop()
+#     return level
+# end
+
+# GC is disabled inside this function (once attribute support exists).
+# def build_cache(area) : Hash
+#     cache = {}                         # GC-managed
+#     doc   = Document.allocate(area)    # arena-managed
+
+#     i = 0
+#     while i < 1_000_000
+#         doc.load_from_source(i)
+#         cache[i] = gc.copy(doc.to_value)
+#         doc.reset
+#         i += 1
+#     end
+
+#     doc.drop
+#     cache
+# end
+
+# def load_level(path : String) : Level
+#     area = gc.begin(capacity: 64 * 1024 * 1024)
+
+#     data     = area.allocate(bytes: 1_000_000)
+#     textures = area.allocate(array: Texture, count: 256)
+#     load_level_data(path, data, textures)
+
+#     level = Level.allocate(
+#         data: gc.copy(data),
+#         meta: gc.copy(textures)
+#     )
+
+#     gc.end(area)
+#     level
+# end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # GC is disabled inside this function.
 # This is inherently UNSAFE: you are responsible for memory usage and lifetimes.
 @[gc.disable]

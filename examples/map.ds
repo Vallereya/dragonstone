@@ -2,12 +2,14 @@
     Maps Example
 ]#
 
+# Example One
 # Map literal with key -> value pairs.
 ages = { "Jules" -> 32, "Ringo" -> 29, "Peet" -> 35 }
 
 # Access existing entries.
 echo ages["Jules"]
 
+# Example Two
 # Update values via index assignment.
 ages["Ringo"] = 30
 echo ages["Ringo"]
@@ -20,3 +22,24 @@ end
 # Some builtin helpers.
 e! ages.keys
 e! ages.values
+
+#! Both examples 3 and 4 do run if you uncomment them, but will error out
+#! with the LLVM backend which is why I commented it out for testing that.
+
+# Example Three
+# greeting = {
+#     "greet" -> "Hi, my name is Jalyn.",
+#     "from" -> " I'm from the USA!"
+# }
+
+# echo greeting["greet"] + greeting["from"]
+
+# Example Four
+# This is adding the `Hash` to a `Map` and adds types.
+# person: Hash(str, int) = {
+#     "name" -> "Jalyn",
+#     "age" -> 30
+# }
+
+# echo person["name"]                                             # -> Jalyn
+# echo person["age"]                                              # -> 30

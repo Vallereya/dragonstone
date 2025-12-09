@@ -1,8 +1,11 @@
 <p align="center">
     <div align="center"> <img src="./docs/0_Index/logos/dragonstone-logo-type.png" width="500"/> </div>
 </p>
-
-## <p align="center"> ![status](https://img.shields.io/badge/⚠️-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE)
+<br>
+<p align="center">
+    <div align="center"> <img src="https://img.shields.io/badge/⚠️-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE"/> </div>
+</p>
+<br>
 
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
 Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language (*some compile targets are still a work in progress*), it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
@@ -14,16 +17,12 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed (*1.17.1+*).
 2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
 3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*).
-<br>
-<br>
 
 ### *To Build from Source*
 ###### **(Linux/MacOS/Windows)**
 1. Clone this repository.
 2. `cd` to the project directory.
 3. Run `shards build --release`
-<br>
-<br>
 
 ### *To Build from Source*
 ###### **(Windows Recommended)**
@@ -32,12 +31,10 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 3. Run `.\bin\dragonstone.bat --rebuild`
     - This builds with the icons/resources and adds `.\bin` to your user PATH Environmental Variables.
     - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
-<br>
-<br>
 
 ###### **(Windows Alternative)**
-3. Run `shards build --release` for a standard build, this is without icon/resources.
-<br>
+3. Run `shards build --release` for a standard build, this is without any icons/resources.
+
 <br>
 
 > **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files about 3x slower.
