@@ -17,6 +17,33 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_begin_expression(self)
             end
+
+            def to_source(io : IO)
+                io << "begin\n"
+                body.each do |stmt|
+                    stmt.to_source(io)
+                    io << "\n"
+                end
+                rescue_clauses.each do |clause|
+                    clause.to_source(io)
+                    io << "\n"
+                end
+                if e = else_block
+                    io << "else\n"
+                    e.each do |stmt|
+                        stmt.to_source(io)
+                        io << "\n"
+                    end
+                end
+                if ens = ensure_block
+                    io << "ensure\n"
+                    ens.each do |stmt|
+                        stmt.to_source(io)
+                        io << "\n"
+                    end
+                end
+                io << "end"
+            end
         end
     end
 end

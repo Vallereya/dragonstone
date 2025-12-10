@@ -95,6 +95,9 @@ module Dragonstone
                             define_class: String,
                             define_method: String,
                             define_enum_member: String,
+                            push_handler: String,
+                            pop_handler: String,
+                            get_exception: String,
                         )
                         
                         @string_counter = 0
@@ -159,6 +162,9 @@ module Dragonstone
                                 define_class: "dragonstone_runtime_define_class",
                                 define_method: "dragonstone_runtime_define_method",
                                 define_enum_member: "dragonstone_runtime_define_enum_member",
+                                push_handler: "dragonstone_runtime_push_exception_frame",
+                                pop_handler: "dragonstone_runtime_pop_exception_frame",
+                                get_exception: "dragonstone_runtime_get_exception",
                             )
                         end
                         
@@ -186,15 +192,21 @@ module Dragonstone
                             getter ensure_stack : Array(Array(AST::Node))
                             getter postamble : String::Builder
                             getter with_stack : Array(ValueRef)
+                            getter loop_stack : Array(NamedTuple(exit: String, next: String, redo: String))
+                            getter retry_stack : Array(String)
+    
                             property block_slot : NamedTuple(ptr: String, type: String)?
-                            
+
                             def initialize(@io : IO, @return_type : String)
                                 @next_reg = 0
                                 @next_label = 0
+                          
                                 @locals = {} of String => NamedTuple(ptr: String, type: String, heap: Bool)
                                 @ensure_stack = [] of Array(AST::Node)
                                 @postamble = String::Builder.new
                                 @with_stack = [] of ValueRef
+                                @loop_stack = [] of NamedTuple(exit: String, next: String, redo: String)
+                                @retry_stack = [] of String
                                 @block_slot = nil
                             end
                             
@@ -397,12 +409,15 @@ module Dragonstone
                                 node.body.each { |stmt| collect_strings_from_node(stmt) }
                             when AST::BeginExpression
                                 node.body.each { |stmt| collect_strings_from_node(stmt) }
+                                node.rescue_clauses.each { |clause| collect_strings_from_node(clause) }
                                 if block = node.else_block
                                     block.each { |stmt| collect_strings_from_node(stmt) }
                                 end
                                 if block = node.ensure_block
                                     block.each { |stmt| collect_strings_from_node(stmt) }
                                 end
+                            when AST::RescueClause
+                                node.body.each { |stmt| collect_strings_from_node(stmt) }
                             when AST::ConstantPath
                                 node.names.each { |segment| intern_string(segment) }
                             when AST::ConstantDeclaration
@@ -454,7 +469,11 @@ module Dragonstone
                             when AST::InterpolatedString
                                 node.parts.each do |part|
                                     type, content = part
-                                    intern_string(content) if type == :string
+                                    if type == :string
+                                        intern_string(content.as(String))
+                                    elsif type == :expression
+                                        collect_strings_from_node(interpolation_expression(content))
+                                    end
                                 end
                             end
                         end
@@ -667,6 +686,10 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:define_class]}(i8*)\n"
                             io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*)\n"
                             io << "declare void @#{@runtime[:define_enum_member]}(i8*, i8*, i64)\n"
+                            io << "declare void @#{@runtime[:push_handler]}(i8*)\n"
+                            io << "declare void @#{@runtime[:pop_handler]}()\n"
+                            io << "declare i8* @#{@runtime[:get_exception]}()\n"
+                            io << "declare i32 @setjmp(i8*)\n"
                         end
                         
                         private def emit_functions(io : IO)
@@ -919,6 +942,14 @@ module Dragonstone
                             when AST::RaiseExpression
                                 generate_raise_expression(ctx, stmt)
                                 true
+                            when AST::BreakStatement
+                                generate_break_statement(ctx, stmt)
+                            when AST::NextStatement
+                                generate_next_statement(ctx, stmt)
+                            when AST::RedoStatement
+                                generate_redo_statement(ctx, stmt)
+                            when AST::RetryStatement
+                                generate_retry_statement(ctx, stmt)
                             else
                                 false
                             end
@@ -1117,20 +1148,84 @@ module Dragonstone
                             cond_label = ctx.fresh_label("while_cond")
                             body_label = ctx.fresh_label("while_body")
                             exit_label = ctx.fresh_label("while_exit")
-                            
+
                             ctx.io << "  br label %#{cond_label}\n"
-                            
                             ctx.io << "#{cond_label}:\n"
+
                             cond_value = ensure_boolean(ctx, generate_expression(ctx, stmt.condition))
+
                             ctx.io << "  br i1 #{cond_value[:ref]}, label %#{body_label}, label %#{exit_label}\n"
-                            
                             ctx.io << "#{body_label}:\n"
+
+                            ctx.loop_stack << {exit: exit_label, next: cond_label, redo: body_label}
+
                             body_returns = generate_block(ctx, stmt.block)
+
+                            ctx.loop_stack.pop
                             ctx.io << "  br label %#{cond_label}\n" unless body_returns
-                            
                             ctx.io << "#{exit_label}:\n"
-                            
+
                             false
+                        end
+
+                        private def generate_break_statement(ctx : FunctionContext, node : AST::BreakStatement) : Bool
+                            loop_info = ctx.loop_stack.last? || raise "break used outside of loop"
+                            
+                            if cond = node.condition
+                                cond_val = ensure_boolean(ctx, generate_expression(ctx, cond))
+                                cont_label = ctx.fresh_label("break_cont")
+                                ctx.io << "  br i1 #{cond_val[:ref]}, label %#{loop_info[:exit]}, label %#{cont_label}\n"
+                                ctx.io << "#{cont_label}:\n"
+                                false
+                            else
+                                ctx.io << "  br label %#{loop_info[:exit]}\n"
+                                true
+                            end
+                        end
+
+                        private def generate_next_statement(ctx : FunctionContext, node : AST::NextStatement) : Bool
+                            loop_info = ctx.loop_stack.last? || raise "next used outside of loop"
+                            
+                            if cond = node.condition
+                                cond_val = ensure_boolean(ctx, generate_expression(ctx, cond))
+                                cont_label = ctx.fresh_label("next_cont")
+                                ctx.io << "  br i1 #{cond_val[:ref]}, label %#{loop_info[:next]}, label %#{cont_label}\n"
+                                ctx.io << "#{cont_label}:\n"
+                                false
+                            else
+                                ctx.io << "  br label %#{loop_info[:next]}\n"
+                                true
+                            end
+                        end
+
+                        private def generate_redo_statement(ctx : FunctionContext, node : AST::RedoStatement) : Bool
+                            loop_info = ctx.loop_stack.last? || raise "redo used outside of loop"
+
+                            if cond = node.condition
+                                cond_val = ensure_boolean(ctx, generate_expression(ctx, cond))
+                                cont_label = ctx.fresh_label("redo_cont")
+                                ctx.io << "  br i1 #{cond_val[:ref]}, label %#{loop_info[:redo]}, label %#{cont_label}\n"
+                                ctx.io << "#{cont_label}:\n"
+                                false
+                            else
+                                ctx.io << "  br label %#{loop_info[:redo]}\n"
+                                true
+                            end
+                        end
+
+                        private def generate_retry_statement(ctx : FunctionContext, node : AST::RetryStatement) : Bool
+                            retry_label = ctx.retry_stack.last? || raise "retry used outside of begin block"
+
+                            if cond = node.condition
+                                cond_val = ensure_boolean(ctx, generate_expression(ctx, cond))
+                                cont_label = ctx.fresh_label("retry_cont")
+                                ctx.io << "  br i1 #{cond_val[:ref]}, label %#{retry_label}, label %#{cont_label}\n"
+                                ctx.io << "#{cont_label}:\n"
+                                false
+                            else
+                                ctx.io << "  br label %#{retry_label}\n"
+                                true
+                            end
                         end
                         
                         private def generate_array_literal(ctx : FunctionContext, node : AST::ArrayLiteral) : ValueRef
@@ -1418,9 +1513,31 @@ module Dragonstone
                         private def generate_begin_expression(ctx : FunctionContext, node : AST::BeginExpression) : ValueRef
                             ensure_block = node.ensure_block
                             ensure_nodes = ensure_block
+       
                             if ensure_nodes && ensure_nodes.empty?
                                 ensure_nodes = nil
                             end
+
+                            rescue_label = ctx.fresh_label("rescue")
+                            body_label = ctx.fresh_label("begin_body")
+                            ensure_label = ctx.fresh_label("ensure")
+                            merge_label = ctx.fresh_label("begin_merge")
+                            frame_storage = ctx.fresh("eh_frame")
+                            ctx.io << "  %#{frame_storage} = alloca [1024 x i8]\n"
+                            frame_ptr = ctx.fresh("eh_ptr")
+                            ctx.io << "  %#{frame_ptr} = bitcast [1024 x i8]* %#{frame_storage} to i8*\n"
+                            ctx.io << "  call void @#{@runtime[:push_handler]}(i8* %#{frame_ptr})\n"
+                            jmp_res = ctx.fresh("setjmp_res")
+                            ctx.io << "  %#{jmp_res} = call i32 @setjmp(i8* %#{frame_ptr})\n"
+                            is_raise = ctx.fresh("is_raise")
+                            ctx.io << "  %#{is_raise} = icmp ne i32 %#{jmp_res}, 0\n"
+                            ctx.io << "  br i1 %#{is_raise}, label %#{rescue_label}, label %#{body_label}\n"
+                            ctx.io << "#{body_label}:\n"
+                            begin_label = ctx.fresh_label("begin_start")
+                            ctx.retry_stack << begin_label
+                            ctx.io << "  br label %#{begin_label}\n"
+                            ctx.io << "#{begin_label}:\n"
+
                             if ensure_nodes
                                 ctx.ensure_stack << ensure_nodes
                             end
@@ -1429,6 +1546,14 @@ module Dragonstone
                             terminated = false
                             
                             body_value, body_terminated = evaluate_block_value(ctx, node.body)
+                            
+                            if ensure_nodes
+                                if last = ctx.ensure_stack.last?
+                                    ctx.ensure_stack.pop if last.same?(ensure_nodes)
+                                end
+                            end
+                            ctx.retry_stack.pop
+
                             value = body_value if body_value
                             terminated ||= body_terminated
                             
@@ -1437,19 +1562,44 @@ module Dragonstone
                                 value = else_value if else_value
                                 terminated ||= else_terminated
                             end
-                            
-                            unless node.rescue_clauses.empty?
-                                emit_rescue_placeholder(ctx)
-                            end
+
+                            ctx.io << "  call void @#{@runtime[:pop_handler]}()\n" unless terminated
                             
                             if ensure_nodes
-                                if last = ctx.ensure_stack.last?
-                                    ctx.ensure_stack.pop if last.same?(ensure_nodes)
-                                end
                                 generate_block(ctx, ensure_nodes) unless terminated
                             end
                             
-                            value || value_ref("i8*", "null", constant: true)
+                            ctx.io << "  br label %#{merge_label}\n" unless terminated
+                            ctx.io << "#{rescue_label}:\n"
+                            ctx.io << "  call void @#{@runtime[:pop_handler]}()\n"
+                            ex_val_reg = ctx.fresh("ex_val")
+                            ctx.io << "  %#{ex_val_reg} = call i8* @#{@runtime[:get_exception]}()\n"
+                            rescue_handled = false
+                            rescue_merge = ctx.fresh_label("rescue_done")
+
+                            node.rescue_clauses.each do |clause|
+                                if var_name = clause.exception_variable
+                                    store_local(ctx, var_name, value_ref("i8*", "%#{ex_val_reg}"))
+                                end
+                                
+                                clause_val, clause_term = evaluate_block_value(ctx, clause.body)
+                                
+                                if ensure_nodes
+                                    generate_block(ctx, ensure_nodes) unless clause_term
+                                end
+                                
+                                ctx.io << "  br label %#{merge_label}\n" unless clause_term
+                                rescue_handled = true
+                            end
+                            if !rescue_handled
+                                if ensure_nodes
+                                    generate_block(ctx, ensure_nodes)
+                                end
+                                ctx.io << "  br label %#{merge_label}\n"
+                            end
+
+                            ctx.io << "#{merge_label}:\n"
+                            value_ref("i8*", "null", constant: true)
                         end
                         
                         private def evaluate_block_value(ctx : FunctionContext, statements : Array(AST::Node)) : Tuple(ValueRef?, Bool)
@@ -2026,9 +2176,13 @@ module Dragonstone
                                     value_ref(type, "%#{reg}")
                                 end
                             when :"==", :"!=", :"<", :"<=", :">", :">="
+                           
                                 if float_operation?(lhs, rhs)
                                     emit_float_comparison(ctx, operator, lhs, rhs)
+                                elsif (operator == :"==" || operator == :"!=") && (pointer_type?(lhs[:type]) || pointer_type?(rhs[:type]))
+                                    emit_pointer_comparison(ctx, operator, lhs, rhs)
                                 else
+                      
                                     emit_integer_comparison(ctx, operator, lhs, rhs)
                                 end
                             else
@@ -2307,7 +2461,32 @@ module Dragonstone
                         private def integer_type?(type : String) : Bool
                             type.starts_with?("i") && !type.ends_with?("*")
                         end
-                        
+
+                        private def pointer_type?(type : String) : Bool
+                            type.ends_with?("*")
+                        end
+
+                        private def emit_pointer_comparison(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
+                            unless operator == :"==" || operator == :"!="
+                                raise "Operator #{operator} not implemented for reference types"
+                            end
+
+                            lhs_ptr = ensure_pointer(ctx, lhs)
+                            rhs_ptr = ensure_pointer(ctx, rhs)
+                            
+                            cmp = runtime_call(ctx, "i1", @runtime[:case_compare], [
+                                {type: "i8*", ref: lhs_ptr[:ref]},
+                                {type: "i8*", ref: rhs_ptr[:ref]}
+                            ])
+                            
+                            if operator == :"!="
+                                emit_boolean_not(ctx, cmp)
+                            else
+                                cmp
+                            end
+                        end
+              
+           
                         private def ensure_boolean(ctx : FunctionContext, value : ValueRef) : ValueRef
                             return value if value[:type] == "i1"
                             

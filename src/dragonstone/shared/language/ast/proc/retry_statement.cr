@@ -13,6 +13,14 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_retry_statement(self)
             end
+
+            def to_source(io : IO)
+                io << "retry"
+                if cond = @condition
+                    io << " if "
+                    cond.to_source(io)
+                end
+            end
         end
     end
 end

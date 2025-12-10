@@ -31,6 +31,13 @@ module Dragonstone
                     "#{lhs} = #{value.to_source}"
                 end
             end
+
+            def to_source(io : IO)
+                io << name
+                io << " " << operator if operator
+                io << " = "
+                value.to_source(io)
+            end
         end
     end
 end

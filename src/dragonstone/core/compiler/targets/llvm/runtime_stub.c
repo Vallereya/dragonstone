@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <setjmp.h>
 
 #if defined(_MSC_VER)
 #define NORETURN __declspec(noreturn)
@@ -115,6 +116,32 @@ typedef struct {
 
 static DSClass *global_classes = NULL;
 
+typedef struct DSExceptionFrame {
+    jmp_buf env;
+    struct DSExceptionFrame *prev;
+} DSExceptionFrame;
+
+static DSExceptionFrame *top_exception_frame = NULL;
+static void *current_exception_object = NULL;
+
+void dragonstone_runtime_push_exception_frame(void *frame_ptr) {
+    printf("[Runtime] Pushing exception frame\n");
+    DSExceptionFrame *frame = (DSExceptionFrame *)frame_ptr;
+    frame->prev = top_exception_frame;
+    top_exception_frame = frame;
+}
+
+void dragonstone_runtime_pop_exception_frame(void) {
+    printf("[Runtime] Popping exception frame\n");
+    if (top_exception_frame) {
+        top_exception_frame = top_exception_frame->prev;
+    }
+}
+
+void *dragonstone_runtime_get_exception(void) {
+    return current_exception_object;
+}
+
 static const char DS_STR_NIL_VAL[] = "nil";
 static const char DS_STR_TRUE_VAL[] = "true";
 static const char DS_STR_FALSE_VAL[] = "false";
@@ -165,9 +192,15 @@ void *dragonstone_runtime_array_push(void *array_val, void *value);
 void *dragonstone_runtime_block_invoke(void *block_val, int64_t argc, void **argv);
 
 void dragonstone_runtime_raise(void *message_ptr) {
-    const char *msg = (const char *)message_ptr;
-    fprintf(stderr, "Runtime Error: %s\n", msg ? msg : "Unknown error");
-    abort();
+    if (top_exception_frame) {
+        printf("[Runtime] Exception raised, jumping to handler...\n");
+        current_exception_object = message_ptr;
+        longjmp(top_exception_frame->env, 1);
+    } else {
+        const char *msg = (const char *)message_ptr;
+        fprintf(stderr, "Runtime Error: %s\n", msg ? msg : "Unknown error");
+        abort();
+    }
 }
 
 static DSValue *ds_create_array_box(int64_t length, void **elements) {
@@ -738,6 +771,7 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
         }
     }
     if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        if (!lhs || !rhs) return false;
         return strcmp((const char*)lhs, (const char*)rhs) == 0;
     }
     if (ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {

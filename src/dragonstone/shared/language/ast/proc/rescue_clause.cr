@@ -19,6 +19,26 @@ module Dragonstone
                     nil
                 end
             end
+
+            def to_source(io : IO)
+                io << "rescue"
+                if !exceptions.empty?
+                    io << " "
+                    exceptions.each_with_index do |type, i|
+                        io << ", " if i > 0
+                        io << type
+                    end
+                end
+                if v = exception_variable
+                    io << " => "
+                    io << v
+                end
+                io << "\n"
+                body.each do |stmt|
+                    stmt.to_source(io)
+                    io << "\n"
+                end
+            end
         end
     end
 end
