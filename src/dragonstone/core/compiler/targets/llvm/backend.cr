@@ -134,27 +134,42 @@ module Dragonstone
                         
                         def initialize(@program : ::Dragonstone::IR::Program)
                             @analysis = @program.analysis
+
                             @string_literals = {} of String => NamedTuple(name: String, escaped: String, length: Int32)
                             @string_order = [] of String
+
                             @functions = [] of AST::FunctionDef
                             @function_names = {} of AST::FunctionDef => String
                             @function_receivers = {} of AST::FunctionDef => String
                             @function_signatures = {} of String => FunctionSignature
                             @function_requires_block = {} of String => Bool
                             @function_defs = {} of String => AST::FunctionDef
+
                             @emitted_functions = Set(String).new
+
                             @function_namespaces = {} of AST::FunctionDef => Array(String)
+
                             @runtime_literals_preregistered = false
+
+                            @class_name_occurrences = Hash(String, Int32).new(0)
+
                             @runtime_types_emitted = false
+
                             @struct_layouts = {} of String => Array(AST::TypeExpression?)
                             @struct_field_indices = {} of String => Hash(String, Int32)
                             @struct_alias_map = {} of String => String
                             @struct_stack = [] of String
+
                             @emitted_struct_types = Set(String).new
+
                             @struct_llvm_lookup = {} of String => String
+
                             @namespace_stack = [] of String
+
                             @globals = Set(String).new
+
                             @function_overloads = Hash(String, Array(String)).new { |h, k| h[k] = [] of String }
+
                             @pending_blocks = [] of String
                             @pending_strings = [] of String
                             
@@ -221,9 +236,14 @@ module Dragonstone
                             collect_strings
                             collect_globals
                             collect_functions
+
                             @namespace_stack.clear
-                            register_missing_functions(@program.ast.statements)
+
+                            # register_missing_functions(@program.ast.statements)
+
                             @namespace_stack.clear
+                            @class_name_occurrences.clear
+
                             prepare_runtime_literals
                             emit_string_constants(io)
                             emit_globals(io)
@@ -622,9 +642,12 @@ module Dragonstone
 
                         private def collect_functions
                             @namespace_stack.clear
+                            @class_name_occurrences.clear
+
                             @program.ast.statements.each do |stmt|
                                 collect_functions_from(stmt)
                             end
+
                             @namespace_stack.clear
                         end
 
@@ -635,7 +658,15 @@ module Dragonstone
                                     node.body.each { |stmt| collect_functions_from(stmt) }
                                 end
                             when AST::ClassDefinition, AST::ModuleDefinition
-                                with_namespace(node.name) do
+                                full_name = qualify_name(node.name)
+                                
+                                @class_name_occurrences[full_name] += 1
+
+                                count = @class_name_occurrences[full_name]
+
+                                unique_ns = count > 1 ? "#{node.name}_#{count}" : node.name
+                                
+                                with_namespace(unique_ns) do
                                     node.body.each { |stmt| collect_functions_from(stmt) }
                                 end
                             when AST::FunctionDef
@@ -645,8 +676,7 @@ module Dragonstone
 
                         private def register_function(func : AST::FunctionDef)
                             base_name = if @namespace_stack.empty?
-                                func.name == "main" ?
-                                "__dragonstone_user_main" : func.name
+                                func.name == "main" ? "__dragonstone_user_main" : func.name
                             else
                                 type_name = @namespace_stack.join("::")
                                 struct_method_symbol(type_name, func.name)
@@ -671,7 +701,7 @@ module Dragonstone
 
                             requires_block = function_body_contains_yield?(func.body)
 
-                            param_types = func.typed_parameters.map { |param| llvm_param_type(param.type) }
+                            param_types = func.typed_parameters.map { |_| "i8*" }
 
                             if receiver_type
                                 param_types.unshift(receiver_type)
@@ -696,18 +726,18 @@ module Dragonstone
                             @function_defs[mangled_name] = func
                         end
 
-                        private def register_missing_functions(nodes : Array(AST::Node))
-                            nodes.each do |node|
-                                case node
-                                when AST::FunctionDef
-                                    register_function(node)
-                                when AST::ModuleDefinition, AST::ClassDefinition, AST::StructDefinition
-                                    with_namespace(node.name) do
-                                        register_missing_functions(node.body)
-                                    end
-                                end
-                            end
-                        end
+                        # private def register_missing_functions(nodes : Array(AST::Node))
+                        #     nodes.each do |node|
+                        #         case node
+                        #         when AST::FunctionDef
+                        #             register_function(node)
+                        #         when AST::ModuleDefinition, AST::ClassDefinition, AST::StructDefinition
+                        #             with_namespace(node.name) do
+                        #                 register_missing_functions(node.body)
+                        #             end
+                        #         end
+                        #     end
+                        # end
                         
                         private def prepare_runtime_literals
                             return if @runtime_literals_preregistered
@@ -807,7 +837,7 @@ module Dragonstone
                             io << "declare void @#{@runtime[:singleton_define]}(i8*, i8*, i8*)\n"
                             io << "declare i8* @#{@runtime[:interpolated_string]}(i64, i8**)\n"
                             io << "declare void @#{@runtime[:raise]}(i8*)\n"
-                            io << "declare i8* @#{@runtime[:range_literal]}(i64, i64, i1)\n"
+                            io << "declare i8* @#{@runtime[:range_literal]}(i8*, i8*, i1)\n"
                             io << "declare i8* @malloc(i64)\n\n"
                             io << "declare i8* @#{@runtime[:box_struct]}(i8*, i64)\n"
                             io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
@@ -868,7 +898,7 @@ module Dragonstone
                                 type = llvm_param_type(param.type)
                                 arg_name = "%arg#{index}"
                                 param_specs << {type: type, source: arg_name, name: param.name}
-                                params << "#{type} #{arg_name}"
+                                params << "i8* #{arg_name}"
                             end
 
                             if requires_block
@@ -880,14 +910,41 @@ module Dragonstone
                             param_specs.each do |spec|
                                 slot = "%#{ctx.fresh("param")}"
                                 ctx.alloca_buffer << "  #{slot} = alloca #{spec[:type]}\n"
-                                ctx.io << "  store #{spec[:type]} #{spec[:source]}, #{spec[:type]}* #{slot}\n"
+                                
+                                incoming_val = value_ref("i8*", spec[:source])
+                                
+                                if spec[:name] == "self" && spec[:type] != "i8*"
+                                    ctx.io << "  store #{spec[:type]} #{spec[:source]}, #{spec[:type]}* #{slot}\n"
+                                else
+                                    converted = ensure_value_type(ctx, incoming_val, spec[:type])
+                                    ctx.io << "  store #{spec[:type]} #{converted[:ref]}, #{spec[:type]}* #{slot}\n"
+                                end
+                                
                                 ctx.locals[spec[:name]] = {ptr: slot, type: spec[:type], heap: false}
                                 if spec[:name] == "__block"
                                     ctx.block_slot = {ptr: slot, type: spec[:type]}
                                 end
+
+                                is_ivar = spec[:name].starts_with?("@")
+                                target_ivar_name = is_ivar ? spec[:name] : "@#{spec[:name]}"
+                                
+                                if (is_ivar || func.name == "initialize") && ctx.locals.has_key?("self")
+                                    self_ref = load_local(ctx, "self")
+                                    val_ref = load_local(ctx, spec[:name])
+                                    boxed_val = box_value(ctx, val_ref)
+                                    
+                                    name_ptr = materialize_string_pointer(ctx, target_ivar_name)
+                                    
+                                    runtime_call(ctx, "i8*", @runtime[:ivar_set], [
+                                        {type: "i8*", ref: self_ref[:ref]},
+                                        {type: "i8*", ref: name_ptr},
+                                        {type: "i8*", ref: boxed_val[:ref]}
+                                    ])
+                                end
                             end
                             
                             terminated = generate_block_with_implicit_return(ctx, func.body)
+
                             emit_default_return(ctx) unless terminated
                             emit_postamble(ctx)
                             
@@ -902,7 +959,6 @@ module Dragonstone
                         
                         private def emit_entrypoint(io : IO)
                             body_io = String::Builder.new
-
                             ctx = FunctionContext.new(body_io, "i32")
                             
                             @namespace_stack.clear
@@ -912,9 +968,9 @@ module Dragonstone
                             }
                             
                             terminated = generate_block(ctx, top_level)
-
+                            
                             ctx.io << "  ret i32 0\n" unless terminated
-
+                            
                             emit_postamble(ctx)
 
                             io << "define i32 @main() {\n"
@@ -1090,8 +1146,9 @@ module Dragonstone
                                     ctx.io << "  call void @#{@runtime[:singleton_define]}(i8* #{receiver_val[:ref]}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
                                 elsif !@namespace_stack.empty?
                                     class_name = @namespace_stack.join("::")
-                                    if @globals.includes?(class_name)
-                                        global_name = mangle_global_name(class_name)
+                                    original_name = class_name.sub(/_\d+$/, "")
+                                    if @globals.includes?(original_name)
+                                        global_name = mangle_global_name(original_name)
                                         cls_reg = ctx.fresh("cls")
                                         ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
                                         method_name_ptr = materialize_string_pointer(ctx, stmt.name)
@@ -1171,8 +1228,118 @@ module Dragonstone
                                 generate_retry_statement(ctx, stmt)
                             when AST::AliasDefinition
                                 false
+                            when AST::AccessorMacro
+                                generate_accessor_macro(ctx, stmt)
+                                false
                             else
                                 false
+                            end
+                        end
+
+                        private def generate_accessor_macro(ctx : FunctionContext, node : AST::AccessorMacro)
+                            return if @namespace_stack.empty?
+                            class_name = @namespace_stack.join("::")
+
+                            [:getter, :property].each do |k|
+                                if node.kind == k
+                                    node.entries.each { |entry| generate_synthetic_getter(ctx, class_name, entry.name, entry.type_annotation) }
+                                end
+                            end
+
+                            [:setter, :property].each do |k|
+                                if node.kind == k
+                                    node.entries.each { |entry| generate_synthetic_setter(ctx, class_name, entry.name, entry.type_annotation) }
+                                end
+                            end
+                        end
+
+                        private def generate_synthetic_getter(ctx : FunctionContext, class_name : String, name : String, type_expr : AST::TypeExpression?)
+                            method_name = name
+                            ivar_name = "@#{name}"
+                            mangled = mangle_global_name("#{class_name}_#{method_name}")
+                            
+                            return_type = type_expr ? llvm_type_of(type_expr) : "i8*"
+                            
+                            @function_signatures[mangled] = {return_type: "i8*", param_types: ["i8*"]}
+                            
+                            body = String::Builder.new
+                            fctx = FunctionContext.new(body, "i8*")
+                            
+                            self_slot = "%#{fctx.fresh("self_arg")}"
+                            fctx.alloca_buffer << "  #{self_slot} = alloca i8*\n"
+                            body << "  store i8* %self, i8** #{self_slot}\n"
+                            
+                            self_val = fctx.fresh("load_self")
+                            body << "  %#{self_val} = load i8*, i8** #{self_slot}\n"
+                            
+                            name_ptr = materialize_string_pointer(fctx, ivar_name)
+                            call_reg = fctx.fresh("ivar")
+                            body << "  %#{call_reg} = call i8* @#{@runtime[:ivar_get]}(i8* %#{self_val}, i8* #{name_ptr})\n"
+                            body << "  ret i8* %#{call_reg}\n"
+                            
+                            func_code = String.build do |io|
+                                io << "define i8* @\"#{mangled}\"(i8* %self) {\n"
+                                io << "entry:\n"
+                                io << fctx.alloca_buffer.to_s
+                                io << body.to_s
+                                io << "}\n\n"
+                            end
+                            @pending_blocks << func_code
+                            
+                            emit_define_method_call(ctx, class_name, method_name, mangled, "i8* (i8*)")
+                        end
+
+                        private def generate_synthetic_setter(ctx : FunctionContext, class_name : String, name : String, type_expr : AST::TypeExpression?)
+                            method_name = "#{name}="
+                            ivar_name = "@#{name}"
+                            mangled = mangle_global_name("#{class_name}_#{method_name}")
+                            
+                            @function_signatures[mangled] = {return_type: "i8*", param_types: ["i8*", "i8*"]}
+                            
+                            body = String::Builder.new
+                            fctx = FunctionContext.new(body, "i8*")
+                            
+                            self_slot = "%#{fctx.fresh("self_arg")}"
+                            val_slot = "%#{fctx.fresh("val_arg")}"
+                            fctx.alloca_buffer << "  #{self_slot} = alloca i8*\n"
+                            fctx.alloca_buffer << "  #{val_slot} = alloca i8*\n"
+                            body << "  store i8* %self, i8** #{self_slot}\n"
+                            body << "  store i8* %value, i8** #{val_slot}\n"
+                            
+                            self_val = fctx.fresh("load_self")
+                            body << "  %#{self_val} = load i8*, i8** #{self_slot}\n"
+                            val_val = fctx.fresh("load_val")
+                            body << "  %#{val_val} = load i8*, i8** #{val_slot}\n"
+                            
+                            name_ptr = materialize_string_pointer(fctx, ivar_name)
+                            call_reg = fctx.fresh("ivar")
+                            body << "  %#{call_reg} = call i8* @#{@runtime[:ivar_set]}(i8* %#{self_val}, i8* #{name_ptr}, i8* %#{val_val})\n"
+                            body << "  ret i8* %#{call_reg}\n"
+                            
+                            func_code = String.build do |io|
+                                io << "define i8* @\"#{mangled}\"(i8* %self, i8* %value) {\n"
+                                io << "entry:\n"
+                                io << fctx.alloca_buffer.to_s
+                                io << body.to_s
+                                io << "}\n\n"
+                            end
+                            @pending_blocks << func_code
+                            
+                            emit_define_method_call(ctx, class_name, method_name, mangled, "i8* (i8*, i8*)")
+                        end
+
+                        private def emit_define_method_call(ctx : FunctionContext, class_name : String, method_name : String, llvm_func : String, cast_type : String)
+                            original_name = class_name.sub(/_\d+$/, "")
+
+                            if @globals.includes?(original_name)
+                                global_name = mangle_global_name(original_name)
+                                cls_reg = ctx.fresh("cls")
+                                ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
+                                
+                                name_ptr = materialize_string_pointer(ctx, method_name)
+                                func_ptr = ctx.fresh("func")
+                                ctx.io << "  %#{func_ptr} = bitcast #{cast_type}* @\"#{llvm_func}\" to i8*\n"
+                                ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{name_ptr}, i8* %#{func_ptr})\n"
                             end
                         end
 
@@ -1180,11 +1347,10 @@ module Dragonstone
                             if value_node = stmt.value
                                 value = generate_expression(ctx, value_node)
                                 
-                                # Fix: Ensure nil is boxed/cast correctly if return type is i8*
                                 if ctx.return_type == "i8*" && value[:type] != "i8*"
                                     value = box_value(ctx, value)
                                 elsif ctx.return_type == "i8*" && value[:ref] == "null"
-                                    # null is already compatible with i8*
+                                    # Nil.
                                 end
                                 
                                 value = ensure_value_type(ctx, value, ctx.return_type)
@@ -1956,7 +2122,7 @@ module Dragonstone
 
                             rescue_label = ctx.fresh_label("rescue")
                             body_label = ctx.fresh_label("begin_body")
-                            # ensure_label = ctx.fresh_label("ensure") # Unused
+                            # ensure_label = ctx.fresh_label("ensure")
                             merge_label = ctx.fresh_label("begin_merge")
                             frame_storage = ctx.fresh("eh_frame")
                             phi_entries = [] of NamedTuple(value: ValueRef, label: String)
@@ -2029,7 +2195,7 @@ module Dragonstone
                             ex_val_reg = ctx.fresh("ex_val")
                             ctx.io << "  %#{ex_val_reg} = call i8* @#{@runtime[:get_exception]}()\n"
                             rescue_handled = false
-                            # rescue_merge = ctx.fresh_label("rescue_done") # Unused
+                            # rescue_merge = ctx.fresh_label("rescue_done")
 
                             node.rescue_clauses.each do |clause|
                                 
@@ -2811,6 +2977,7 @@ module Dragonstone
                             
                             block_value = block_node ? generate_block_literal(ctx, block_node) : nil
                             arg_values = args.map { |arg| generate_expression(ctx, arg) }
+                            
                             if receiver = call.receiver
                                 if struct_name = resolve_struct_reference(receiver)
                                     if call.name == "new"
@@ -2827,17 +2994,72 @@ module Dragonstone
                                     return emit_struct_method_dispatch(ctx, struct_name, receiver_value, call.name, arg_values)
                                 end
                                 return emit_receiver_call(ctx, call.name, receiver_value, arg_values, block_value)
-                            end
-                            
-                            call_args = arg_values.dup
-                            
-                            if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
-                                if struct_name = struct_name_for_value(implicit_receiver)
-                                    return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
-                                end
-                            end
+                            else
 
-                            emit_function_call(ctx, call, call_args, block_value)
+                                if !@namespace_stack.empty?
+                                    class_name = @namespace_stack.join("::")
+                                    base_name = "#{llvm_struct_symbol(class_name)}_#{call.name}"
+                                    
+                                    if overloads = @function_overloads[base_name]?
+                                        if self_slot = ctx.locals["self"]?
+                                            self_val = load_local(ctx, "self")
+                                        else
+                                            self_val = value_ref("i8*", "null", constant: true)
+                                        end
+                                        
+                                        final_args = [self_val] + arg_values
+                                        args_with_block = final_args.dup
+                                        block_arg = block_value || value_ref("i8*", "null", constant: true)
+
+                                        signature = nil
+                                        target_name = nil
+                                        
+                                        overloads.each do |cand|
+                                            if sig = @function_signatures[cand]?
+                                                expected = sig[:param_types].size
+                                                if expected == args_with_block.size
+                                                    signature = sig
+                                                    target_name = cand
+                                                    break
+                                                elsif expected == args_with_block.size + 1 && sig[:param_types].last == "i8*"
+                                                    signature = sig
+                                                    target_name = cand
+                                                    args_with_block << block_arg
+                                                    break
+                                                end
+                                            end
+                                        end
+                                        
+                                        if signature && target_name
+                                            casted_args = args_with_block.map_with_index do |val, i|
+                                                ensure_value_type(ctx, val, signature[:param_types][i])
+                                            end
+                                            
+                                            arg_source = casted_args.map { |v| "#{v[:type]} #{v[:ref]}" }.join(", ")
+                                            return_type = signature[:return_type]
+                                            
+                                            if return_type == "void"
+                                                ctx.io << "  call void @\"#{target_name}\"(#{arg_source})\n"
+                                                return value_ref("i8*", "null", constant: true)
+                                            else
+                                                reg = ctx.fresh("call")
+                                                ctx.io << "  %#{reg} = call #{return_type} @\"#{target_name}\"(#{arg_source})\n"
+                                                return value_ref(return_type, "%#{reg}")
+                                            end
+                                        end
+                                    end
+                                end
+                                
+                                call_args = arg_values.dup
+                                
+                                if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
+                                    if struct_name = struct_name_for_value(implicit_receiver)
+                                        return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
+                                    end
+                                end
+
+                                emit_function_call(ctx, call, call_args, block_value)
+                            end
                         end
 
                         private def emit_function_call(ctx : FunctionContext, call : AST::MethodCall, args : Array(ValueRef), block_value : ValueRef? = nil) : ValueRef?
@@ -2996,12 +3218,16 @@ module Dragonstone
                         end
 
                         private def emit_range_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
-                            from_val = coerce_integer(ctx, lhs, 64)
-                            to_val = coerce_integer(ctx, rhs, 64)
+                            # from_val = coerce_integer(ctx, lhs, 64)
+                            # to_val = coerce_integer(ctx, rhs, 64)
+                            lhs_ptr = ensure_pointer(ctx, lhs)
+                            rhs_ptr = ensure_pointer(ctx, rhs)
+
                             exclusive = operator == :"..."
                             reg = ctx.fresh("range")
                             flag = exclusive ? "1" : "0"
-                            ctx.io << "  %#{reg} = call i8* @#{@runtime[:range_literal]}(i64 #{from_val[:ref]}, i64 #{to_val[:ref]}, i1 #{flag})\n"
+
+                            ctx.io << "  %#{reg} = call i8* @#{@runtime[:range_literal]}(i8* #{lhs_ptr[:ref]}, i8* #{rhs_ptr[:ref]}, i1 #{flag})\n"
                             value_ref("i8*", "%#{reg}")
                         end
 
@@ -3385,6 +3611,11 @@ module Dragonstone
 
                         private def generate_class_definition(ctx : FunctionContext, node : AST::ClassDefinition) : Bool
                             full_name = qualify_name(node.name)
+
+                            @class_name_occurrences[full_name] += 1
+                            count = @class_name_occurrences[full_name]
+                            unique_ns = count > 1 ? "#{node.name}_#{count}" : node.name
+
                             name_ptr = materialize_string_pointer(ctx, full_name)
                             
                             reg = ctx.fresh("class")
@@ -3395,7 +3626,7 @@ module Dragonstone
                                 ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
                             end
 
-                            with_namespace(node.name) do
+                            with_namespace(unique_ns) do
                                 generate_block(ctx, node.body)
                             end
                             false
@@ -3403,6 +3634,11 @@ module Dragonstone
 
                         private def generate_module_definition(ctx : FunctionContext, node : AST::ModuleDefinition) : Bool
                             full_name = qualify_name(node.name)
+
+                            @class_name_occurrences[full_name] += 1
+                            count = @class_name_occurrences[full_name]
+                            unique_ns = count > 1 ? "#{node.name}_#{count}" : node.name
+
                             name_ptr = materialize_string_pointer(ctx, full_name)
 
                             reg = ctx.fresh("module")
@@ -3413,7 +3649,7 @@ module Dragonstone
                                 ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
                             end
 
-                            with_namespace(node.name) do
+                            with_namespace(unique_ns) do
                                 generate_block(ctx, node.body)
                             end
                             false
@@ -3595,6 +3831,69 @@ module Dragonstone
                                 reg = ctx.fresh("structcall")
                                 ctx.io << "  %#{reg} = call #{return_type} @\"#{mangled_symbol}\"(#{arg_source})\n"
                                 value_ref(return_type, "%#{reg}")
+                            end
+                        end
+
+                        def pre_scan_definitions(nodes : Array(AST::Node))
+                            nodes.each { |node| scan_node(node) }
+                        end
+
+                        private def scan_node(node : AST::Node)
+                            case node
+                            when AST::ClassDefinition
+                                full_name = qualify_name(node.name)
+                                @globals << full_name
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| scan_node(stmt) }
+                                end
+                            when AST::ModuleDefinition
+                                full_name = qualify_name(node.name)
+                                @globals << full_name
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| scan_node(stmt) }
+                                end
+                            when AST::StructDefinition
+                                full_name = qualify_name(node.name)
+                                with_namespace(node.name) do
+                                    node.body.each { |stmt| scan_node(stmt) }
+                                end
+                            when AST::FunctionDef
+                                receiver_type = nil
+                                if node.receiver
+                                    receiver_node = node.receiver.as(AST::Node)
+                                    if receiver_node.is_a?(AST::Variable) && receiver_node.name == "self"
+                                        if !@namespace_stack.empty?
+                                            receiver_type = @namespace_stack.join("::")
+                                            @function_receivers[node] = receiver_type
+                                        end
+                                    end
+                                end
+
+                                current_ns = @namespace_stack.empty? ? "" : @namespace_stack.join("::")
+                                method_name = node.name
+                                
+                                global_name = if receiver_type
+                                    "#{receiver_type}_#{method_name}"
+                                elsif !current_ns.empty?
+                                    "#{current_ns}::#{method_name}"
+                                else
+                                    method_name
+                                end
+
+                                mangled_name = mangle_global_name(global_name)
+                                @function_names[node] = mangled_name
+                                @function_namespaces[node] = @namespace_stack.dup
+
+                                params = node.typed_parameters.map { |p| llvm_param_type(p.type) }
+                                if receiver_type || !current_ns.empty?
+                                    params.unshift("i8*") 
+                                end
+                                
+                                return_type = llvm_type_of(node.return_type)
+                                @function_signatures[mangled_name] = {
+                                    return_type: return_type,
+                                    param_types: params
+                                }
                             end
                         end
 

@@ -54,7 +54,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 > **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files about 3x slower.
 
-> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will removed the build files, then you can use `.\bin\dragonstone.bat --rebuild` again.
+> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` again.
 
 > **Tip for Windows Users:** An installer is also available in the [Releases](https://github.com/Vallereya/dragonstone/releases) section.
 
@@ -298,7 +298,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 ###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
-###### **WARNING**: There is a current bug I made when I split the interpreter that I need to fix with imports, right now you need to specify `dragonstone run --backend native` and with the import specify the `.ds` when running a file with imports, but the `.ds` is not needed if importing something from the stdlib.
+###### **WARNING**: There is a current bug I made when I split the interpreter that I need to fix with imports, right now it only works if you specify `dragonstone run --backend native` and with the import specify the `.ds` when running a file with imports, but the `.ds` is not needed if importing something from the stdlib.
 ```crystal
     # Both by file and selectively using `from` with it.
     use "test_use.ds"
@@ -342,7 +342,7 @@ echo square.call(6)
     ffi.call_c("printf", ["Hello from C!"])
 ```
 
-###### Like I said, the ffi is still a work in progress but I have settled on what it will look like, the only reason it doesn't work yet is because I'm still deciding on whether I want it as something from the stdlib by `use "ffi"` or through extending the actual ffi to support it, doing that would require a rewrite in some places that already all the current ffi.
+###### Like I said, the ffi is still a work in progress but I have settled on what it will look like, the only reason it doesn't work yet is because I'm still deciding on whether I want it as something from the stdlib by `use "ffi"` or through extending the actual ffi to support it, doing that would require a rewrite in some places that already use the current ffi.
 ```crystal
     #! This does not currently work but just to give you an ideal of where its going.
     Invoke C
