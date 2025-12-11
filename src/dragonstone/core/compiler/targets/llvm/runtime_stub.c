@@ -270,6 +270,13 @@ void *dragonstone_runtime_to_string(void *value);
 void *dragonstone_runtime_tuple_literal(int64_t l, void **e);
 void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v);
 
+void *dragonstone_runtime_gt(void *lhs, void *rhs);
+void *dragonstone_runtime_lt(void *lhs, void *rhs);
+void *dragonstone_runtime_gte(void *lhs, void *rhs);
+void *dragonstone_runtime_lte(void *lhs, void *rhs);
+void *dragonstone_runtime_eq(void *lhs, void *rhs);
+void *dragonstone_runtime_ne(void *lhs, void *rhs);
+
 void dragonstone_runtime_raise(void *message_ptr) {
     if (top_exception_frame) {
         // printf("[Runtime] Exception raised, jumping to handler...\n");
@@ -1630,3 +1637,127 @@ void *dragonstone_runtime_define_constant(void *n, void *v) {
 }
 void dragonstone_runtime_yield_missing_block(void) { abort(); }
 void dragonstone_runtime_extend_container(void *c, void *t) { dragonstone_runtime_extend(c, t); }
+
+void *dragonstone_runtime_gt(void *lhs, void *rhs) {
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+        
+        // Handle Integer vs Integer
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_bool(li > ri);
+        }
+        
+        // Handle Float vs Float
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_bool(ld > rd);
+        }
+    }
+    
+    // Fallback: String comparison
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return dragonstone_runtime_box_bool(strcmp((char*)lhs, (char*)rhs) > 0);
+    }
+    
+    return dragonstone_runtime_box_bool(false);
+}
+
+void *dragonstone_runtime_lt(void *lhs, void *rhs) {
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+        
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_bool(li < ri);
+        }
+        
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_bool(ld < rd);
+        }
+    }
+    
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return dragonstone_runtime_box_bool(strcmp((char*)lhs, (char*)rhs) < 0);
+    }
+    
+    return dragonstone_runtime_box_bool(false);
+}
+
+void *dragonstone_runtime_gte(void *lhs, void *rhs) {
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+        
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_bool(li >= ri);
+        }
+        
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_bool(ld >= rd);
+        }
+    }
+    
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return dragonstone_runtime_box_bool(strcmp((char*)lhs, (char*)rhs) >= 0);
+    }
+    
+    return dragonstone_runtime_box_bool(false);
+}
+
+void *dragonstone_runtime_lte(void *lhs, void *rhs) {
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+        
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_bool(li <= ri);
+        }
+        
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_bool(ld <= rd);
+        }
+    }
+    
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return dragonstone_runtime_box_bool(strcmp((char*)lhs, (char*)rhs) <= 0);
+    }
+    
+    return dragonstone_runtime_box_bool(false);
+}
+
+void *dragonstone_runtime_eq(void *lhs, void *rhs) {
+    return dragonstone_runtime_box_bool(dragonstone_runtime_case_compare(lhs, rhs));
+}
+
+void *dragonstone_runtime_ne(void *lhs, void *rhs) {
+    return dragonstone_runtime_box_bool(!dragonstone_runtime_case_compare(lhs, rhs));
+}
+
+_Bool dragonstone_runtime_is_truthy(void *value) {
+    if (!value) return false;
+    if (ds_is_boxed(value)) {
+        DSValue *box = (DSValue *)value;
+        if (box->kind == DS_VALUE_BOOL) return box->as.boolean;
+    }
+    return true;
+}
