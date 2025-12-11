@@ -18,9 +18,15 @@ module Dragonstone
                         EXTENSION = "ll"
                         
                         def build(program : ::Dragonstone::IR::Program, options : BuildOptions) : BuildArtifact
-                            serializer = Shared::ProgramSerializer.new(program)
-                            source_dump = serializer.source
-                            summary_lines = serializer.summary_lines
+                            source_dump = ""
+                            summary_lines = [] of String
+                            begin
+                                serializer = Shared::ProgramSerializer.new(program)
+                                source_dump = serializer.source
+                                summary_lines = serializer.summary_lines
+                            rescue
+                                # Continue.
+                            end
                             artifact_path = Shared.artifact_path(options, EXTENSION)
                             File.write(artifact_path, build_content(program, source_dump, summary_lines))
                             BuildArtifact.new(target: Target::LLVM, object_path: artifact_path)
@@ -33,6 +39,15 @@ module Dragonstone
                                 io << "; ---------------------------------\n"
                                 io << "; Dragonstone LLVM Target Artifact \n"
                                 io << "; ---------------------------------\n"
+                                
+                                {% if flag?(:windows) %}
+                                    io << "target triple = \"x86_64-pc-windows-msvc\"\n"
+                                {% elsif flag?(:linux) %}
+                                    io << "target triple = \"x86_64-pc-linux-gnu\"\n"
+                                {% elsif flag?(:darwin) %}
+                                    io << "target triple = \"x86_64-apple-darwin\"\n"
+                                {% end %}
+
                                 unless source.empty?
                                     io << "; Source snapshot\n"
                                     source.each_line do |line|
@@ -48,7 +63,7 @@ module Dragonstone
                                     io << ";\n"
                                 end
                                 
-                                # Generate actual LLVM IR
+                                # Generate actual LLVM IR.
                                 generator.generate(io)
                             end
                         end
@@ -91,13 +106,21 @@ module Dragonstone
                             box_struct: String,
                             unbox_struct: String,
                             array_push: String,
+                            generic_add: String,
                             to_string: String,
+                            typeof: String,
+                            bag_constructor: String,
+                            ivar_get: String,
+                            ivar_set: String,
+                            singleton_define: String,
                             define_class: String,
+                            define_module: String,
                             define_method: String,
                             define_enum_member: String,
                             push_handler: String,
                             pop_handler: String,
                             get_exception: String,
+                            extend_container: String,
                         )
                         
                         @string_counter = 0
@@ -111,6 +134,8 @@ module Dragonstone
                             @function_receivers = {} of AST::FunctionDef => String
                             @function_signatures = {} of String => FunctionSignature
                             @function_requires_block = {} of String => Bool
+                            @function_defs = {} of String => AST::FunctionDef
+                            @emitted_functions = Set(String).new
                             @function_namespaces = {} of AST::FunctionDef => Array(String)
                             @runtime_literals_preregistered = false
                             @runtime_types_emitted = false
@@ -122,7 +147,9 @@ module Dragonstone
                             @struct_llvm_lookup = {} of String => String
                             @namespace_stack = [] of String
                             @globals = Set(String).new
+                            @function_overloads = Hash(String, Array(String)).new { |h, k| h[k] = [] of String }
                             @pending_blocks = [] of String
+                            @pending_strings = [] of String
                             
                             index_struct_types
                             
@@ -150,21 +177,29 @@ module Dragonstone
                                 index_get: "dragonstone_runtime_index_get",
                                 index_set: "dragonstone_runtime_index_set",
                                 case_compare: "dragonstone_runtime_case_compare",
-                            yield_missing_block: "dragonstone_runtime_yield_missing_block",
-                            display_value: "dragonstone_runtime_value_display",
-                            interpolated_string: "dragonstone_runtime_interpolated_string",
-                            raise: "dragonstone_runtime_raise",
-                            range_literal: "dragonstone_runtime_range_literal",
-                            box_struct: "dragonstone_runtime_box_struct",
-                            unbox_struct: "dragonstone_runtime_unbox_struct",
-                            array_push: "dragonstone_runtime_array_push",
+                                yield_missing_block: "dragonstone_runtime_yield_missing_block",
+                                display_value: "dragonstone_runtime_value_display",
+                                interpolated_string: "dragonstone_runtime_interpolated_string",
+                                raise: "dragonstone_runtime_raise",
+                                range_literal: "dragonstone_runtime_range_literal",
+                                box_struct: "dragonstone_runtime_box_struct",
+                                unbox_struct: "dragonstone_runtime_unbox_struct",
+                                array_push: "dragonstone_runtime_array_push",
+                                generic_add: "dragonstone_runtime_add",
                                 to_string: "dragonstone_runtime_to_string",
+                                bag_constructor: "dragonstone_runtime_bag_constructor",
+                                typeof: "dragonstone_runtime_typeof",
+                                ivar_get: "dragonstone_runtime_ivar_get",
+                                ivar_set: "dragonstone_runtime_ivar_set",
+                                singleton_define: "dragonstone_runtime_define_singleton_method",
                                 define_class: "dragonstone_runtime_define_class",
+                                define_module: "dragonstone_runtime_define_module",
                                 define_method: "dragonstone_runtime_define_method",
                                 define_enum_member: "dragonstone_runtime_define_enum_member",
                                 push_handler: "dragonstone_runtime_push_exception_frame",
                                 pop_handler: "dragonstone_runtime_pop_exception_frame",
                                 get_exception: "dragonstone_runtime_get_exception",
+                                extend_container: "dragonstone_runtime_extend_container",
                             )
                         end
                         
@@ -172,9 +207,13 @@ module Dragonstone
                             collect_strings
                             collect_globals
                             collect_functions
+                            @namespace_stack.clear
+                            register_missing_functions(@program.ast.statements)
+                            @namespace_stack.clear
                             prepare_runtime_literals
                             emit_string_constants(io)
                             emit_globals(io)
+                            
                             emit_runtime_types(io)
                             declare_runtime(io)
                             emit_functions(io)
@@ -183,6 +222,8 @@ module Dragonstone
                             @pending_blocks.each do |block_code|
                                 io << block_code
                             end
+
+                            emit_pending_strings(io)
                         end
                         
                         private class FunctionContext
@@ -200,7 +241,7 @@ module Dragonstone
                             def initialize(@io : IO, @return_type : String)
                                 @next_reg = 0
                                 @next_label = 0
-                          
+                                
                                 @locals = {} of String => NamedTuple(ptr: String, type: String, heap: Bool)
                                 @ensure_stack = [] of Array(AST::Node)
                                 @postamble = String::Builder.new
@@ -271,13 +312,13 @@ module Dragonstone
                         end
 
                         private def mangle_global_name(name : String) : String
-                            "ds_global_#{name.gsub("::", "_")}"
+                            "ds_global_#{name.gsub("::", "_").gsub(/[^a-zA-Z0-9_]/) { |m| "_#{m[0].ord}_" }}"
                         end
 
                         private def emit_globals(io : IO)
                             @globals.each do |name|
                                 global_symbol = mangle_global_name(name)
-                                io << "@#{global_symbol} = private global i8* null\n"
+                                io << "@\"#{global_symbol}\" = private global i8* null\n"
                             end
                             io << "\n" unless @globals.empty?
                         end
@@ -334,7 +375,7 @@ module Dragonstone
                                     end
                                 end
                             else
-                                # no-op
+                                # Skip.
                             end
                         end
                         
@@ -376,6 +417,8 @@ module Dragonstone
                             when AST::ReturnStatement
                                 node.value.try { |value| collect_strings_from_node(value) }
                             when AST::FunctionDef
+                                intern_string(node.name)
+                                collect_strings_from_node(node.receiver.not_nil!) if node.receiver
                                 node.body.each { |stmt| collect_strings_from_node(stmt) }
                             when AST::IfStatement
                                 collect_strings_from_node(node.condition)
@@ -405,7 +448,22 @@ module Dragonstone
                                     collect_strings_from_node(key)
                                     collect_strings_from_node(value)
                                 end
+                            when AST::BagConstructor
+                                intern_string(node.element_type.to_source)
+                            when AST::InstanceVariable
+                                intern_string(node.name)
+                            when AST::InstanceVariableAssignment
+                                intern_string(node.name)
+                                collect_strings_from_node(node.value)
+                            when AST::InstanceVariableDeclaration
+                                intern_string(node.name)
+                            when AST::AttributeAssignment
+                                intern_string(node.name)
+                                collect_strings_from_node(node.receiver)
+                                collect_strings_from_node(node.value)
                             when AST::BlockLiteral
+                                node.body.each { |stmt| collect_strings_from_node(stmt) }
+                            when AST::ParaLiteral
                                 node.body.each { |stmt| collect_strings_from_node(stmt) }
                             when AST::BeginExpression
                                 node.body.each { |stmt| collect_strings_from_node(stmt) }
@@ -467,14 +525,15 @@ module Dragonstone
                             when AST::RaiseExpression
                                 node.expression.try { |expr| collect_strings_from_node(expr) }
                             when AST::InterpolatedString
-                                node.parts.each do |part|
-                                    type, content = part
+                                node.normalized_parts.each do |type, content|
                                     if type == :string
                                         intern_string(content.as(String))
                                     elsif type == :expression
                                         collect_strings_from_node(interpolation_expression(content))
                                     end
                                 end
+                            when AST::AliasDefinition
+                                # Skip.
                             end
                         end
                         
@@ -490,7 +549,7 @@ module Dragonstone
                             case node
                             when AST::YieldExpression
                                 true
-                            when AST::FunctionDef, AST::FunctionLiteral, AST::BlockLiteral
+                            when AST::FunctionDef, AST::FunctionLiteral, AST::BlockLiteral, AST::ParaLiteral
                                 false
                             when AST::MethodCall
                                 if receiver = node.receiver
@@ -508,13 +567,15 @@ module Dragonstone
                                     false
                                 end
                             when AST::IfStatement
-                                node_contains_yield?(node.condition) || nodes_contain_yield?(node.then_block) ||
+                                node_contains_yield?(node.condition) ||
+                                    nodes_contain_yield?(node.then_block) ||
                                     node.elsif_blocks.any? { |clause| node_contains_yield?(clause) } ||
                                     (node.else_block ? nodes_contain_yield?(node.else_block.not_nil!) : false)
                             when AST::ElsifClause
                                 node_contains_yield?(node.condition) || nodes_contain_yield?(node.block)
                             when AST::UnlessStatement
-                                node_contains_yield?(node.condition) || nodes_contain_yield?(node.body) ||
+                                node_contains_yield?(node.condition) ||
+                                    nodes_contain_yield?(node.body) ||
                                     (node.else_block ? nodes_contain_yield?(node.else_block.not_nil!) : false)
                             when AST::WhileStatement
                                 node_contains_yield?(node.condition) || nodes_contain_yield?(node.block)
@@ -568,28 +629,32 @@ module Dragonstone
                         end
 
                         private def register_function(func : AST::FunctionDef)
-                            mangled_name = if @namespace_stack.empty?
-                                func.name == "main" ? "__dragonstone_user_main" : func.name
+                            base_name = if @namespace_stack.empty?
+                                func.name == "main" ?
+                                "__dragonstone_user_main" : func.name
                             else
                                 type_name = @namespace_stack.join("::")
                                 struct_method_symbol(type_name, func.name)
                             end
 
-                            @function_names[func] = mangled_name
                             @function_namespaces[func] = @namespace_stack.dup
-                            @functions << func
 
                             receiver_type = nil
-                            if !@namespace_stack.empty?
+                            if func.receiver
+                                receiver_type = "i8*"
+                                @function_receivers[func] = receiver_type
+                            elsif !@namespace_stack.empty?
                                 current_scope = @namespace_stack.join("::")
                                 if canonical_struct_name(current_scope)
                                     receiver_type = llvm_struct_name(current_scope)
+                                    @function_receivers[func] = receiver_type
+                                else
+                                    receiver_type = "i8*"
                                     @function_receivers[func] = receiver_type
                                 end
                             end
 
                             requires_block = function_body_contains_yield?(func.body)
-                            @function_requires_block[mangled_name] = requires_block
 
                             param_types = func.typed_parameters.map { |param| llvm_param_type(param.type) }
 
@@ -598,6 +663,14 @@ module Dragonstone
                             end
 
                             param_types << "i8*" if requires_block
+
+                            mangled_name = mangle_function_name(base_name, param_types)
+
+                            @function_names[func] = mangled_name
+                            @function_requires_block[mangled_name] = requires_block
+                            unless @function_overloads[base_name].includes?(mangled_name)
+                                @function_overloads[base_name] << mangled_name
+                            end
                             
                             signature = FunctionSignature.new(
                                 return_type: llvm_type_of(func.return_type),
@@ -605,6 +678,20 @@ module Dragonstone
                             )
                             
                             @function_signatures[mangled_name] = signature
+                            @function_defs[mangled_name] = func
+                        end
+
+                        private def register_missing_functions(nodes : Array(AST::Node))
+                            nodes.each do |node|
+                                case node
+                                when AST::FunctionDef
+                                    register_function(node)
+                                when AST::ModuleDefinition, AST::ClassDefinition, AST::StructDefinition
+                                    with_namespace(node.name) do
+                                        register_missing_functions(node.body)
+                                    end
+                                end
+                            end
                         end
                         
                         private def prepare_runtime_literals
@@ -614,6 +701,7 @@ module Dragonstone
                             intern_string("true")
                             intern_string("false")
                             intern_string("nil")
+                            intern_string("Division by zero")
                             @runtime_literals_preregistered = true
                         end
                         
@@ -621,9 +709,31 @@ module Dragonstone
                             @string_order.each do |literal|
                                 entry = @string_literals[literal]
                                 size = entry[:length] + 1
-                                io << "@#{entry[:name]} = private unnamed_addr constant [#{size} x i8] c\"#{entry[:escaped]}\\00\"\n"
+                                io << "@\"#{entry[:name]}\" = private unnamed_addr constant [#{size} x i8] c\"#{entry[:escaped]}\\00\"\n"
                             end
                             io << "\n" unless @string_order.empty?
+                        end
+
+                        private def emit_pending_strings(io : IO)
+                            @pending_strings.each do |literal|
+                                entry = @string_literals[literal]
+                                size = entry[:length] + 1
+                                io << "@\"#{entry[:name]}\" = private unnamed_addr constant [#{size} x i8] c\"#{entry[:escaped]}\\00\"\n"
+                            end
+                            io << "\n" unless @pending_strings.empty?
+                        end
+
+                        private def emit_function_inline(func : AST::FunctionDef)
+                            name_key = @function_names[func]? || begin
+                                register_function(func)
+                                @function_names[func]
+                            end
+                            return if @emitted_functions.includes?(name_key)
+
+                            builder = String::Builder.new
+                            emit_function(builder, func)
+                            builder << "\n"
+                            @pending_blocks << builder.to_s
                         end
                         
                         private def emit_runtime_types(io : IO)
@@ -676,6 +786,10 @@ module Dragonstone
                             io << "declare void @#{@runtime[:yield_missing_block]}()\n"
                             io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:typeof]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:ivar_get]}(i8*, i8*)\n"
+                            io << "declare i8* @#{@runtime[:ivar_set]}(i8*, i8*, i8*)\n"
+                            io << "declare void @#{@runtime[:singleton_define]}(i8*, i8*, i8*)\n"
                             io << "declare i8* @#{@runtime[:interpolated_string]}(i64, i8**)\n"
                             io << "declare void @#{@runtime[:raise]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:range_literal]}(i64, i64, i1)\n"
@@ -683,23 +797,33 @@ module Dragonstone
                             io << "declare i8* @#{@runtime[:box_struct]}(i8*, i64)\n"
                             io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
+                            io << "declare i8* @#{@runtime[:generic_add]}(i8*, i8*)\n"
+                            io << "declare i8* @#{@runtime[:bag_constructor]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:define_class]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:define_module]}(i8*)\n"
                             io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*)\n"
                             io << "declare void @#{@runtime[:define_enum_member]}(i8*, i8*, i64)\n"
                             io << "declare void @#{@runtime[:push_handler]}(i8*)\n"
                             io << "declare void @#{@runtime[:pop_handler]}()\n"
                             io << "declare i8* @#{@runtime[:get_exception]}()\n"
-                            io << "declare i32 @setjmp(i8*)\n"
+                            io << "declare void @#{@runtime[:extend_container]}(i8*, i8*)\n"
+                            {% if flag?(:windows) %}
+                                io << "declare i32 @_setjmp(i8*, i8*) returns_twice\n"
+                            {% else %}
+                                io << "declare i32 @setjmp(i8*) returns_twice\n"
+                            {% end %}
                         end
                         
                         private def emit_functions(io : IO)
-                            @functions.each do |func|
-                                emit_function(io, func)
-                                io << "\n"
+                            @function_defs.values.each do |func|
+                                emit_function(io, func) unless @emitted_functions.includes?(@function_names[func])
+                                io << "\n" unless @emitted_functions.includes?(@function_names[func])
                             end
                         end
                         
                         private def emit_function(io : IO, func : AST::FunctionDef)
+                            name_key = @function_names[func]
+                            return if @emitted_functions.includes?(name_key)
                             return_type = llvm_type_of(func.return_type)
 
                             ctx = FunctionContext.new(io, return_type)
@@ -743,10 +867,11 @@ module Dragonstone
                                 end
                             end
                             
-                            terminated = generate_block(ctx, func.body)
+                            terminated = generate_block_with_implicit_return(ctx, func.body)
                             emit_default_return(ctx) unless terminated
                             emit_postamble(ctx)
                             io << "}\n"
+                            @emitted_functions << name_key
                         end
                         
                         private def emit_entrypoint(io : IO)
@@ -756,7 +881,7 @@ module Dragonstone
                             io << "define i32 @main() {\n"
                             io << "entry:\n"
                             
-                            top_level = @program.ast.statements.reject { |stmt| stmt.is_a?(AST::FunctionDef) }
+                            top_level = @program.ast.statements.reject { |stmt| stmt.is_a?(AST::FunctionDef) && stmt.receiver.nil? }
                             terminated = generate_block(ctx, top_level)
                             
                             io << "  ret i32 0\n" unless terminated
@@ -767,6 +892,37 @@ module Dragonstone
                         private def generate_block(ctx : FunctionContext, statements : Array(AST::Node)) : Bool
                             terminated = false
                             statements.each do |stmt|
+                                terminated = generate_statement(ctx, stmt)
+                                break if terminated
+                            end
+                            terminated
+                        end
+
+                        private def expression_statement?(stmt : AST::Node) : Bool
+                            case stmt
+                            when AST::Literal, AST::Variable, AST::BinaryOp, AST::UnaryOp,
+                                 AST::MethodCall, AST::ArrayLiteral, AST::BagConstructor,
+                                 AST::MapLiteral, AST::TupleLiteral, AST::NamedTupleLiteral,
+                                 AST::ConstantPath, AST::InterpolatedString
+                                true
+                            else
+                                false
+                            end
+                        end
+
+                        private def generate_block_with_implicit_return(ctx : FunctionContext, statements : Array(AST::Node)) : Bool
+                            terminated = false
+                            statements.each_with_index do |stmt, idx|
+                                is_last = idx == statements.size - 1
+
+                                if is_last && !terminated && ctx.return_type != "void" && expression_statement?(stmt)
+                                    value = generate_expression(ctx, stmt)
+                                    value = ensure_value_type(ctx, value, ctx.return_type)
+                                    emit_ensure_chain(ctx)
+                                    ctx.io << "  ret #{value[:type]} #{value[:ref]}\n"
+                                    return true
+                                end
+
                                 terminated = generate_statement(ctx, stmt)
                                 break if terminated
                             end
@@ -800,63 +956,56 @@ module Dragonstone
                         private def generate_statement(ctx : FunctionContext, stmt : AST::Node) : Bool
                             case stmt
                             when AST::MethodCall
-                                
                                 generate_method_call(ctx, stmt)
                                 false
                             when AST::DebugPrint
                                 value = generate_expression(ctx, stmt.expression)
-   
                                 prefix_str = "#{stmt.expression.to_source} # => "
                                 format_ptr = materialize_string_pointer(ctx, "%s")
-                               
                                 prefix_ptr = materialize_string_pointer(ctx, prefix_str)
                                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{prefix_ptr})\n"
                                 emit_echo(ctx, value, inspect: true)
-                  
                                 false
                             when AST::Assignment
                                 value = generate_expression(ctx, stmt.value.as(AST::Node))
-                      
                                 if type_expr = stmt.type_annotation
                                     target_type = llvm_type_of(type_expr)
                                     value = ensure_value_type(ctx, value, target_type)
-         
                                 end
                                 if operator = stmt.operator
                                     current = generate_variable_reference(ctx, stmt.name)
-   
                                     value = emit_binary_op(ctx, operator, current, value)
                                 end
-                              
-   
                                 full_name = qualify_name(stmt.name)
                                 if @globals.includes?(full_name)
-                               
                                     boxed = box_value(ctx, value)
                                     global_name = mangle_global_name(full_name)
-                                    ctx.io << "  store i8* #{boxed[:ref]}, i8** @#{global_name}\n"
-          
+                                    ctx.io << "  store i8* #{boxed[:ref]}, i8** @\"#{global_name}\"\n"
                                 else
                                     store_local(ctx, stmt.name, value)
                                 end
-        
                                 false
                             when AST::ReturnStatement
                                 if value_node = stmt.value
-            
                                     value = generate_expression(ctx, value_node)
                                     value = ensure_value_type(ctx, value, ctx.return_type)
                                     emit_ensure_chain(ctx)
                                     ctx.io << "  ret #{value[:type]} #{value[:ref]}\n"
                                 else
                                     emit_ensure_chain(ctx)
-                           
                                     emit_default_return(ctx)
                                 end
                                 true
-                           
                             when AST::BinaryOp
                                 generate_expression(ctx, stmt)
+                                false
+                            when AST::InstanceVariableDeclaration
+                                false
+                            when AST::InstanceVariableAssignment
+                                generate_instance_variable_assignment(ctx, stmt)
+                                false
+                            when AST::AttributeAssignment
+                                generate_attribute_assignment(ctx, stmt)
                                 false
                             when AST::Literal
                                 generate_expression(ctx, stmt)
@@ -871,29 +1020,39 @@ module Dragonstone
                             when AST::WhileStatement
                                 generate_while_statement(ctx, stmt)
                             when AST::FunctionDef
-                                if !@namespace_stack.empty?
+                                emit_function_inline(stmt)
+                                if stmt.receiver
+                                    receiver_val = ensure_pointer(ctx, generate_expression(ctx, stmt.receiver.not_nil!))
+                                    method_name_ptr = materialize_string_pointer(ctx, stmt.name)
+                                    llvm_name = @function_names[stmt]
+                                    signature = @function_signatures[llvm_name]
+                                    param_types_str = signature[:param_types].join(", ")
+                                    func_type = "#{signature[:return_type]} (#{param_types_str})*"
+                                    func_ptr = ctx.fresh("func")
+                                    ctx.io << "  %#{func_ptr} = bitcast #{func_type} @\"#{llvm_name}\" to i8*\n"
+                                    ctx.io << "  call void @#{@runtime[:singleton_define]}(i8* #{receiver_val[:ref]}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
+                                elsif !@namespace_stack.empty?
                                     class_name = @namespace_stack.join("::")
                                     if @globals.includes?(class_name)
                                         global_name = mangle_global_name(class_name)
                                         cls_reg = ctx.fresh("cls")
-                                        ctx.io << "  %#{cls_reg} = load i8*, i8** @#{global_name}\n"
-                                        
+                                        ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
                                         method_name_ptr = materialize_string_pointer(ctx, stmt.name)
                                         llvm_name = @function_names[stmt]
-                                        
                                         signature = @function_signatures[llvm_name]
                                         param_types_str = signature[:param_types].join(", ")
                                         func_type = "#{signature[:return_type]} (#{param_types_str})*"
-                                        
                                         func_ptr = ctx.fresh("func")
                                         ctx.io << "  %#{func_ptr} = bitcast #{func_type} @\"#{llvm_name}\" to i8*\n"
-                                        
                                         ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
                                     end
                                 end
                                 false
                             when AST::ArrayLiteral
                                 generate_array_literal(ctx, stmt)
+                                false
+                            when AST::BagConstructor
+                                generate_bag_constructor(ctx, stmt)
                                 false
                             when AST::MapLiteral
                                 generate_map_literal(ctx, stmt)
@@ -931,6 +1090,9 @@ module Dragonstone
                             when AST::ModuleDefinition
                                 generate_module_definition(ctx, stmt)
                                 false
+                            when AST::ExtendStatement
+                                generate_extend_statement(ctx, stmt)
+                                false
                             when AST::CaseStatement
                                 generate_case_expression(ctx, stmt)
                                 false
@@ -950,6 +1112,8 @@ module Dragonstone
                                 generate_redo_statement(ctx, stmt)
                             when AST::RetryStatement
                                 generate_retry_statement(ctx, stmt)
+                            when AST::AliasDefinition
+                                false
                             else
                                 false
                             end
@@ -978,10 +1142,14 @@ module Dragonstone
                                 generate_unary_expression(ctx, node)
                             when AST::ArrayLiteral
                                 generate_array_literal(ctx, node)
+                            when AST::BagConstructor
+                                generate_bag_constructor(ctx, node)
                             when AST::MapLiteral
                                 generate_map_literal(ctx, node)
                             when AST::BlockLiteral
                                 generate_block_literal(ctx, node)
+                            when AST::ParaLiteral
+                                generate_para_literal(ctx, node)
                             when AST::BeginExpression
                                 generate_begin_expression(ctx, node)
                             when AST::ConstantPath
@@ -996,12 +1164,22 @@ module Dragonstone
                                 generate_index_access(ctx, node)
                             when AST::IndexAssignment
                                 generate_index_assignment(ctx, node)
+                            when AST::InstanceVariable
+                                generate_instance_variable(ctx, node)
+                            when AST::InstanceVariableAssignment
+                                generate_instance_variable_assignment(ctx, node)
+                            when AST::AttributeAssignment
+                                generate_attribute_assignment(ctx, node)
                             when AST::CaseStatement
                                 generate_case_expression(ctx, node)
                             when AST::YieldExpression
                                 generate_yield_expression(ctx, node)
                             when AST::RaiseExpression
                                 generate_raise_expression(ctx, node)
+                            when AST::IfStatement
+                                generate_if_expression(ctx, node)
+                            when AST::UnlessStatement
+                                generate_unless_expression(ctx, node)
                             else
                                 raise "Unsupported expression #{node.class}"
                             end
@@ -1143,6 +1321,111 @@ module Dragonstone
                             
                             then_returns && else_returns
                         end
+
+                        private def generate_if_expression(ctx : FunctionContext, stmt : AST::IfStatement) : ValueRef
+                            normalized = normalize_if_statement(stmt)
+                            
+                            cond_value = ensure_boolean(ctx, generate_expression(ctx, normalized.condition))
+                            
+                            then_label = ctx.fresh_label("if_then")
+                            else_label = ctx.fresh_label("if_else")
+                            merge_label = ctx.fresh_label("if_merge")
+                            
+                            ctx.io << "  br i1 #{cond_value[:ref]}, label %#{then_label}, label %#{else_label}\n"
+                            
+                            phi_entries = [] of NamedTuple(value: ValueRef, label: String)
+                            
+                            ctx.io << "#{then_label}:\n"
+                            then_val, then_term = evaluate_block_value(ctx, normalized.then_block)
+                            unless then_term
+                                v = then_val ? ensure_pointer(ctx, then_val) : value_ref("i8*", "null", constant: true)
+                                pred_label = ctx.fresh_label("if_pred")
+                                ctx.io << "  br label %#{pred_label}\n"
+                                ctx.io << "#{pred_label}:\n"
+                                ctx.io << "  br label %#{merge_label}\n"
+                                phi_entries << {value: v, label: pred_label}
+                            end
+                            
+                            ctx.io << "#{else_label}:\n"
+                            if else_block = normalized.else_block
+                                else_val, else_term = evaluate_block_value(ctx, else_block)
+                                unless else_term
+                                    v = else_val ? ensure_pointer(ctx, else_val) : value_ref("i8*", "null", constant: true)
+                                    pred_label = ctx.fresh_label("if_pred")
+                                    ctx.io << "  br label %#{pred_label}\n"
+                                    ctx.io << "#{pred_label}:\n"
+                                    ctx.io << "  br label %#{merge_label}\n"
+                                    phi_entries << {value: v, label: pred_label}
+                                end
+                            else
+                                pred_label = ctx.fresh_label("if_pred")
+                                ctx.io << "  br label %#{pred_label}\n"
+                                ctx.io << "#{pred_label}:\n"
+                                ctx.io << "  br label %#{merge_label}\n"
+                                phi_entries << {value: value_ref("i8*", "null", constant: true), label: pred_label}
+                            end
+                            
+                            ctx.io << "#{merge_label}:\n"
+                            if phi_entries.empty?
+                                value_ref("i8*", "null", constant: true)
+                            else
+                                phi = ctx.fresh("ifphi")
+                                entries = phi_entries.map { |e| "[ #{e[:value][:ref]}, %#{e[:label]} ]" }.join(", ")
+                                ctx.io << "  %#{phi} = phi i8* #{entries}\n"
+                                value_ref("i8*", "%#{phi}")
+                            end
+                        end
+
+                        private def generate_unless_expression(ctx : FunctionContext, stmt : AST::UnlessStatement) : ValueRef
+                            cond_value = ensure_boolean(ctx, generate_expression(ctx, stmt.condition))
+                            then_label = ctx.fresh_label("unless_then")
+                            else_label = ctx.fresh_label("unless_else")
+                            merge_label = ctx.fresh_label("unless_merge")
+                            
+                            ctx.io << "  br i1 #{cond_value[:ref]}, label %#{else_label}, label %#{then_label}\n"
+                            
+                            phi_entries = [] of NamedTuple(value: ValueRef, label: String)
+                            
+                            ctx.io << "#{then_label}:\n"
+                            then_val, then_term = evaluate_block_value(ctx, stmt.body)
+                            unless then_term
+                                v = then_val ? ensure_pointer(ctx, then_val) : value_ref("i8*", "null", constant: true)
+                                pred_label = ctx.fresh_label("ul_pred")
+                                ctx.io << "  br label %#{pred_label}\n"
+                                ctx.io << "#{pred_label}:\n"
+                                ctx.io << "  br label %#{merge_label}\n"
+                                phi_entries << {value: v, label: pred_label}
+                            end
+                            
+                            ctx.io << "#{else_label}:\n"
+                            if else_block = stmt.else_block
+                                else_val, else_term = evaluate_block_value(ctx, else_block)
+                                unless else_term
+                                    v = else_val ? ensure_pointer(ctx, else_val) : value_ref("i8*", "null", constant: true)
+                                    pred_label = ctx.fresh_label("ul_pred")
+                                    ctx.io << "  br label %#{pred_label}\n"
+                                    ctx.io << "#{pred_label}:\n"
+                                    ctx.io << "  br label %#{merge_label}\n"
+                                    phi_entries << {value: v, label: pred_label}
+                                end
+                            else
+                                pred_label = ctx.fresh_label("ul_pred")
+                                ctx.io << "  br label %#{pred_label}\n"
+                                ctx.io << "#{pred_label}:\n"
+                                ctx.io << "  br label %#{merge_label}\n"
+                                phi_entries << {value: value_ref("i8*", "null", constant: true), label: pred_label}
+                            end
+                            
+                            ctx.io << "#{merge_label}:\n"
+                            if phi_entries.empty?
+                                value_ref("i8*", "null", constant: true)
+                            else
+                                phi = ctx.fresh("ulphi")
+                                entries = phi_entries.map { |e| "[ #{e[:value][:ref]}, %#{e[:label]} ]" }.join(", ")
+                                ctx.io << "  %#{phi} = phi i8* #{entries}\n"
+                                value_ref("i8*", "%#{phi}")
+                            end
+                        end
                         
                         private def generate_while_statement(ctx : FunctionContext, stmt : AST::WhileStatement) : Bool
                             cond_label = ctx.fresh_label("while_cond")
@@ -1229,12 +1512,24 @@ module Dragonstone
                         end
                         
                         private def generate_array_literal(ctx : FunctionContext, node : AST::ArrayLiteral) : ValueRef
-                            boxed = node.elements.map { |elem| box_value(ctx, generate_expression(ctx, elem)) }
+                            generate_array_literal_from_elements(ctx, node.elements)
+                        end
+
+                        private def generate_array_literal_from_elements(ctx : FunctionContext, elements : Array(AST::Node)) : ValueRef
+                            boxed = elements.map { |elem| box_value(ctx, generate_expression(ctx, elem)) }
                             buffer = allocate_pointer_buffer(ctx, boxed) || "null"
-                            len_literal = node.elements.size
+                            len_literal = elements.size
                             reg = ctx.fresh("array")
                             ctx.io << "  %#{reg} = call i8* @#{@runtime[:array_literal]}(i64 #{len_literal}, i8** #{buffer})\n"
                             value_ref("i8*", "%#{reg}")
+                        end
+
+                        private def generate_bag_constructor(ctx : FunctionContext, node : AST::BagConstructor) : ValueRef
+                            type_name = node.element_type.to_source
+                            ptr = materialize_string_pointer(ctx, type_name)
+                            runtime_call(ctx, "i8*", @runtime[:bag_constructor], [
+                                {type: "i8*", ref: ptr}
+                            ])
                         end
                         
                         private def generate_map_literal(ctx : FunctionContext, node : AST::MapLiteral) : ValueRef
@@ -1256,12 +1551,32 @@ module Dragonstone
                         end
                         
                         private def generate_block_literal(ctx : FunctionContext, node : AST::BlockLiteral) : ValueRef
+                            generate_block_literal_impl(ctx, node.typed_parameters, node.body)
+                        end
+
+                        private def generate_para_literal(ctx : FunctionContext, node : AST::ParaLiteral) : ValueRef
+                            generate_block_literal_impl(ctx, node.typed_parameters, node.body)
+                        end
+
+                        private def generate_attribute_assignment(ctx : FunctionContext, node : AST::AttributeAssignment) : ValueRef
+                            method_name = "#{node.name}="
+                            value = generate_expression(ctx, node.value)
+                            receiver = generate_expression(ctx, node.receiver)
+
+                            if struct_name = struct_name_for_value(receiver)
+                                emit_struct_method_dispatch(ctx, struct_name, receiver, method_name, [value])
+                            else
+                                emit_receiver_call(ctx, method_name, receiver, [value])
+                            end
+                        end
+
+                        private def generate_block_literal_impl(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node)) : ValueRef
                             fn_name = unique_block_symbol
                             fn_type = "i8*"
-                            captures = collect_block_captures(ctx, node)
+                            captures = collect_block_captures(ctx, params, body)
                             env_pointer = captures.empty? ? value_ref("i8*", "null", constant: true) : build_block_environment(ctx, captures)
                             
-                            param_specs = node.typed_parameters.map_with_index do |param, index|
+                            param_specs = params.map_with_index do |param, index|
                                 local_type = llvm_param_type(param.type)
                                 {type: local_type, name: param.name, index: index}
                             end
@@ -1285,8 +1600,11 @@ module Dragonstone
                             
                             attach_block_captures(block_ctx, captures)
                             
-                            terminated = generate_block(block_ctx, node.body)
-                            block_io << "  ret i8* null\n" unless terminated
+                            value, terminated = evaluate_block_value(block_ctx, body)
+                            unless terminated
+                                boxed = value ? box_value(block_ctx, value) : value_ref("i8*", "null", constant: true)
+                                block_io << "  ret i8* #{boxed[:ref]}\n"
+                            end
                             block_io << "}\n\n"
                             
                             @pending_blocks << block_io.to_s
@@ -1349,14 +1667,14 @@ module Dragonstone
                             end
                         end
                         
-                        private def collect_block_captures(ctx : FunctionContext, block : AST::BlockLiteral) : Array(BlockCaptureInfo)
+                        private def collect_block_captures(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node)) : Array(BlockCaptureInfo)
                             return [] of BlockCaptureInfo if ctx.locals.empty?
                             locals = ctx.locals
                             local_bindings = Set(String).new
-                            block.typed_parameters.each { |param| local_bindings << param.name }
+                            params.each { |param| local_bindings << param.name }
                             ordered = [] of String
                             seen = Set(String).new
-                            scan_capture_statements(block.body, locals, local_bindings, ordered, seen)
+                            scan_capture_statements(body, locals, local_bindings, ordered, seen)
                             
                             ordered.each { |name| promote_local_to_heap(ctx, name) }
                             
@@ -1407,7 +1725,7 @@ module Dragonstone
                         private def scan_capture_node(node : AST::Node, available : Hash(String, NamedTuple(ptr: String, type: String, heap: Bool)), local_bindings : Set(String), ordered : Array(String), seen : Set(String))
                             case node
                             when AST::Literal, AST::ConstantPath
-                                # no-op
+                                # Skip.
                             when AST::Variable
                                 record_capture(node.name, available, local_bindings, ordered, seen)
                             when AST::MethodCall
@@ -1495,10 +1813,10 @@ module Dragonstone
                                     next unless type == :expression
                                     scan_capture_node(interpolation_expression(content), available, local_bindings, ordered, seen)
                                 end
-                            when AST::BlockLiteral, AST::FunctionDef, AST::FunctionLiteral,
+                            when AST::BlockLiteral, AST::ParaLiteral, AST::FunctionDef, AST::FunctionLiteral,
                                  AST::ClassDefinition, AST::StructDefinition, AST::ModuleDefinition, AST::EnumDefinition
                             else
-                                # unhandled node types.
+                                # Unhandled node types.
                             end
                         end
                         
@@ -1513,7 +1831,6 @@ module Dragonstone
                         private def generate_begin_expression(ctx : FunctionContext, node : AST::BeginExpression) : ValueRef
                             ensure_block = node.ensure_block
                             ensure_nodes = ensure_block
-       
                             if ensure_nodes && ensure_nodes.empty?
                                 ensure_nodes = nil
                             end
@@ -1523,12 +1840,17 @@ module Dragonstone
                             ensure_label = ctx.fresh_label("ensure")
                             merge_label = ctx.fresh_label("begin_merge")
                             frame_storage = ctx.fresh("eh_frame")
-                            ctx.io << "  %#{frame_storage} = alloca [1024 x i8]\n"
+                            
+                            ctx.io << "  %#{frame_storage} = alloca [4096 x i8], align 16\n"
                             frame_ptr = ctx.fresh("eh_ptr")
-                            ctx.io << "  %#{frame_ptr} = bitcast [1024 x i8]* %#{frame_storage} to i8*\n"
+                            ctx.io << "  %#{frame_ptr} = bitcast [4096 x i8]* %#{frame_storage} to i8*\n"
                             ctx.io << "  call void @#{@runtime[:push_handler]}(i8* %#{frame_ptr})\n"
                             jmp_res = ctx.fresh("setjmp_res")
-                            ctx.io << "  %#{jmp_res} = call i32 @setjmp(i8* %#{frame_ptr})\n"
+                            {% if flag?(:windows) %}
+                                ctx.io << "  %#{jmp_res} = call i32 @_setjmp(i8* %#{frame_ptr}, i8* null)\n"
+                            {% else %}
+                                ctx.io << "  %#{jmp_res} = call i32 @setjmp(i8* %#{frame_ptr})\n"
+                            {% end %}
                             is_raise = ctx.fresh("is_raise")
                             ctx.io << "  %#{is_raise} = icmp ne i32 %#{jmp_res}, 0\n"
                             ctx.io << "  br i1 %#{is_raise}, label %#{rescue_label}, label %#{body_label}\n"
@@ -1552,8 +1874,6 @@ module Dragonstone
                                     ctx.ensure_stack.pop if last.same?(ensure_nodes)
                                 end
                             end
-                            ctx.retry_stack.pop
-
                             value = body_value if body_value
                             terminated ||= body_terminated
                             
@@ -1568,10 +1888,8 @@ module Dragonstone
                             if ensure_nodes
                                 generate_block(ctx, ensure_nodes) unless terminated
                             end
-                            
                             ctx.io << "  br label %#{merge_label}\n" unless terminated
                             ctx.io << "#{rescue_label}:\n"
-                            ctx.io << "  call void @#{@runtime[:pop_handler]}()\n"
                             ex_val_reg = ctx.fresh("ex_val")
                             ctx.io << "  %#{ex_val_reg} = call i8* @#{@runtime[:get_exception]}()\n"
                             rescue_handled = false
@@ -1598,6 +1916,7 @@ module Dragonstone
                                 ctx.io << "  br label %#{merge_label}\n"
                             end
 
+                            ctx.retry_stack.pop
                             ctx.io << "#{merge_label}:\n"
                             value_ref("i8*", "null", constant: true)
                         end
@@ -1626,13 +1945,20 @@ module Dragonstone
                                  AST::MethodCall,
                                  AST::UnaryOp,
                                  AST::ArrayLiteral,
+                                 AST::BagConstructor,
                                  AST::MapLiteral,
                                  AST::BlockLiteral,
+                                 AST::ParaLiteral,
+                                 AST::InstanceVariable,
+                                 AST::InstanceVariableAssignment,
                                  AST::BeginExpression,
                                  AST::ConstantPath,
                                  AST::TupleLiteral,
                                  AST::NamedTupleLiteral,
-                                 AST::InterpolatedString
+                                 AST::InterpolatedString,
+                                 AST::IfStatement,
+                                 AST::UnlessStatement,
+                                 AST::CaseStatement
                                 true
                             else
                                 false
@@ -1709,7 +2035,7 @@ module Dragonstone
                             segments = [] of ValueRef
                             parts.each do |type, content|
                                 if type == :string
-                                    segments << value_ref("i8*", materialize_string_pointer(ctx, content), constant: true)
+                                    segments << value_ref("i8*", materialize_string_pointer(ctx, content.as(String)), constant: true)
                                 else
                                     expression_value = generate_expression(ctx, interpolation_expression(content))
                                     segments << ensure_string_pointer(ctx, expression_value)
@@ -1752,7 +2078,7 @@ module Dragonstone
                             
                             if @globals.includes?(full_name)
                                 global_name = mangle_global_name(full_name)
-                                ctx.io << "  store i8* %#{reg}, i8** @#{global_name}\n"
+                                ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
                             end
 
                             counter_ptr = ctx.fresh("enum_ctr")
@@ -1790,6 +2116,7 @@ module Dragonstone
                                 merge_label = ctx.fresh_label("index_merge")
                                 ctx.io << "  %#{cmp} = icmp eq i8* #{object[:ref]}, null\n"
                                 ctx.io << "  br i1 %#{cmp}, label %#{nil_label}, label %#{invoke_label}\n"
+                                
                                 ctx.io << "#{invoke_label}:\n"
                                 value = runtime_call(ctx, "i8*", @runtime[:index_get], [
                                     {type: "i8*", ref: object[:ref]},
@@ -1826,6 +2153,27 @@ module Dragonstone
                                 {type: "i8*", ref: value[:ref]}
                             ])
                         end
+
+                        private def generate_instance_variable(ctx : FunctionContext, node : AST::InstanceVariable) : ValueRef
+                            self_ref = load_local(ctx, "self")
+                            name_ptr = materialize_string_pointer(ctx, node.name)
+                            runtime_call(ctx, "i8*", @runtime[:ivar_get], [
+                                {type: "i8*", ref: self_ref[:ref]},
+                                {type: "i8*", ref: name_ptr}
+                            ])
+                        end
+
+                        private def generate_instance_variable_assignment(ctx : FunctionContext, node : AST::InstanceVariableAssignment) : ValueRef
+                            value = box_value(ctx, generate_expression(ctx, node.value))
+                            self_ref = load_local(ctx, "self")
+                            name_ptr = materialize_string_pointer(ctx, node.name)
+                            
+                            runtime_call(ctx, "i8*", @runtime[:ivar_set], [
+                                {type: "i8*", ref: self_ref[:ref]},
+                                {type: "i8*", ref: name_ptr},
+                                {type: "i8*", ref: value[:ref]}
+                            ])
+                        end
                         
                         private def generate_case_expression(ctx : FunctionContext, node : AST::CaseStatement) : ValueRef
                             case_value = node.expression ? ensure_pointer(ctx, generate_expression(ctx, node.expression.not_nil!)) : nil
@@ -1837,13 +2185,19 @@ module Dragonstone
                                 match_label = ctx.fresh_label("case_match")
                                 next_label = ctx.fresh_label("case_next")
                                 condition_value = generate_case_condition(ctx, clause, case_value)
+                            
                                 ctx.io << "  br i1 #{condition_value[:ref]}, label %#{match_label}, label %#{next_label}\n"
                                 ctx.io << "#{match_label}:\n"
                                 clause_value, clause_terminated = evaluate_block_value(ctx, clause.block)
                                 unless clause_terminated
                                     resolved = clause_value ? ensure_pointer(ctx, clause_value) : value_ref("i8*", "null", constant: true)
-                                    phi_entries << {value: resolved, label: match_label}
+                                    
+                                    pred_label = ctx.fresh_label("case_pred")
+                                    ctx.io << "  br label %#{pred_label}\n"
+                                    ctx.io << "#{pred_label}:\n"
                                     ctx.io << "  br label %#{exit_label}\n"
+                                    
+                                    phi_entries << {value: resolved, label: pred_label}
                                 end
                                 ctx.io << "#{next_label}:\n"
                                 current_label = next_label
@@ -1858,12 +2212,20 @@ module Dragonstone
                                 else_value, else_terminated = evaluate_block_value(ctx, else_block)
                                 unless else_terminated
                                     resolved = else_value ? ensure_pointer(ctx, else_value) : value_ref("i8*", "null", constant: true)
-                                    phi_entries << {value: resolved, label: current_label}
+                                    
+                                    pred_label = ctx.fresh_label("case_pred")
+                                    ctx.io << "  br label %#{pred_label}\n"
+                                    ctx.io << "#{pred_label}:\n"
                                     ctx.io << "  br label %#{exit_label}\n"
+
+                                    phi_entries << {value: resolved, label: pred_label}
                                 end
                             else
-                                phi_entries << {value: value_ref("i8*", "null", constant: true), label: current_label}
+                                pred_label = ctx.fresh_label("case_pred")
+                                ctx.io << "  br label %#{pred_label}\n"
+                                ctx.io << "#{pred_label}:\n"
                                 ctx.io << "  br label %#{exit_label}\n"
+                                phi_entries << {value: value_ref("i8*", "null", constant: true), label: pred_label}
                             end
                             
                             ctx.io << "#{exit_label}:\n"
@@ -1915,7 +2277,7 @@ module Dragonstone
                                 if struct_name = struct_name_for_value(receiver)
                                     method_symbol = struct_method_symbol(struct_name, name)
 
-                                    if @function_signatures.has_key?(method_symbol)
+                                    if @function_overloads.has_key?(method_symbol) || @function_signatures.has_key?(method_symbol)
                                         return receiver
                                     end
 
@@ -1923,6 +2285,10 @@ module Dragonstone
                                         return receiver
                                     end
                                 end
+                            end
+
+                            if ctx.locals.has_key?("self")
+                                return load_local(ctx, "self")
                             end
 
                             nil
@@ -1994,10 +2360,16 @@ module Dragonstone
                         end
                         
                         private def materialize_string_pointer(ctx : FunctionContext, literal : String) : String
-                            entry = intern_string(literal)
+                            entry = @string_literals[literal]?
+                            
+                            unless entry
+                                entry = intern_string(literal)
+                                @pending_strings << literal
+                            end
+
                             size = entry[:length] + 1
                             reg = ctx.fresh("str")
-                            ctx.io << "  %#{reg} = getelementptr [#{size} x i8], [#{size} x i8]* @#{entry[:name]}, i32 0, i32 0\n"
+                            ctx.io << "  %#{reg} = getelementptr [#{size} x i8], [#{size} x i8]* @\"#{entry[:name]}\", i32 0, i32 0\n"
                             "%#{reg}"
                         end
                         
@@ -2111,6 +2483,13 @@ module Dragonstone
                                 return emit_range_op(ctx, operator, lhs, rhs)
                             end
 
+                            if operator == :+ && lhs[:type] == "i8*" && rhs[:type] == "i8*"
+                                return runtime_call(ctx, "i8*", @runtime[:generic_add], [
+                                    {type: "i8*", ref: lhs[:ref]},
+                                    {type: "i8*", ref: rhs[:ref]}
+                                ])
+                            end
+
                             if struct_name = struct_name_for_value(lhs)
                                 method_name = operator.to_s
                                 return emit_struct_method_dispatch(ctx, struct_name, lhs, method_name, [rhs])
@@ -2141,7 +2520,7 @@ module Dragonstone
                             end
 
                             case operator
-                            when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>"
+                            when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>", :&, :|, :^, :>>, :%
                                 target_bits = integer_operation_width(lhs, rhs)
                                 lhs = coerce_integer(ctx, lhs, target_bits)
                                 rhs = coerce_integer(ctx, rhs, target_bits)
@@ -2153,11 +2532,32 @@ module Dragonstone
                                 when :"//" then "sdiv"
                                 when :"&-" then "sub"
                                 when :"<=>" then nil
+                                when :& then "and"
+                                when :| then "or"
+                                when :^ then "xor"
+                                when :>> then "ashr"
+                                when :% then "srem"
                                 else
                                     raise "Unsupported arithmetic operator #{operator}"
                                 end
-                                
+
                                 type = "i#{target_bits}"
+
+                                if operator == :/ || operator == :"//" || operator == :%
+                                    is_zero = ctx.fresh("is_zero")
+                                    ctx.io << "  %#{is_zero} = icmp eq #{type} #{rhs[:ref]}, 0\n"
+                                    zero_label = ctx.fresh_label("div_zero")
+                                    cont_label = ctx.fresh_label("div_cont")
+                                    ctx.io << "  br i1 %#{is_zero}, label %#{zero_label}, label %#{cont_label}\n"
+                                    
+                                    ctx.io << "#{zero_label}:\n"
+                                    msg_ptr = materialize_string_pointer(ctx, "Division by zero")
+                                    ctx.io << "  call void @#{@runtime[:raise]}(i8* #{msg_ptr})\n"
+                                    ctx.io << "  unreachable\n"
+                                    
+                                    ctx.io << "#{cont_label}:\n"
+                                end
+
                                 if operator == :"<=>"
                                     reg = ctx.fresh("cmp3")
                                     gt = ctx.fresh("cmpgt")
@@ -2176,13 +2576,11 @@ module Dragonstone
                                     value_ref(type, "%#{reg}")
                                 end
                             when :"==", :"!=", :"<", :"<=", :">", :">="
-                           
                                 if float_operation?(lhs, rhs)
                                     emit_float_comparison(ctx, operator, lhs, rhs)
                                 elsif (operator == :"==" || operator == :"!=") && (pointer_type?(lhs[:type]) || pointer_type?(rhs[:type]))
                                     emit_pointer_comparison(ctx, operator, lhs, rhs)
                                 else
-                      
                                     emit_integer_comparison(ctx, operator, lhs, rhs)
                                 end
                             else
@@ -2221,6 +2619,11 @@ module Dragonstone
                                 arg_val = generate_expression(ctx, args.first)
                                 emit_echo(ctx, arg_val, inspect: false)
                                 return value_ref("i8*", "null", constant: true) 
+                            elsif call.name == "typeof"
+                                raise "typeof expects exactly one argument" unless args.size == 1
+                                raise "typeof does not accept a block" if block_node
+                                arg_val = box_value(ctx, generate_expression(ctx, args.first))
+                                return runtime_call(ctx, "i8*", @runtime[:typeof], [{type: "i8*", ref: arg_val[:ref]}])
                             end
                             
                             block_value = block_node ? generate_block_literal(ctx, block_node) : nil
@@ -2243,37 +2646,73 @@ module Dragonstone
                                 return emit_receiver_call(ctx, call.name, receiver_value, arg_values, block_value)
                             end
                             
-                            requires_block = @function_requires_block[call.name]? || false
                             call_args = arg_values.dup
-
-                            if requires_block
-                                block_argument = block_value ||
-                                value_ref("i8*", "null", constant: true)
-                                call_args << block_argument
-                            elsif block_value
-                                raise "Function 
-                                #{call.name} does not accept a block"
-                            end
                             
                             if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
-                                struct_name = struct_name_for_value(implicit_receiver).not_nil!
-                                return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
+                                if struct_name = struct_name_for_value(implicit_receiver)
+                                    return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
+                                end
                             end
 
-                            emit_function_call(ctx, call, call_args)
+                            emit_function_call(ctx, call, call_args, block_value)
                         end
-                        
-                        private def emit_function_call(ctx : FunctionContext, call : AST::MethodCall, args : Array(ValueRef)) : ValueRef?
-                            target_name = call.name == "main" ? "__dragonstone_user_main" : call.name
-                            signature = ensure_function_signature(target_name)
+
+                        private def emit_function_call(ctx : FunctionContext, call : AST::MethodCall, args : Array(ValueRef), block_value : ValueRef? = nil) : ValueRef?
+                            base_name = call.name == "main" ? "__dragonstone_user_main" : call.name
+                            args_with_block = args.dup
+                            block_arg = block_value || value_ref("i8*", "null", constant: true)
+
+                            overloads = @function_overloads[base_name]?
+                            signature = nil
+                            target_name = nil
+
+                            if overloads
+                                overloads.each do |cand|
+                                    if sig = @function_signatures[cand]?
+                                        expected = sig[:param_types].size
+                                        if expected == args_with_block.size
+                                            signature = sig
+                                            target_name = cand
+                                            break
+                                        elsif expected == args_with_block.size + 1 && sig[:param_types].last == "i8*"
+                                            signature = sig
+                                            target_name = cand
+                                            args_with_block << block_arg
+                                            break
+                                        end
+                                    end
+                                end
+                                if !signature && !overloads.empty?
+                                    target_name = overloads.first
+                                    signature = @function_signatures[target_name]?
+                                end
+                            end
+
+                            unless signature
+                                target_name = base_name
+                                signature = @function_signatures[target_name]?
+                            end
+
+                            target_name ||= base_name
                             
+                            if !signature && target_name != "__dragonstone_user_main"
+                                param_suffix = args.map { |a| a[:type].gsub("*", "P").gsub("%", "") }.join("_")
+                                target_name = "#{target_name}_#{param_suffix}" unless param_suffix.empty?
+                            end
+
+                            signature ||= ensure_function_signature(target_name)
+
                             expected = signature[:param_types].size
-                            provided = args.size
+                            if expected == args_with_block.size + 1 && signature[:param_types].last == "i8*"
+                                args_with_block << block_arg
+                            end
+
+                            provided = args_with_block.size
                             unless expected == provided
                                 raise "Function #{call.name} expects #{expected} arguments but got #{provided}"
                             end
                             
-                            coerced_args = args.map_with_index do |value, index|
+                            coerced_args = args_with_block.map_with_index do |value, index|
                                 ensure_value_type(ctx, value, signature[:param_types][index])
                             end
                             
@@ -2295,9 +2734,10 @@ module Dragonstone
                             name_ptr = materialize_string_pointer(ctx, method_name)
                             
                             block_arg = block_value ? block_value[:ref] : "null"
+                            receiver_ptr = ensure_pointer(ctx, receiver)
                             
                             runtime_call(ctx, "i8*", @runtime[:method_invoke], [
-                                {type: "i8*", ref: receiver[:ref]},
+                                {type: "i8*", ref: receiver_ptr[:ref]},
                                 {type: "i8*", ref: name_ptr},
                                 {type: "i64", ref: args.size.to_s},
                                 {type: "i8**", ref: buffer},
@@ -2342,32 +2782,23 @@ module Dragonstone
 
                             if expected.starts_with?("%") && value[:type] == "i8*"
                                 data_ptr = runtime_call(ctx, "i8*", @runtime[:unbox_struct], [{type: "i8*", ref: value[:ref]}])
-
                                 typed_ptr = ctx.fresh("struct_ptr")
-   
                                 ctx.io << "  %#{typed_ptr} = bitcast i8* #{data_ptr[:ref]} to #{expected}*\n"
-
                                 reg = ctx.fresh("unboxed")
-                           
                                 ctx.io << "  %#{reg} = load #{expected}, #{expected}* %#{typed_ptr}\n"
-
                                 return value_ref(expected, "%#{reg}")
                             end
 
-                        
                             case expected
                             when "i32"
                                 coerce_integer(ctx, value, 32)
                             when "i64"
-   
                                 coerce_integer(ctx, value, 64)
                             when "i1"
                                 coerce_boolean_exact(ctx, value)
-       
                             when "double"
                                 ensure_double(ctx, value)
                             else
-                 
                                 raise "Cannot convert #{value[:type]} to #{expected}"
                             end
                         end
@@ -2385,7 +2816,6 @@ module Dragonstone
                             from_val = coerce_integer(ctx, lhs, 64)
                             to_val = coerce_integer(ctx, rhs, 64)
                             exclusive = operator == :"..."
-
                             reg = ctx.fresh("range")
                             flag = exclusive ? "1" : "0"
                             ctx.io << "  %#{reg} = call i8* @#{@runtime[:range_literal]}(i64 #{from_val[:ref]}, i64 #{to_val[:ref]}, i1 #{flag})\n"
@@ -2485,8 +2915,7 @@ module Dragonstone
                                 cmp
                             end
                         end
-              
-           
+                        
                         private def ensure_boolean(ctx : FunctionContext, value : ValueRef) : ValueRef
                             return value if value[:type] == "i1"
                             
@@ -2607,7 +3036,6 @@ module Dragonstone
                         
                         private def llvm_type_of(type_expr : AST::TypeExpression?) : String
                             return "i8*" unless type_expr
-                  
                             case type_expr
                             when AST::SimpleTypeExpression
                                 name = type_expr.name
@@ -2680,15 +3108,21 @@ module Dragonstone
                         
                         private def ensure_function_signature(name : String) : FunctionSignature
                             if signature = @function_signatures[name]?
-                                signature
-                            else
-                                if info = @analysis.symbol_table.lookup(name)
-                                    if info.kind == Language::Sema::SymbolKind::Function
-                                        raise "Function #{name} is declared but no definition was provided for LLVM emission"
-                                    end
-                                end
-                                raise "Unknown function #{name}"
+                                return signature
                             end
+                            
+                            candidate = @function_signatures.find { |k, v| k.starts_with?("#{name}_") }
+                            if candidate
+                                return candidate[1]
+                            end
+
+                            if info = @analysis.symbol_table.lookup(name)
+                                if info.kind == Language::Sema::SymbolKind::Function
+                                    raise "Function #{name} is declared but no definition was provided for LLVM emission"
+                                end
+                            end
+
+                            raise "Unknown function #{name}"
                         end
                         
                         private def value_ref(type : String, ref : String, constant : Bool = false, kind : Symbol? = nil) : ValueRef
@@ -2697,6 +3131,12 @@ module Dragonstone
                         
                         private def pointer_type_for(type : String) : String
                             "#{type}*"
+                        end
+
+                        private def mangle_function_name(base : String, param_types : Array(String)) : String
+                            return base if base == "__dragonstone_user_main"
+                            suffix = param_types.map { |t| t.gsub("%", "").gsub("*", "P") }.join("_")
+                            suffix.empty? ? base : "#{base}_#{suffix}"
                         end
                         
                         private def unique_block_symbol : String
@@ -2724,11 +3164,9 @@ module Dragonstone
 
                             if @globals.includes?(full_name)
                                 reg = ctx.fresh("load_global")
-             
                                 global_name = mangle_global_name(full_name)
-                                ctx.io << "  %#{reg} = load i8*, i8** @#{global_name}\n"
+                                ctx.io << "  %#{reg} = load i8*, i8** @\"#{global_name}\"\n"
                                 return value_ref("i8*", "%#{reg}")
-    
                             end
 
                             if constant_symbol?(name)
@@ -2736,8 +3174,11 @@ module Dragonstone
                             elsif ctx.locals.has_key?(name)
                                 load_local(ctx, name)
                             elsif receiver = resolve_implicit_receiver(ctx, name)
-                                struct_name = struct_name_for_value(receiver).not_nil!
-                                emit_struct_method_dispatch(ctx, struct_name, receiver, name, [] of ValueRef)
+                                if struct_name = struct_name_for_value(receiver)
+                                    emit_struct_method_dispatch(ctx, struct_name, receiver, name, [] of ValueRef)
+                                else
+                                    emit_receiver_call(ctx, name, receiver, [] of ValueRef)
+                                end
                             else
                                 raise "Undefined local #{name}"
                             end
@@ -2767,7 +3208,7 @@ module Dragonstone
                             
                             if @globals.includes?(full_name)
                                 global_name = mangle_global_name(full_name)
-                                ctx.io << "  store i8* %#{reg}, i8** @#{global_name}\n"
+                                ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
                             end
 
                             with_namespace(node.name) do
@@ -2777,11 +3218,36 @@ module Dragonstone
                         end
 
                         private def generate_module_definition(ctx : FunctionContext, node : AST::ModuleDefinition) : Bool
-                            emit_namespace_placeholder(ctx, node.name)
+                            full_name = qualify_name(node.name)
+                            name_ptr = materialize_string_pointer(ctx, full_name)
+
+                            reg = ctx.fresh("module")
+                            ctx.io << "  %#{reg} = call i8* @#{@runtime[:define_module]}(i8* #{name_ptr})\n"
+
+                            if @globals.includes?(full_name)
+                                global_name = mangle_global_name(full_name)
+                                ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
+                            end
+
                             with_namespace(node.name) do
                                 generate_block(ctx, node.body)
                             end
                             false
+                        end
+
+                        private def generate_extend_statement(ctx : FunctionContext, node : AST::ExtendStatement) : Nil
+                            return if @namespace_stack.empty?
+                            container_name = @namespace_stack.join("::")
+                            return unless @globals.includes?(container_name)
+
+                            global_name = mangle_global_name(container_name)
+                            container_reg = ctx.fresh("extend_container")
+                            ctx.io << "  %#{container_reg} = load i8*, i8** @\"#{global_name}\"\n"
+
+                            node.targets.each do |target|
+                                target_val = ensure_pointer(ctx, generate_expression(ctx, target))
+                                ctx.io << "  call void @#{@runtime[:extend_container]}(i8* %#{container_reg}, i8* #{target_val[:ref]})\n"
+                            end
                         end
 
                         private def emit_namespace_placeholder(ctx : FunctionContext, name : String)
@@ -2842,12 +3308,30 @@ module Dragonstone
                         private def emit_struct_new(ctx : FunctionContext, struct_name : String, args : Array(ValueRef)) : ValueRef
                             fields = @struct_layouts[struct_name]? || raise "Unknown struct #{struct_name}"
 
-                            if args.size != fields.size
-                                raise "Struct #{struct_name} expects #{fields.size} arguments but got #{args.size}"
-                            end
-
                             struct_type = llvm_struct_name(struct_name)
                             current_ref = "zeroinitializer"
+                            fields.each_with_index do |target_type_expr, index|
+                                if index < args.size
+                                    arg = args[index]
+                                    target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                                    coerced = ensure_value_type(ctx, arg, target_type)
+                                    reg = ctx.fresh("structinit")
+                                    base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
+                                    ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{coerced[:type]} #{coerced[:ref]}, #{index}\n"
+                                    current_ref = "%#{reg}"
+                                else
+                                    target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                                    zero = zero_value(target_type)
+                                    reg = ctx.fresh("structinit")
+                                    base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
+                                    ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{target_type} #{zero}, #{index}\n"
+                                    current_ref = "%#{reg}"
+                                end
+                            end
+
+                            if args.size > fields.size
+                                raise "Struct #{struct_name} expects #{fields.size} arguments but got #{args.size}"
+                            end
                             args.each_with_index do |arg, index|
                                 target_type_expr = fields[index]
                                 target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
@@ -2903,8 +3387,9 @@ module Dragonstone
                             end
                             
                             function_symbol = struct_method_symbol(struct_name, method_name)
-                            signature = ensure_function_signature(function_symbol)
                             call_args = [receiver] + args
+                            mangled_symbol = mangle_function_name(function_symbol, call_args.map { |arg| arg[:type] })
+                            signature = ensure_function_signature(mangled_symbol)
                             expected_params = signature[:param_types]
 
                             if expected_params.size != call_args.size
@@ -2920,11 +3405,11 @@ module Dragonstone
                             return_type = signature[:return_type]
 
                             if return_type == "void"
-                                ctx.io << "  call void @\"#{function_symbol}\"(#{arg_source})\n"
+                                ctx.io << "  call void @\"#{mangled_symbol}\"(#{arg_source})\n"
                                 value_ref("i8*", "null", constant: true)
                             else
                                 reg = ctx.fresh("structcall")
-                                ctx.io << "  %#{reg} = call #{return_type} @\"#{function_symbol}\"(#{arg_source})\n"
+                                ctx.io << "  %#{reg} = call #{return_type} @\"#{mangled_symbol}\"(#{arg_source})\n"
                                 value_ref(return_type, "%#{reg}")
                             end
                         end

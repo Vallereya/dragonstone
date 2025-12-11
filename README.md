@@ -3,7 +3,22 @@
 </p>
 <br>
 <p align="center">
-    <div align="center"> <img src="https://img.shields.io/badge/⚠️-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE"/> </div>
+    <div align="center">
+        <img src="https://img.shields.io/badge/⚠️%20Warning-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE"/>
+    </div>
+    <br>
+    <div align="center">
+        <img src="https://img.shields.io/badge/🟢%20Passing-Frontend:%20Interpreter-379144"/>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20ByteCode-379144"/>
+    </div>
+    <div align="center">
+        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20LLVM-E7CD54"/>
+    </div>
+    <div align="center">
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D"/>
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D"/>
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20C-BC002D"/>
+    </div>
 </p>
 <br>
 
@@ -77,7 +92,6 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Build and Run Files via the Compiler with a target.
 ```bash
     # Supported Target Flags: bytecode, llvm, c, crystal, and ruby
-    # I may extend this in the future for Python and JavaScript targets, or even more.
     dragonstone build --target bytecode examples/hello_world.ds
 
     # Build and immediately execute the produced artifacts.
@@ -350,7 +364,7 @@ echo square.call(6)
 
 You can run these yourself from the `./scripts` directory.
 
-### 1 Billion Nested Loop Iteration Benchmark (Interpreter)
+### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
 ```bash
     ~4.47   billion iterations/seconds
     ~224    ns
@@ -359,7 +373,7 @@ You can run these yourself from the `./scripts` directory.
     Actual Time:            3.73 minutes
 ```
 
-### 1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)
+### *1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)*
 ```bash
     ~812    billion iterations/seconds
     ~1.23   ns
@@ -369,8 +383,8 @@ You can run these yourself from the `./scripts` directory.
     Results:                ~182x Faster
 ```
 
-### Comparison Context
-For 1 billion iterations of this benchmark (Interpreter):
+### *Comparison Context*
+###### For 1 billion iterations of this benchmark (Interpreter):
 ```bash
     Ruby v2.X.X         = ~15-30 minutes    (varies by version)
     Python v3.X.X       = ~5-15 minutes     (varies by version)
@@ -379,7 +393,7 @@ For 1 billion iterations of this benchmark (Interpreter):
     JavaScript          = ~10-30 seconds    (using V8)
 ```
 
-For 1 billion iterations of this benchmark (Compiler/LLVM):
+###### For 1 billion iterations of this benchmark (Compiler/LLVM):
 ```bash
     C                   = ~0.5-1.5 seconds
     Rust                = ~0.5-1.5 seconds

@@ -220,7 +220,7 @@ module Dragonstone
         private def run_artifacts(program : IR::Program, artifacts : Array(TargetArtifact), stdout : IO, stderr : IO) : Bool
             artifacts.each do |entry|
                 target = entry[:target]
-                stdout.puts "Running #{target_label(target)} artifact..."
+                # stdout.puts "Running #{target_label(target)} artifact..."
                 return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr, entry[:linked_path])
             end
 
@@ -374,15 +374,15 @@ module Dragonstone
         private def report_artifact(target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, linked_path : String?) : Nil
             label = target_label(target)
             if path = artifact.object_path
-                stdout.puts "Built #{label} -> #{path}"
+                # stdout.puts "Built #{label} -> #{path}"
             elsif bytecode = artifact.bytecode
                 instructions = bytecode.code.size
-                stdout.puts "Built #{label} (#{instructions} instructions)"
+                # stdout.puts "Built #{label} (#{instructions} instructions)"
             else
-                stdout.puts "Built #{label}"
+                # stdout.puts "Built #{label}"
             end
             if linked_path
-                stdout.puts "Linked #{label} binary -> #{linked_path}"
+                # stdout.puts "Linked #{label} binary -> #{linked_path}"
             end
         end
 
@@ -406,7 +406,7 @@ module Dragonstone
         end
 
         private def link_with_clang(ir_path : String, runtime_obj : String, binary_path : String, stdout : IO, stderr : IO) : Bool
-            args = [ir_path, runtime_obj, "-o", binary_path]
+            args = ["-Wno-override-module", ir_path, runtime_obj, "-o", binary_path]
             run_clang(args, stdout, stderr)
         end
 
