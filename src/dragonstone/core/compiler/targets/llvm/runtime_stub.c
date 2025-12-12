@@ -853,6 +853,20 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
     if (box->kind == DS_VALUE_CLASS) {
         DSClass *cls = (DSClass *)box->as.ptr;
         if (strcmp(method, "new") == 0 && !cls->is_module) {
+            /* Enum-style constructor: match by value if enum members exist. */
+            if (argc == 1) {
+                int64_t target = dragonstone_runtime_unbox_i64(argv[0]);
+                DSConstant *c = cls->constants;
+                while (c) {
+                    if (ds_is_boxed(c->value) && ((DSValue *)c->value)->kind == DS_VALUE_ENUM) {
+                        DSEnum *e = (DSEnum *)((DSValue *)c->value)->as.ptr;
+                        if (e && e->klass == cls && e->value == target) {
+                            return c->value;
+                        }
+                    }
+                    c = c->next;
+                }
+            }
 
             DSInstance *inst = (DSInstance *)ds_alloc(sizeof(DSInstance));
             inst->klass = cls;
@@ -1064,7 +1078,7 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                 args[1] = curr->value;
                 void *res = dragonstone_runtime_block_invoke(block_val, 2, args);
                 if (dragonstone_runtime_case_compare(res, dragonstone_runtime_box_bool(true))) {
-                    void *items[2];
+                    void **items = (void **)ds_alloc(sizeof(void*) * 2);
                     items[0] = curr->key;
                     items[1] = curr->value;
                     return dragonstone_runtime_tuple_literal(2, items);

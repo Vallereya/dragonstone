@@ -25,6 +25,8 @@ release
 
 # Ignore any Output/Build Cache from testing.
 .cache
+.tmp
+.crystal-cache
 
 # Ignore my self-hosting/bootstrap compiler builds and notes.
 LLVM_CHECKLIST.md

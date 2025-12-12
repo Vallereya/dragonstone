@@ -3,6 +3,7 @@
         Command Usage:
             Rebuild: `dragonstone.ps1 --rebuild`
             Clean: `dragonstone.ps1 --clean`
+            Clean and Rebuild: `dragonstone.ps1 --clean-rebuild`
 
     .SYNOPSIS
         PowerShell launcher script for Dragonstone.
@@ -215,6 +216,7 @@ function CompileDragonstoneResource {
     }
 
     $tool = $null
+    # $toolNames = @('llvm-rc', 'x86_64-w64-mingw32-windres', 'windres')
     $toolNames = @('windres', 'x86_64-w64-mingw32-windres', 'llvm-rc')
 
     foreach ($name in $toolNames) {
@@ -330,6 +332,7 @@ function EnsureDragonstoneExecutable {
 
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
+        # $resourceLinkArg = $resourceLinkArg -replace '\\','/'
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
 
         # Write-Host "Resource object file: $resourceLinkArg"
@@ -387,6 +390,23 @@ if ($argCount -gt 0) {
     if ($firstArg -eq '--clean') {
         Clean-DragonstoneArtifacts
         exit 0
+    }
+
+    # Handles the `--clean-rebuild` flag.
+    if ($firstArg -eq '--clean-rebuild') {
+        Clean-DragonstoneArtifacts
+
+        if (-not (Test-Path -Path $buildDir)) {
+            New-Item -ItemType Directory -Path $buildDir | Out-Null
+        }
+
+        $forceRebuild = $true
+
+        if ($argCount -gt 1) {
+            $DragonstoneArgs = $DragonstoneArgs[1..($argCount - 1)]
+        } else {
+            [string[]]$DragonstoneArgs = @()
+        }
     }
     
     # Handles the `--rebuild-exe` flag.

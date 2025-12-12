@@ -108,7 +108,7 @@ module Dragonstone
                             array_push: String,
                             generic_add: String,
                             to_string: String,
-                            typeof: String,
+                            type_of: String,
                             bag_constructor: String,
                             ivar_get: String,
                             ivar_set: String,
@@ -158,6 +158,8 @@ module Dragonstone
                             @struct_layouts = {} of String => Array(AST::TypeExpression?)
                             @struct_field_indices = {} of String => Hash(String, Int32)
                             @struct_alias_map = {} of String => String
+                            @struct_name_occurrences = Hash(String, Int32).new(0)
+                            @struct_unique_names = {} of AST::StructDefinition => String
                             @struct_stack = [] of String
 
                             @emitted_struct_types = Set(String).new
@@ -210,7 +212,7 @@ module Dragonstone
                                 generic_add: "dragonstone_runtime_add",
                                 to_string: "dragonstone_runtime_to_string",
                                 bag_constructor: "dragonstone_runtime_bag_constructor",
-                                typeof: "dragonstone_runtime_typeof",
+                                type_of: "dragonstone_runtime_typeof",
                                 ivar_get: "dragonstone_runtime_ivar_get",
                                 ivar_set: "dragonstone_runtime_ivar_set",
                                 singleton_define: "dragonstone_runtime_define_singleton_method",
@@ -385,12 +387,19 @@ module Dragonstone
                         private def register_struct_types(node : AST::Node)
                             case node
                             when AST::StructDefinition
-                                full_name = qualify_name(node.name)
+                                base_full_name = qualify_name(node.name)
+                                count = (@struct_name_occurrences[base_full_name] += 1)
+                                unique_ns = count > 1 ? "#{node.name}_#{count}" : node.name
+                                full_name = qualify_name(unique_ns)
+
+                                @struct_unique_names[node] = unique_ns
                                 struct_fields_for(full_name)
                                 struct_field_map_for(full_name)
-                                @struct_alias_map[node.name] = full_name unless @struct_alias_map.has_key?(node.name)
+                                @struct_alias_map[node.name] = full_name
+                                @struct_alias_map[base_full_name] = full_name
+
                                 @struct_stack << full_name
-                                with_namespace(node.name) do
+                                with_namespace(unique_ns) do
                                     node.body.each { |stmt| register_struct_types(stmt) }
                                 end
                                 @struct_stack.pop
@@ -654,7 +663,8 @@ module Dragonstone
                         private def collect_functions_from(node : AST::Node)
                             case node
                             when AST::StructDefinition
-                                with_namespace(node.name) do
+                                struct_name = @struct_unique_names[node]? || node.name
+                                with_namespace(struct_name) do
                                     node.body.each { |stmt| collect_functions_from(stmt) }
                                 end
                             when AST::ClassDefinition, AST::ModuleDefinition
@@ -701,7 +711,7 @@ module Dragonstone
 
                             requires_block = function_body_contains_yield?(func.body)
 
-                            param_types = func.typed_parameters.map { |_| "i8*" }
+                            param_types = func.typed_parameters.map { |param| llvm_param_type(param.type) }
 
                             if receiver_type
                                 param_types.unshift(receiver_type)
@@ -831,7 +841,7 @@ module Dragonstone
                             io << "declare void @#{@runtime[:yield_missing_block]}()\n"
                             io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
-                            io << "declare i8* @#{@runtime[:typeof]}(i8*)\n"
+                            io << "declare i8* @#{@runtime[:type_of]}(i8*)\n"
                             io << "declare i8* @#{@runtime[:ivar_get]}(i8*, i8*)\n"
                             io << "declare i8* @#{@runtime[:ivar_set]}(i8*, i8*, i8*)\n"
                             io << "declare void @#{@runtime[:singleton_define]}(i8*, i8*, i8*)\n"
@@ -898,7 +908,7 @@ module Dragonstone
                                 type = llvm_param_type(param.type)
                                 arg_name = "%arg#{index}"
                                 param_specs << {type: type, source: arg_name, name: param.name}
-                                params << "i8* #{arg_name}"
+                                params << "#{type} #{arg_name}"
                             end
 
                             if requires_block
@@ -910,9 +920,9 @@ module Dragonstone
                             param_specs.each do |spec|
                                 slot = "%#{ctx.fresh("param")}"
                                 ctx.alloca_buffer << "  #{slot} = alloca #{spec[:type]}\n"
-                                
-                                incoming_val = value_ref("i8*", spec[:source])
-                                
+
+                                incoming_val = value_ref(spec[:type], spec[:source])
+
                                 if spec[:name] == "self" && spec[:type] != "i8*"
                                     ctx.io << "  store #{spec[:type]} #{spec[:source]}, #{spec[:type]}* #{slot}\n"
                                 else
@@ -921,6 +931,7 @@ module Dragonstone
                                 end
                                 
                                 ctx.locals[spec[:name]] = {ptr: slot, type: spec[:type], heap: false}
+                                
                                 if spec[:name] == "__block"
                                     ctx.block_slot = {ptr: slot, type: spec[:type]}
                                 end
@@ -929,17 +940,20 @@ module Dragonstone
                                 target_ivar_name = is_ivar ? spec[:name] : "@#{spec[:name]}"
                                 
                                 if (is_ivar || func.name == "initialize") && ctx.locals.has_key?("self")
-                                    self_ref = load_local(ctx, "self")
-                                    val_ref = load_local(ctx, spec[:name])
-                                    boxed_val = box_value(ctx, val_ref)
-                                    
-                                    name_ptr = materialize_string_pointer(ctx, target_ivar_name)
-                                    
-                                    runtime_call(ctx, "i8*", @runtime[:ivar_set], [
-                                        {type: "i8*", ref: self_ref[:ref]},
-                                        {type: "i8*", ref: name_ptr},
-                                        {type: "i8*", ref: boxed_val[:ref]}
-                                    ])
+                                    receiver = ctx.locals["self"]
+                                    if receiver[:type] == "i8*"
+                                        self_ref = load_local(ctx, "self")
+                                        val_ref = load_local(ctx, spec[:name])
+                                        boxed_val = box_value(ctx, val_ref)
+                                        
+                                        name_ptr = materialize_string_pointer(ctx, target_ivar_name)
+                                        
+                                        runtime_call(ctx, "i8*", @runtime[:ivar_set], [
+                                            {type: "i8*", ref: self_ref[:ref]},
+                                            {type: "i8*", ref: name_ptr},
+                                            {type: "i8*", ref: boxed_val[:ref]}
+                                        ])
+                                    end
                                 end
                             end
                             
@@ -1138,26 +1152,23 @@ module Dragonstone
                                     receiver_val = ensure_pointer(ctx, generate_expression(ctx, stmt.receiver.not_nil!))
                                     method_name_ptr = materialize_string_pointer(ctx, stmt.name)
                                     llvm_name = @function_names[stmt]
-                                    signature = @function_signatures[llvm_name]
-                                    param_types_str = signature[:param_types].join(", ")
-                                    func_type = "#{signature[:return_type]} (#{param_types_str})*"
+                                    wrapper, wrapper_sig = generate_method_wrapper(llvm_name)
                                     func_ptr = ctx.fresh("func")
-                                    ctx.io << "  %#{func_ptr} = bitcast #{func_type} @\"#{llvm_name}\" to i8*\n"
+                                    ctx.io << "  %#{func_ptr} = bitcast #{wrapper_sig} @\"#{wrapper}\" to i8*\n"
                                     ctx.io << "  call void @#{@runtime[:singleton_define]}(i8* #{receiver_val[:ref]}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
                                 elsif !@namespace_stack.empty?
                                     class_name = @namespace_stack.join("::")
                                     original_name = class_name.sub(/_\d+$/, "")
+
                                     if @globals.includes?(original_name)
                                         global_name = mangle_global_name(original_name)
                                         cls_reg = ctx.fresh("cls")
                                         ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
                                         method_name_ptr = materialize_string_pointer(ctx, stmt.name)
                                         llvm_name = @function_names[stmt]
-                                        signature = @function_signatures[llvm_name]
-                                        param_types_str = signature[:param_types].join(", ")
-                                        func_type = "#{signature[:return_type]} (#{param_types_str})*"
+                                        wrapper, wrapper_sig = generate_method_wrapper(llvm_name)
                                         func_ptr = ctx.fresh("func")
-                                        ctx.io << "  %#{func_ptr} = bitcast #{func_type} @\"#{llvm_name}\" to i8*\n"
+                                        ctx.io << "  %#{func_ptr} = bitcast #{wrapper_sig} @\"#{wrapper}\" to i8*\n"
                                         ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
                                     end
                                 end
@@ -1328,6 +1339,77 @@ module Dragonstone
                             emit_define_method_call(ctx, class_name, method_name, mangled, "i8* (i8*, i8*)")
                         end
 
+                        private def generate_method_wrapper(llvm_name : String) : Tuple(String, String)
+                            wrapper_name = "#{llvm_name}_wrapper"
+                            
+                            signature = @function_signatures[llvm_name]
+                            param_types = signature[:param_types]
+                            
+                            func_def = @function_defs[llvm_name]?
+                            has_receiver = func_def ? @function_receivers.has_key?(func_def) : true
+                            
+                            explicit_indices = [] of Int32
+                            param_types.each_with_index do |_, i|
+                                if has_receiver && i == 0
+                                    # Skip.
+                                else
+                                    explicit_indices << i
+                                end
+                            end
+                            
+                            wrapper_params = ["i8* %self"]
+                            explicit_indices.each_with_index do |_, i|
+                                wrapper_params << "i8* %arg#{i}"
+                            end
+                            
+                            wrapper_sig_str = "i8* (#{wrapper_params.map { "i8*" }.join(", ")})*"
+
+                            if @emitted_functions.includes?(wrapper_name)
+                                return {wrapper_name, wrapper_sig_str}
+                            end
+
+                            body = String::Builder.new
+                            ctx = FunctionContext.new(body, "i8*")
+                            
+                            call_args = [] of String
+                            
+                            param_types.each_with_index do |expected_type, i|
+                                if has_receiver && i == 0
+                                    val_ref = value_ref("i8*", "%self")
+                                    converted = ensure_value_type(ctx, val_ref, expected_type)
+                                    call_args << "#{converted[:type]} #{converted[:ref]}"
+                                else
+                                    wrapper_arg_idx = has_receiver ? i - 1 : i
+                                    val_ref = value_ref("i8*", "%arg#{wrapper_arg_idx}")
+                                    converted = ensure_value_type(ctx, val_ref, expected_type)
+                                    call_args << "#{converted[:type]} #{converted[:ref]}"
+                                end
+                            end
+                            
+                            ret_type = signature[:return_type]
+                            if ret_type == "void"
+                                body << "  call void @\"#{llvm_name}\"(#{call_args.join(", ")})\n"
+                                body << "  ret i8* null\n"
+                            else
+                                res = ctx.fresh("res")
+                                body << "  %#{res} = call #{ret_type} @\"#{llvm_name}\"(#{call_args.join(", ")})\n"
+                                res_ref = value_ref(ret_type, "%#{res}")
+                                boxed = box_value(ctx, res_ref)
+                                body << "  ret i8* #{boxed[:ref]}\n"
+                            end
+                            
+                            io = String::Builder.new
+                            io << "define i8* @\"#{wrapper_name}\"(#{wrapper_params.join(", ")}) {\n"
+                            io << "entry:\n"
+                            io << ctx.alloca_buffer.to_s
+                            io << body.to_s
+                            io << "}\n\n"
+                            
+                            @pending_blocks << io.to_s
+                            @emitted_functions << wrapper_name
+                            {wrapper_name, wrapper_sig_str}
+                        end
+
                         private def emit_define_method_call(ctx : FunctionContext, class_name : String, method_name : String, llvm_func : String, cast_type : String)
                             original_name = class_name.sub(/_\d+$/, "")
 
@@ -1335,12 +1417,13 @@ module Dragonstone
                                 global_name = mangle_global_name(original_name)
                                 cls_reg = ctx.fresh("cls")
                                 ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
-                                
+                                wrapper, wrapper_sig = generate_method_wrapper(llvm_func)
                                 name_ptr = materialize_string_pointer(ctx, method_name)
                                 func_ptr = ctx.fresh("func")
-                                ctx.io << "  %#{func_ptr} = bitcast #{cast_type}* @\"#{llvm_func}\" to i8*\n"
+                                ctx.io << "  %#{func_ptr} = bitcast #{wrapper_sig} @\"#{wrapper}\" to i8*\n"
                                 ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{name_ptr}, i8* %#{func_ptr})\n"
                             end
+              
                         end
 
                         private def generate_return_statement(ctx : FunctionContext, stmt : AST::ReturnStatement) : Bool
@@ -2391,10 +2474,11 @@ module Dragonstone
                                 {type: "i8*", ref: boxed[:ref]}
                             ])
                         end
-
+                        
                         private def generate_struct_definition(ctx : FunctionContext, node : AST::StructDefinition) : Bool
-                            emit_namespace_placeholder(ctx, node.name)
-                            with_namespace(node.name) do
+                            struct_name = @struct_unique_names[node]? || node.name
+                            emit_namespace_placeholder(ctx, struct_name)
+                            with_namespace(struct_name) do
                                 generate_block(ctx, node.body)
                             end
                             false
@@ -2487,7 +2571,8 @@ module Dragonstone
 
                         private def generate_instance_variable(ctx : FunctionContext, node : AST::InstanceVariable) : ValueRef
                             self_ref = load_local(ctx, "self")
-                            name_ptr = materialize_string_pointer(ctx, node.name)
+                            ivar_name = node.name.starts_with?("@") ? node.name : "@#{node.name}"
+                            name_ptr = materialize_string_pointer(ctx, ivar_name)
                             runtime_call(ctx, "i8*", @runtime[:ivar_get], [
                                 {type: "i8*", ref: self_ref[:ref]},
                                 {type: "i8*", ref: name_ptr}
@@ -2497,7 +2582,8 @@ module Dragonstone
                         private def generate_instance_variable_assignment(ctx : FunctionContext, node : AST::InstanceVariableAssignment) : ValueRef
                             value = box_value(ctx, generate_expression(ctx, node.value))
                             self_ref = load_local(ctx, "self")
-                            name_ptr = materialize_string_pointer(ctx, node.name)
+                            ivar_name = node.name.starts_with?("@") ? node.name : "@#{node.name}"
+                            name_ptr = materialize_string_pointer(ctx, ivar_name)
                             
                             runtime_call(ctx, "i8*", @runtime[:ivar_set], [
                                 {type: "i8*", ref: self_ref[:ref]},
@@ -2719,10 +2805,11 @@ module Dragonstone
 
                             if type.starts_with?("%")
                                 temp_ptr = ctx.fresh("box_temp")
-                                ctx.io << "  %#{temp_ptr} = alloca #{type}\n"
+                                ctx.alloca_buffer << "  %#{temp_ptr} = alloca #{type}\n"
                                 ctx.io << "  store #{type} #{value[:ref]}, #{type}* %#{temp_ptr}\n"
 
                                 raw_ptr = ctx.fresh("box_raw")
+
                                 ctx.io << "  %#{raw_ptr} = bitcast #{type}* %#{temp_ptr} to i8*\n"
 
                                 size_ptr = ctx.fresh("size_ptr")
@@ -2760,8 +2847,8 @@ module Dragonstone
                             
                             size = values.size
                             buffer = ctx.fresh("buf")
-                            ctx.io << "  %#{buffer} = alloca [#{size} x i8*]\n"
-                            
+                            ctx.alloca_buffer << "  %#{buffer} = alloca [#{size} x i8*], align 16\n"
+                           
                             values.each_with_index do |value, index|
                                 slot = ctx.fresh("bufslot")
                                 ctx.io << "  %#{slot} = getelementptr [#{size} x i8*], [#{size} x i8*]* %#{buffer}, i32 0, i32 #{index}\n"
@@ -2972,7 +3059,7 @@ module Dragonstone
                                 raise "typeof expects exactly one argument" unless args.size == 1
                                 raise "typeof does not accept a block" if block_node
                                 arg_val = box_value(ctx, generate_expression(ctx, args.first))
-                                return runtime_call(ctx, "i8*", @runtime[:typeof], [{type: "i8*", ref: arg_val[:ref]}])
+                                return runtime_call(ctx, "i8*", @runtime[:type_of], [{type: "i8*", ref: arg_val[:ref]}])
                             end
                             
                             block_value = block_node ? generate_block_literal(ctx, block_node) : nil
@@ -3258,8 +3345,13 @@ module Dragonstone
                                 ctx.io << "  %#{reg} = fptosi double #{double_value[:ref]} to i#{target_bits}\n"
                                 value_ref("i#{target_bits}", "%#{reg}")
                             elsif value[:type] == "i8*"
-                                unboxed = runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
-                                target_bits == 32 ? truncate_integer(ctx, unboxed, 32) : unboxed
+                                if target_bits <= 32
+                                    unboxed = runtime_call(ctx, "i32", @runtime[:unbox_i32], [{type: "i8*", ref: value[:ref]}])
+                                    adjust_integer_width(ctx, unboxed, target_bits)
+                                else
+                                    unboxed = runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
+                                    adjust_integer_width(ctx, unboxed, target_bits)
+                                end
                             elsif value[:type].starts_with?("%") && value[:type].ends_with?("*")
                                 cast = ctx.fresh("anycast")
                                 ctx.io << "  %#{cast} = bitcast #{value[:type]} #{value[:ref]} to i8*\n"
