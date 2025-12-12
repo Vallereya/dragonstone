@@ -31,30 +31,46 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ### *Requirements*
 1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed (*1.17.1+*).
 2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
-3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*).
+<!-- 3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*). -->
 
 ### *To Build from Source*
-###### **(Linux/MacOS/Windows)**
+###### **(MacOS/Linux/Windows)**
 1. Clone this repository.
 2. `cd` to the project directory.
 3. Run `shards build --release`
+
+<br>
+
+> **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files roughly about 3-5x slower.
+
+###### **(Linux Recommended)**
+1. Clone this repository.
+2. `cd` to the project directory.
+3. Run `./bin/dragonstone.sh --rebuild`
+4. (optional) Run `./bin/dragonstone.sh --install` which adds `.\bin` to your user PATH.
+    - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
+
+###### **(Linux Alternative)**
+3. Run `shards build --release` for a standard build, PATH.
+
+<br>
+
+> **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` again. For an automated version to do both you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
 
 ### *To Build from Source*
 ###### **(Windows Recommended)**
 1. Clone this repository.
 2. `cd` to the project directory.
 3. Run `.\bin\dragonstone.bat --rebuild`
-    - This builds with the icons/resources and adds `.\bin` to your user PATH Environmental Variables.
+    - This builds with the icons/resources and adds `.\bin` to your user PATH.
     - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
 
 ###### **(Windows Alternative)**
-3. Run `shards build --release` for a standard build, without any icons/resources.
+3. Run `shards build --release` for a standard build, without any icons/resources or PATH.
 
 <br>
 
-> **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files about 3x slower.
-
-> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` again.
+> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` again. For an automated version to do both you can use `.\bin\dragonstone.bat --clean-rebuild` which will clean first then rebuild for you.
 
 > **Tip for Windows Users:** An installer is also available in the [Releases](https://github.com/Vallereya/dragonstone/releases) section.
 
@@ -69,7 +85,8 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 #### Select a Backend to Use.
-###### For now this is a temporary flag so I can verify some of my --backend build targets as these are still being built out, this may change in the future when I start the self-host/bootstrap process.
+###### For now this is a temporary flag so I can verify some of my --backend build targets, this may change in the future when the self-host/bootstrap process begins.
+> **WARNING:** As of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. Please report any you find so they can be fixed. In regards to the C, Crystal, and Ruby backends these still need built out as only create temporary artifacts for echo/strings.
 ```bash
     # Select between native (interpreter) or core (compiler) backends.
     dragonstone run --backend native examples/hello_world.ds
@@ -401,27 +418,6 @@ You can run these yourself from the `./scripts` directory.
     PyPy                = ~10-20 seconds    (using JIT)
     Node.js             = ~10-30 seconds    (using V8)
 ```
-
-<!--
-## NOTE: Regarding `FORGE`
-##### "Forge Package Manager"
-Dragonstone has a package manager currently in the works, this is called Forge (.forge files).
-
-## NOTE: Regarding `EDEN`
-##### "Emergent Developmental Engine for Neural-Networks"
-You may notice a placeholder folder/files for `EDEN`. Overall with the scope of this language `dragonstone` isn't going to be "just another general-purpose language", I'm keeping the future in mind with `EDEN` which for `dragonstone` will effectively be a domain optimized ecosystem for AI simulation. My choices via the backend specifically have a need for high performance compiled modules interacting with high level scripted logic.
-
-Many successful languages are driven by some "Killer App" (Ruby had Rails, Rust had Servo, etc.) and `dragonstone` will have `EDEN`, at least from my end, what the community creates is another story.
-
-From an architectural standpoint, my `hybrid` approach stems from that need to be able to run on the Core Compiler for raw speed, while the logic needs the Native Interpreter for self-modifying code and rapid behavior iteration. I plan to expose the simulation for controls directly to `dragonstone` through a native provider registry, allowing users to script scenarios or agent behaviors as easily as writing a web server.
-
-Now, what is `EDEN`? Well, it's an AI development engine for developing AI inside a time-dilated virtual environment, learning embodied experience without dataset based pre-training. This is how we get to AGI.
-
-`EDEN` has been a project of mine for several years, before LLMs and `dragonstone` with the current version of `dragonstone` within this repo is v5 that I actually started utilizing GitHub for and having worked on that I noticed that there is a need to be able to have some sort of full top to bottom approach to solve my issues there by allowing me to unify multiple languages and resources into a single language driver. `EDEN` currently sits in a private repo, but after I bootstrap the compiler, finish the ffi, and ship forge I will introduce the `EDEN` project and how with both of these, `dragonstone` is no longer just *"some language"* but can be used as the operating system for a synthetic world; anyways I digress.
-
-## NOTE: Regarding AI-Assisted Development
-LLM, hereafter "AI", code is not being using in the development of either of these projects (`EDEN` predates LLMs anyways), my use of AI is strictly via questions, code review, in some cases code completion, and with unit testing. Any code that *has* been generated by AI, I have tested, know how it works, and rewrote to fit my own standards and for the standards required for the scope of these projects. I bring this up because after reading about `EDEN` you may wonder about if AI has been used within these projects.
--->
 
 ## 📝 Contact
     Project:

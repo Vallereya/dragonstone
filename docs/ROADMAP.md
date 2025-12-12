@@ -168,17 +168,17 @@
 
 ```diff
 + Implement abstract classes and abstract def.
-+ Support for annotations via `@[...]`, this will allow use to use it later.
++ Extend the LLVM backend be able to compile all current examples.
++ Support for annotations via `@[...]`, this will allow us to use it later.
 + Reformat the stdlib and adjust the path/file utilities.
-+ Add a simple networking stdlib.
-+ Add a simple toml stdlib.
++ Add a simple networking stdlib and simple toml stdlib.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-- Extend the LLVM backend be able to compile all current examples.
+- 
 - 
 - 
 - 
