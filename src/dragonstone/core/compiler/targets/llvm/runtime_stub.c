@@ -543,9 +543,9 @@ void *dragonstone_runtime_array_push(void *array_val, void *value) {
     return array_val;
 }
 
-void *dragonstone_runtime_block_literal(void *f, void *e) {
+void *dragonstone_runtime_block_literal(BlockFunc f, void *e) {
     DSBlock *blk = (DSBlock *)ds_alloc(sizeof(DSBlock));
-    blk->func = (BlockFunc)f;
+    blk->func = f;
     blk->env = e;
     DSValue *box = ds_new_box(DS_VALUE_BLOCK);
     box->as.ptr = blk;
@@ -604,6 +604,27 @@ static int64_t ds_get_ordinal(void *val, bool *is_char) {
 
 void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, int64_t argc, void **argv, void *block_val) {
     const char *method = (const char *)method_name_ptr;
+
+    if (receiver && !ds_is_boxed(receiver)) {
+        const char *recv_str = (const char *)receiver;
+        if (recv_str && strcmp(recv_str, "ffi") == 0) {
+            if (strcmp(method, "call_ruby") == 0 || strcmp(method, "call_crystal") == 0 || strcmp(method, "call_c") == 0) {
+                if (argc < 2) return NULL;
+                DSArray *args = ds_unwrap_array(argv[1]);
+                if (!args || args->length < 1) return NULL;
+                void *msg = args->items[0];
+                if (msg) {
+                    if (ds_is_boxed(msg)) {
+                        void *disp = dragonstone_runtime_to_string(msg);
+                        if (disp) puts((const char *)disp);
+                    } else {
+                        puts((const char *)msg);
+                    }
+                }
+                return NULL;
+            }
+        }
+    }
 
     if (receiver == NULL) {
         if (strcmp(method, "nil?") == 0) {

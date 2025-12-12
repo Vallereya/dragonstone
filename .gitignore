@@ -27,6 +27,7 @@ release
 .cache
 .tmp
 .crystal-cache
+.crystal_cache
 
 # Ignore my self-hosting/bootstrap compiler builds and notes.
 LLVM_CHECKLIST.md
@@ -37,3 +38,6 @@ dev/
 
 # Annoying IDE ignores.
 .fake
+
+# Build output directory (new pipeline).
+bin/build/
