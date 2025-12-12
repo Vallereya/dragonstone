@@ -605,6 +605,13 @@ static int64_t ds_get_ordinal(void *val, bool *is_char) {
 void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, int64_t argc, void **argv, void *block_val) {
     const char *method = (const char *)method_name_ptr;
 
+    if (receiver == NULL) {
+        if (strcmp(method, "nil?") == 0) {
+            return dragonstone_runtime_box_bool(true);
+        }
+        return NULL;
+    }
+
     DSSingletonMethod *snode = singleton_methods;
     while (snode) {
         if (strcmp(snode->name, method) == 0) {

@@ -88,8 +88,12 @@ module Dragonstone
         # Resolve all `use` directives reachable from `entry_path`,
         # then returns a topo sorted list of canonical file paths.
         def resolve(entry_path : String) : Array(String)
-            entry = canonicalize(entry_path, base: Dir.current)
-            visit(entry, parents: [] of String)
+            if remote_path?(entry_path)
+                visit_remote(entry_path, parents: [] of String)
+            else
+                entry = canonicalize(entry_path, base: Dir.current)
+                visit(entry, parents: [] of String)
+            end
             topo_sort
         end
 
@@ -134,7 +138,39 @@ module Dragonstone
 
             depend_paths.each do |dep|
                 graph[path].not_nil!.deps << dep
-                visit(dep, parents + [path])
+                if remote_path?(dep)
+                    visit_remote(dep, parents + [path])
+                else
+                    visit(dep, parents + [path])
+                end
+            end
+        end
+
+        private def visit_remote(url : String, parents : Array(String))
+            return if graph[url]
+            raise "Cyclic import: #{(parents + [url]).join(" -> ")}" if parents.includes?(url)
+
+            source_path = local_fallback_for_remote(url) || url
+            normalized = read_source(source_path)
+            processed_source, typed = Language::Directives.process_typed_directive(normalized.data)
+            ast = parse(processed_source, source_path)
+            node = ModuleNode.new(url, ast, typed, nil)
+            graph.add(node)
+            cache.set(url, ast)
+
+            base_dir = base_directory(source_path)
+
+            depend_paths = ast.use_decls.flat_map do |use_decl|
+                use_decl.items.flat_map { |item| expand_use_item(item, base_dir) }
+            end.uniq
+
+            depend_paths.each do |dep|
+                graph[url].not_nil!.deps << dep
+                if remote_path?(dep)
+                    visit_remote(dep, parents + [url])
+                else
+                    visit(dep, parents + [url])
+                end
             end
         end
 
@@ -301,11 +337,22 @@ module Dragonstone
         end
 
         private def read_remote_source(url : String) : Encoding::Source
-            body = download_remote_body(url)
-            stripped = Encoding::Decoding.strip_bom(body)
-            Encoding::Checks.ensure_valid_utf8!(stripped.bytes, url)
-            data = Encoding::Decoding.decode_utf8(stripped.bytes)
-            Encoding::Source.new(url, data, Encoding::DEFAULT, stripped.bom)
+            if fallback_path = local_fallback_for_remote(url)
+                return Encoding.read(fallback_path)
+            end
+
+            begin
+                body = download_remote_body(url)
+                stripped = Encoding::Decoding.strip_bom(body)
+                Encoding::Checks.ensure_valid_utf8!(stripped.bytes, url)
+                data = Encoding::Decoding.decode_utf8(stripped.bytes)
+                return Encoding::Source.new(url, data, Encoding::DEFAULT, stripped.bom)
+            rescue ex : Exception
+                if fallback_path = local_fallback_for_remote(url)
+                    return Encoding.read(fallback_path)
+                end
+                raise ex
+            end
         end
 
         private def download_remote_body(url : String) : Bytes
@@ -323,6 +370,35 @@ module Dragonstone
             raise "Failed to fetch #{url}: #{ex.message}"
         rescue ex : Exception
             raise "Failed to fetch #{url}: #{ex.message}"
+        end
+
+        private def local_fallback_for_remote(url : String) : String?
+            # If network is unavailable, try to map well-known repo URLs back to local files.
+            begin
+                uri = URI.parse(url)
+                path = uri.path
+                roots = config.roots
+                candidates = [] of String
+
+                if m = path.match(/dragonstone@[^\/]*\/(.*)/)
+                    candidates << m[1]
+                end
+
+                if m = path.match(/\/examples\/.*$/)
+                    candidates << m[0].lstrip('/')
+                end
+
+                search_roots = roots.empty? ? [Dir.current] : roots
+                search_roots.each do |root|
+                    candidates.each do |suffix|
+                        candidate = File.join(root, suffix)
+                        return candidate if File.file?(candidate)
+                    end
+                end
+            rescue
+                # ignore
+            end
+            nil
         end
     end
 end

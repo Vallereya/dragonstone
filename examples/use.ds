@@ -12,16 +12,16 @@
     same examples on GitHub.
 ]#
 
-use "test_use.ds"
-use { Person } from "classes.ds"
+use "test_use"
+use { divide } from "raise"
 
-use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode.ds"
-use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution.ds"
+use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
+use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 
 echo add(magic, 8)
 
-person = Person.new
-person.greet
+echo divide(10, 2)
 
 🔥.道
+
 echo MyModule::Test

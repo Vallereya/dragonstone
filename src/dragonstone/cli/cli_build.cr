@@ -189,18 +189,57 @@ module Dragonstone
             entry_path = File.realpath(filename)
 
             resolver = Dragonstone.build_resolver(entry_path, BackendMode::Core)
-            resolver.resolve(filename)
+            topo = resolver.resolve(filename)
 
-            node = resolver.graph[entry_path]?
-            raise "Internal: missing module node for #{entry_path}" unless node
-
-            ast = node.ast || resolver.cache.get(entry_path)
-            raise "Internal: missing AST for #{entry_path}" unless ast
-
-            typed_flag = typed || node.typed
             pipeline = Core::Compiler::Frontend::Pipeline.new
-            program = pipeline.build_ir(ast, typed: typed_flag)
+
+            combined_statements = [] of AST::Node
+            typed_flag = typed
+            entry = entry_path
+
+            topo.reverse_each do |path|
+                node = resolver.graph[path]?
+                raise "Internal: missing module node for #{path}" unless node
+
+                ast = node.ast || resolver.cache.get(path)
+                raise "Internal: missing AST for #{path}" unless ast
+
+                typed_flag ||= node.typed
+
+                is_entry = !remote_path?(path) && File.realpath(path) == entry
+                if is_entry
+                    combined_statements.concat(ast.statements)
+                else
+                    ast.statements.each do |stmt|
+                        combined_statements << stmt if exportable_statement?(stmt)
+                    end
+                end
+            end
+
+            combined_ast = AST::Program.new(combined_statements, [] of AST::UseDecl)
+
+            program = pipeline.build_ir(combined_ast, typed: typed_flag)
             {program, program.warnings}
+        end
+
+        private def exportable_statement?(stmt : AST::Node) : Bool
+            case stmt
+            when AST::ClassDefinition,
+                 AST::ModuleDefinition,
+                 AST::StructDefinition,
+                 AST::EnumDefinition,
+                 AST::FunctionDef,
+                 AST::ConstantDeclaration,
+                 AST::AliasDefinition,
+                 AST::AccessorMacro
+                true
+            else
+                false
+            end
+        end
+
+        private def remote_path?(value : String) : Bool
+            value.starts_with?("http://") || value.starts_with?("https://")
         end
 
         private def build_targets(program : IR::Program, targets : Array(Core::Compiler::Target), output_dir : String?, stdout : IO, stderr : IO) : Array(TargetArtifact)

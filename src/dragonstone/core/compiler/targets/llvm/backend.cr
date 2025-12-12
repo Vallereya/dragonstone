@@ -2839,7 +2839,16 @@ module Dragonstone
                         end
                         
                         private def ensure_pointer(ctx : FunctionContext, value : ValueRef) : ValueRef
-                            value[:type] == "i8*" ? value : box_value(ctx, value)
+                            case value[:type]
+                            when "i8*"
+                                value
+                            when "%DSValue*", "%DSObject*"
+                                cast = ctx.fresh("bitcast")
+                                ctx.io << "  %#{cast} = bitcast #{value[:type]} #{value[:ref]} to i8*\n"
+                                value_ref("i8*", "%#{cast}")
+                            else
+                                box_value(ctx, value)
+                            end
                         end
                         
                         private def allocate_pointer_buffer(ctx : FunctionContext, values : Array(ValueRef)) : String?
@@ -3100,20 +3109,40 @@ module Dragonstone
 
                                         signature = nil
                                         target_name = nil
+                                        best_score = -1
                                         
                                         overloads.each do |cand|
-                                            if sig = @function_signatures[cand]?
-                                                expected = sig[:param_types].size
-                                                if expected == args_with_block.size
-                                                    signature = sig
-                                                    target_name = cand
-                                                    break
-                                                elsif expected == args_with_block.size + 1 && sig[:param_types].last == "i8*"
-                                                    signature = sig
-                                                    target_name = cand
-                                                    args_with_block << block_arg
-                                                    break
+                                            next unless sig = @function_signatures[cand]?
+                                            expected_params = sig[:param_types]
+
+                                            candidate_args = args_with_block.dup
+                                            if expected_params.size == candidate_args.size + 1 && expected_params.last == "i8*"
+                                                candidate_args << block_arg
+                                            elsif expected_params.size != candidate_args.size
+                                                next
+                                            end
+
+                                            score = 0
+                                            candidate_args.each_with_index do |val, idx|
+                                                exp_type = expected_params[idx]
+                                                if val[:constant] && val[:ref] == "null"
+                                                    if exp_type == "%DSValue*" || exp_type == "%DSObject*"
+                                                        score += 2
+                                                    elsif exp_type == "i8*"
+                                                        score += 1
+                                                    end
+                                                elsif val[:type] == exp_type
+                                                    score += 3
+                                                elsif val[:type] == "i8*" && (exp_type == "%DSValue*" || exp_type == "%DSObject*")
+                                                    score += 2
                                                 end
+                                            end
+
+                                            if score > best_score
+                                                best_score = score
+                                                signature = sig
+                                                target_name = cand
+                                                args_with_block = candidate_args
                                             end
                                         end
                                         
@@ -3137,11 +3166,11 @@ module Dragonstone
                                     end
                                 end
                                 
-                                call_args = arg_values.dup
-                                
-                                if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
-                                    if struct_name = struct_name_for_value(implicit_receiver)
-                                        return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
+                            call_args = arg_values.dup
+                            
+                            if implicit_receiver = resolve_implicit_receiver(ctx, call.name)
+                                if struct_name = struct_name_for_value(implicit_receiver)
+                                    return emit_struct_method_dispatch(ctx, struct_name, implicit_receiver, call.name, arg_values)
                                     end
                                 end
 
@@ -3159,21 +3188,43 @@ module Dragonstone
                             target_name = nil
 
                             if overloads
+                                best_score = -1
+                                best_args = nil
                                 overloads.each do |cand|
-                                    if sig = @function_signatures[cand]?
-                                        expected = sig[:param_types].size
-                                        if expected == args_with_block.size
-                                            signature = sig
-                                            target_name = cand
-                                            break
-                                        elsif expected == args_with_block.size + 1 && sig[:param_types].last == "i8*"
-                                            signature = sig
-                                            target_name = cand
-                                            args_with_block << block_arg
-                                            break
+                                    next unless sig = @function_signatures[cand]?
+                                    expected_params = sig[:param_types]
+
+                                    candidate_args = args_with_block.dup
+                                    if expected_params.size == candidate_args.size + 1 && expected_params.last == "i8*"
+                                        candidate_args << block_arg
+                                    elsif expected_params.size != candidate_args.size
+                                        next
+                                    end
+
+                                    score = 0
+                                    candidate_args.each_with_index do |val, idx|
+                                        exp_type = expected_params[idx]
+                                        if val[:constant] && val[:ref] == "null"
+                                            if exp_type == "%DSValue*" || exp_type == "%DSObject*"
+                                                score += 2
+                                            elsif exp_type == "i8*"
+                                                score += 1
+                                            end
+                                        elsif val[:type] == exp_type
+                                            score += 3
+                                        elsif val[:type] == "i8*" && (exp_type == "%DSValue*" || exp_type == "%DSObject*")
+                                            score += 2
                                         end
                                     end
+
+                                    if score > best_score
+                                        best_score = score
+                                        signature = sig
+                                        target_name = cand
+                                        args_with_block = candidate_args
+                                    end
                                 end
+
                                 if !signature && !overloads.empty?
                                     target_name = overloads.first
                                     signature = @function_signatures[target_name]?
@@ -3270,6 +3321,22 @@ module Dragonstone
 
                             if expected == "i8*"
                                 return box_value(ctx, value)
+                            end
+
+                            if expected == "%DSValue*" || expected == "%DSObject*"
+                                case value[:type]
+                                when expected
+                                    return value
+                                when "i8*"
+                                    cast = ctx.fresh("bitcast")
+                                    ctx.io << "  %#{cast} = bitcast i8* #{value[:ref]} to #{expected}\n"
+                                    return value_ref(expected, "%#{cast}")
+                                else
+                                    boxed = box_value(ctx, value)
+                                    cast = ctx.fresh("bitcast")
+                                    ctx.io << "  %#{cast} = bitcast i8* #{boxed[:ref]} to #{expected}\n"
+                                    return value_ref(expected, "%#{cast}")
+                                end
                             end
 
                             if expected.starts_with?("%") && value[:type] == "i8*"
@@ -3548,6 +3615,7 @@ module Dragonstone
                                 when "Float32"                      then "float"
                                 when "Float64", "Float", "float"    then "double"
                                 when "String", "str"                then "i8*"
+                                when "para", "Para"                 then "i8*" # Treat para types as block handles
                                 # when "Void", "void"                 then "void"
                                 else
                                     if struct_type?(name)
@@ -3555,6 +3623,14 @@ module Dragonstone
                                     else
                                         pointer_type_for("%DSObject")
                                     end
+                                end
+                            when AST::GenericTypeExpression
+                                base = type_expr.name
+                                case base
+                                when "para", "Para"
+                                    "i8*"
+                                else
+                                    pointer_type_for("%DSObject")
                                 end
                             else
                                 pointer_type_for("%DSValue")
