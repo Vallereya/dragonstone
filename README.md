@@ -23,7 +23,9 @@
 <br>
 
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
-Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language (*some compile targets are still a work in progress*), it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+
+> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
 <br>
 <br>
 
@@ -31,9 +33,9 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ### *Requirements*
 1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed (*1.17.1+*).
 2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
-<!-- 3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*). -->
+3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*).
 
-### *To Build from Source*
+### *To Build from Source (All Platforms)*
 ###### **(MacOS/Linux/Windows)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -43,6 +45,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 > **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files roughly about 3-5x slower.
 
+### *To Build from Source (Linux)*
 ###### **(Linux Recommended)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -51,13 +54,13 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
 
 ###### **(Linux Alternative)**
-3. Run `shards build --release` for a standard build, PATH.
+3. Run `shards build --release` for a standard build and without PATH.
 
 <br>
 
-> **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` again. For an automated version to do both you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
+> **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` to build it again. For an automated version you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
 
-### *To Build from Source*
+### *To Build from Source (Windows)*
 ###### **(Windows Recommended)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -70,7 +73,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 <br>
 
-> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` again. For an automated version to do both you can use `.\bin\dragonstone.bat --clean-rebuild` which will clean first then rebuild for you.
+> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` to build it again. For an automated version you can use `.\bin\dragonstone.bat --clean-rebuild` which will clean first then rebuild for you.
 
 > **Tip for Windows Users:** An installer is also available in the [Releases](https://github.com/Vallereya/dragonstone/releases) section.
 
@@ -85,8 +88,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 #### Select a Backend to Use.
-###### For now this is a temporary flag so I can verify some of my --backend build targets, this may change in the future when the self-host/bootstrap process begins.
-> **WARNING:** As of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. Please report any you find so they can be fixed. In regards to the C, Crystal, and Ruby backends these still need built out as only create temporary artifacts for echo/strings.
+###### For now this is a temporary flag so I can verify some of my `--backend` build targets, this may change in the future when the self-host/bootstrap process begins.
 ```bash
     # Select between native (interpreter) or core (compiler) backends.
     dragonstone run --backend native examples/hello_world.ds
@@ -180,7 +182,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Also Ascii and Unicode are supported.
 ```crystal
     class 🔥
-    あ = true
+        あ = true
   
         def 道
             if あ
@@ -300,7 +302,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Example of using/importing other files with `use`.
 ###### From (./examples/use.ds)
 ```crystal
-    use "test_use.ds"
+    use "./test_use"
 
     echo add(magic, 8)
 ```
@@ -317,15 +319,15 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
 ```crystal
     # Both by file and selectively using `from` with it.
-    use "test_use"
-    use { divide } from "raise"
+    use "./test_use"
+    use { divide } from "./raise"
 
     # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
     # because it was the only thing I could find that would grab the examples from GitHub.
     use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
     use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 ```
-> <small><small> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix the. <small><small>
+> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them.
 
 #### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
@@ -373,34 +375,32 @@ echo square.call(6)
 #### See the `examples/` directory for more sample `.ds` files.
 
 ## ⚡ Benchmark Information
-- When using `--release` flag.
+- Built with --release.
+- Results are for this specific benchmark + machine; expect variance across CPUs/Operating Systems.
+- "Nested" means an extra loop layer (measuring loop-overhead vs a single loop), not extra work.
 - <2% overhead at scale.
 - Near identical for loops vs single.
 
-You can run these yourself from the `./scripts` directory.
+You can run these yourself from the `./tests/benchmark` directory.
 
 ### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
-```bash
-    ~4.47   billion iterations/seconds
-    ~224    ns
-
-    Iterations:             4.47M/s
-    Actual Time:            3.73 minutes
+```
+    Iterations:             ~4.47M iterations/s
+    Per-iteration cost:     ~223.71 ns
+    Actual Time:            223.71 s (~3.73 min)
 ```
 
 ### *1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)*
-```bash
-    ~812    billion iterations/seconds
-    ~1.23   ns
-
-    Iterations:             812M/s
-    LLVM Compiler Time:     1.23 seconds
-    Results:                ~182x Faster
+```
+    Iterations:             ~811M iterations/s
+    Per-iteration cost:     ~1.23 ns
+    LLVM Compiler Time:     1.2326 s
+    Results:                ~182× vs Interpreter
 ```
 
-### *Comparison Context*
+### *Comparison Context (Rough context, not direct comparable)*
 ###### For 1 billion iterations of this benchmark (Interpreter):
-```bash
+```
     Ruby v2.X.X         = ~15-30 minutes    (varies by version)
     Python v3.X.X       = ~5-15 minutes     (varies by version)
  -> Dragonstone         = ~3.7 minutes
@@ -409,7 +409,7 @@ You can run these yourself from the `./scripts` directory.
 ```
 
 ###### For 1 billion iterations of this benchmark (Compiler/LLVM):
-```bash
+```
     C                   = ~0.5-1.5 seconds
     Rust                = ~0.5-1.5 seconds
  -> Dragonstone LLVM    = ~1.23 seconds

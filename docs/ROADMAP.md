@@ -178,7 +178,7 @@
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-+ Extend the LLVM backend be able to compile all stdlibs.
+- Extend the LLVM backend be able to compile all stdlibs.
 - Added support for strip, added to llvm backend as well.
 - Implement optional Garbage Collection (c-like or crystal-like).
 - Implement optional Borrow Checker/Ownership (rust-like).

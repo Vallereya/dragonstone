@@ -33,6 +33,10 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     ├── .github/
     │   ├── CONTRIBUTING.md
     │   └── FUNDING.yml
+    ├── examples/                       -> example .ds files
+    ├── scripts/                        -> auto scripts
+    ├── spec/                           -> spec testing files
+    ├── tests/                          -> benchmark and unimportant test files 
     ├── docs/                           -> documentation
     │   ├── 0. Index/                   -> project assets
     │   ├── 1. Getting Started/         -> language quickstart guides
@@ -43,10 +47,6 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── README.md                   -> documentation overview
     │   ├── ARCHITECTURE.md         -> *you are here*
     │   └── ROADMAP.md                  -> project roadmap
-    ├── examples/                       -> example .ds files
-    ├── scripts/                        -> auto scripts
-    ├── spec/                           -> testing files
-    ├── tests/                          -> unimportant test .ds files
     ├── bin/                            -> **BUILD**
     │   ├── resources/
     │   │   └── dragonstone.rc
@@ -55,24 +55,19 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   └── dragonstone.bat             -> add to path and handoff to .ps1
     ├── src/                            -> **SOURCE**
     │   ├── dragonstone/
-    │   │   ├── backend_mode.cr         -> backend flag/env helpers
+    │   │   ├── eden/                   -> native provider for eden
     │   │   ├── cli/                    -> command line interface
     │   │   ├── shared/                 -> shared front-end + runtime commons
-    │   │   │   ├── language/           -> lexer, parser, AST, resolver, sema
-    │   │   │   ├── ir/                 -> lowering + IR program objects
-    │   │   │   └── runtime/            -> value contracts, ABI, GC/BC placeholders
     │   │   ├── native/                 -> interpreter runtime (env, evaluator, builtins, REPL)
     │   │   ├── core/                   -> compiler + VM (frontend, IR, codegen, targets, runtime helpers)
     │   │   ├── hybrid/                 -> runtime engine, importer, backend cache/orchestration
-    │   │   ├── lib/                    -> lib for C, Crystal and Ruby
-    │   │   ├── stdlib/                 -> dragonstone standard lib (`modules/{shared,native}` + data)
+    │   │   ├── stdlib/                 -> dragonstone standard lib (`modules/{shared,native}` + data) & lib for C, Crystal and Ruby
     │   │   ├── tools/                  -> language tooling
-    │   │   └── eden/                   -> native provider for eden
+    │   │   └── backend_mode.cr         -> backend flag/env helpers
     │   ├── version.cr                  -> version control
     │   └── dragonstone.cr              -> orchestrator
     ├── shard.yml
     ├── LICENSE
-    ├── CONTRIBUTING.md
     ├── README.md
     ├── .editorconfig
     ├── .gitattributes

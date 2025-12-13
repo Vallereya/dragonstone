@@ -33,7 +33,7 @@ module Dragonstone
                 "boolean" => ->(value : RuntimeValue) { value.is_a?(Bool) },
                 "char"    => ->(value : RuntimeValue) { value.is_a?(Char) },
                 "array"   => ->(value : RuntimeValue) { value.is_a?(Array) },
-                "map"     => ->(value : RuntimeValue) { value.is_a?(Hash) },
+                "map"     => ->(value : RuntimeValue) { value.is_a?(MapValue) },
                 "nil"     => ->(value : RuntimeValue) { value.nil? },
                 "any"     => ->(_value : RuntimeValue) { true }
             }
@@ -169,8 +169,8 @@ module Dragonstone
             end
 
             def satisfied_by?(value, context : Context) : Bool
-                return false unless value.is_a?(Hash)
-                value.each do |key, val|
+                return false unless value.is_a?(MapValue)
+                value.entries.each do |key, val|
                     return false unless @key_descriptor.satisfied_by?(key, context)
                     return false unless @value_descriptor.satisfied_by?(val, context)
                 end

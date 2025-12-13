@@ -8,7 +8,7 @@ require "../src/dragonstone/hybrid/runtime_engine"
 class SpecFakeBackend < Dragonstone::Runtime::Backend
     getter executed : Bool
 
-    def initialize(@should_fail : Bool = false, @label : String = "spec-backend")
+    def initialize(@should_fail : Bool = false, @label : String = "spec-backend", @mode : Dragonstone::BackendMode = Dragonstone::BackendMode::Auto)
         super(false)
         @executed = false
         @bindings = {} of String => Dragonstone::Runtime::ExportValue
@@ -26,6 +26,10 @@ class SpecFakeBackend < Dragonstone::Runtime::Backend
         @bindings.dup
     end
 
+    def backend_mode : Dragonstone::BackendMode
+        @mode
+    end
+
     def execute(program : Dragonstone::IR::Program) : Nil
         @executed = true
         raise "backend failure" if @should_fail
@@ -38,7 +42,7 @@ class SpecRuntimeEngine < Dragonstone::Runtime::Engine
         super(resolver)
     end
 
-    private def backend_candidates(program : Dragonstone::IR::Program, typing_flag : Bool) : Array(Dragonstone::Runtime::Backend)
+    private def backend_candidates(program : Dragonstone::IR::Program, typing_flag : Bool, preferred_backend : Dragonstone::BackendMode?) : Array(Dragonstone::Runtime::Backend)
         @static_backends
     end
 end
@@ -62,8 +66,8 @@ end
 describe Dragonstone::Runtime::Engine do
     it "falls back to the interpreter backend when the compiled backend fails" do
         program, resolver, path = build_program(%(echo "fallback"))
-        vm_backend = SpecFakeBackend.new(should_fail: true, label: "vm-backend")
-        native_backend = SpecFakeBackend.new(false, "native-backend")
+        vm_backend = SpecFakeBackend.new(should_fail: true, label: "vm-backend", mode: Dragonstone::BackendMode::Core)
+        native_backend = SpecFakeBackend.new(false, "native-backend", Dragonstone::BackendMode::Native)
         backends = [] of Dragonstone::Runtime::Backend
         backends << vm_backend
         backends << native_backend

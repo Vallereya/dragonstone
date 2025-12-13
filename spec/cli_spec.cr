@@ -142,8 +142,7 @@ describe Dragonstone::CLI do
             )
 
             status.should eq(0)
-            stdout.to_s.should contain("Built bytecode target")
-            stdout.to_s.should contain("Hello from build-run")
+            stdout.to_s.should eq("Hello from build-run\n")
             stderr.to_s.should be_empty
         end
     end

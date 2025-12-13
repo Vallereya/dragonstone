@@ -52,7 +52,7 @@ describe Dragonstone::IR do
 
         it "exposes VM and interpreter capability checks" do
             ast = parse_program("x += 1")
-            Dragonstone::IR::Lowering::Supports.vm?(ast).should be_false
+            Dragonstone::IR::Lowering::Supports.vm?(ast).should be_true
             Dragonstone::IR::Lowering::Supports.interpreter?(ast).should be_true
         end
     end
