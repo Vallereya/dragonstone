@@ -33,7 +33,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
 <!-- 3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*). -->
 
-### *To Build from Source*
+### *To Build from Source (All Platforms)*
 ###### **(MacOS/Linux/Windows)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -43,6 +43,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 > **Tip:** Always use the `--release` flag for production builds as it significantly improves performance, without it a standard build is made and the dragonstone interpreter will run files roughly about 3-5x slower.
 
+### *To Build from Source (Linux)*
 ###### **(Linux Recommended)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -57,7 +58,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 > **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` again. For an automated version to do both you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
 
-### *To Build from Source*
+### *To Build from Source (Windows)*
 ###### **(Windows Recommended)**
 1. Clone this repository.
 2. `cd` to the project directory.
@@ -325,7 +326,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
     use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 ```
-> <small><small> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix the. <small><small>
+> <small><small> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them. <small><small>
 
 #### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
@@ -373,34 +374,31 @@ echo square.call(6)
 #### See the `examples/` directory for more sample `.ds` files.
 
 ## ⚡ Benchmark Information
-- When using `--release` flag.
-- <2% overhead at scale.
-- Near identical for loops vs single.
+- Built with --release.
+- Results are for this specific benchmark + machine; expect variance across CPUs/Operating Systems.
+- "Nested" means an extra loop layer (measuring loop-overhead vs a single loop), not extra work.
+- <2% overhead at scale. - Near identical for loops vs single.
 
-You can run these yourself from the `./scripts` directory.
+You can run these yourself from the `./tests/benchmark` directory.
 
 ### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
-```bash
-    ~4.47   billion iterations/seconds
-    ~224    ns
-
-    Iterations:             4.47M/s
-    Actual Time:            3.73 minutes
+```
+    Iterations:             ~4.47M iterations/s
+    Per-iteration cost:     ~223.71 ns
+    Actual Time:            223.71 s (~3.73 min)
 ```
 
 ### *1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)*
-```bash
-    ~812    billion iterations/seconds
-    ~1.23   ns
-
-    Iterations:             812M/s
-    LLVM Compiler Time:     1.23 seconds
-    Results:                ~182x Faster
+```
+    Iterations:             ~811M iterations/s
+    Per-iteration cost:     ~1.23 ns
+    LLVM Compiler Time:     1.2326 s
+    Results:                ~182× vs Interpreter
 ```
 
-### *Comparison Context*
+### *Comparison Context (Rough context, not direct comparable)*
 ###### For 1 billion iterations of this benchmark (Interpreter):
-```bash
+```
     Ruby v2.X.X         = ~15-30 minutes    (varies by version)
     Python v3.X.X       = ~5-15 minutes     (varies by version)
  -> Dragonstone         = ~3.7 minutes
@@ -409,7 +407,7 @@ You can run these yourself from the `./scripts` directory.
 ```
 
 ###### For 1 billion iterations of this benchmark (Compiler/LLVM):
-```bash
+```
     C                   = ~0.5-1.5 seconds
     Rust                = ~0.5-1.5 seconds
  -> Dragonstone LLVM    = ~1.23 seconds
