@@ -25,7 +25,7 @@ Dragonstone is a language meant to provide programmers with happiness and choice
 
 2. Introduction
     - These guides provides a quick introductory overview of some of the various basic capabilities Dragonstone has to offer, including some examples of how they work, for more code examples visit the `./examples` directory.
-    - This includes Hello World, Comments, Variables and Strings.
+    - This includes Hello World, Comments, Variables, Strings and Numbers.
 
 3. Specification
     - (Coming Soon)

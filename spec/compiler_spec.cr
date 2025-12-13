@@ -24,16 +24,13 @@ describe Dragonstone::Core::Compiler do
         ast = Dragonstone::Parser.new(tokens).parse
         bytecode = compile_bytecode(ast)
 
-        param_arrays = bytecode.consts.compact_map do |const|
-            const.as?(Array(Dragonstone::Bytecode::Value))
+        signatures = bytecode.consts.compact_map do |const|
+            const.as?(Dragonstone::Bytecode::FunctionSignature)
         end
 
-        found = param_arrays.any? do |arr|
-            names = arr.map do |entry|
-                index = entry.as(Int32)
-                bytecode.names[index]
-            end
-            names == ["a", "b"]
+        found = signatures.any? do |signature|
+            signature.parameters.size == 2 &&
+                signature.parameters.map { |param| bytecode.names[param.name_index] } == ["a", "b"]
         end
 
         found.should be_true

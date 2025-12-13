@@ -33,7 +33,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ### *Requirements*
 1. The [Crystal Programming Language](https://crystal-lang.org/install/) needs to be installed (*1.17.1+*).
 2. (optional) [**LLVM/Clang**](https://releases.llvm.org/); While the [Crystal Programming Language](https://crystal-lang.org/install/) also installs [LLVM/Clang](https://releases.llvm.org/), installing a standalone version is recommended if you want to target `dragonstone build --target llvm`.
-<!-- 3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*). -->
+3. (optional) The [Ruby Programming Language](https://www.ruby-lang.org/en/downloads/) is needed if you want to use `dragonstone build --target ruby` (*3.4.6+*).
 
 ### *To Build from Source (All Platforms)*
 ###### **(MacOS/Linux/Windows)**

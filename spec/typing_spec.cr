@@ -40,7 +40,7 @@ DS
     it "supports generic type aliases" do
         success_source = <<-DS
 #! typed
-alias Data = Array(str) | map(str, int)
+alias Data = Array(str) | Hash(str, int)
 
 def process(data: Data)
   data

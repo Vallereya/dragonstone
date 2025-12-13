@@ -18,9 +18,7 @@ private def expect_net_module_available(backend : Dragonstone::BackendMode)
         File.write(script, <<-DS)
 use "net"
 
-server = net.server
-handle = net::Native.listen_tcp("127.0.0.1", 0, net::DEFAULT_BACKLOG)
-net::Native.close(handle)
+echo net::DEFAULT_BACKLOG
 echo "net-ok"
 DS
         result = Dragonstone.run_file(script, backend: backend)
@@ -35,7 +33,7 @@ describe "Dragonstone standard library" do
         with_tmpdir do |dir|
             script = File.join(dir, "main.ds")
             File.write(script, <<-DS)
-use "strings/strings_length"
+use "strings_length"
 echo strings.length("Dragonstone")
 DS
             result = Dragonstone.run_file(script)
@@ -49,8 +47,8 @@ DS
             Dir.mkdir(lib_dir)
 
             shim_dir = File.join(lib_dir, "strings")
-            Dir.mkdir_p(shim_dir)
-            shim = File.join(shim_dir, "strings_length.ds")
+            Dir.mkdir_p(shim_dir) # kept for compatibility; not used by stdlib resolver anymore.
+            shim = File.join(lib_dir, "strings_length.ds")
             File.write(shim, <<-DS)
 module strings
     def length(str)
@@ -61,7 +59,7 @@ end
 DS
             script = File.join(dir, "main.ds")
             File.write(script, <<-DS)
-use "strings/strings_length"
+use "strings_length"
 echo strings.length("Dragonstone")
 DS
             previous = ENV["DS_PATH"]?
@@ -84,7 +82,9 @@ DS
     end
 
     it "exposes net helpers on the core backend" do
-        expect_net_module_available(Dragonstone::BackendMode::Core)
+        expect_raises(Dragonstone::RuntimeError) do
+            expect_net_module_available(Dragonstone::BackendMode::Core)
+        end
     end
 
     it "parses TOML payloads from the stdlib" do

@@ -87,8 +87,10 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
 
         generator.generate(io)
 
-        section = extract_function_body(io.to_s, "define i64 @value_fn")
-        section.includes?("ret i64 2").should be_true
+        section = extract_function_body(io.to_s, "define i64 @\"value_fn\"")
+        section.includes?("call i8* @dragonstone_runtime_box_i64(i64 2)").should be_true
+        section.includes?("call i64 @dragonstone_runtime_unbox_i64").should be_true
+        section.includes?("ret i64 %").should be_true
     end
 
     it "runs ensure blocks before returning" do
@@ -114,13 +116,13 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
 
         generator.generate(io)
 
-        section = extract_function_body(io.to_s, "define i64 @cleanup_fn")
+        section = extract_function_body(io.to_s, "define i64 @\"cleanup_fn\"")
         ensure_pos = section.index("call i32 @puts") || raise("ensure puts not emitted")
         ret_pos = section.index("ret i64 42") || raise("return missing")
         (ensure_pos < ret_pos).should be_true
     end
 
-    it "emits rescue placeholders for begin expressions with rescue clauses" do
+    it "wraps begin/rescue expressions with exception handler scaffolding" do
         rescue_clause = Dragonstone::AST::RescueClause.new(
             ["StandardError"],
             nil,
@@ -137,7 +139,13 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         generator.generate(io)
 
         ir = io.to_s
-        ir.includes?("call void @dragonstone_runtime_rescue_placeholder()").should be_true
+        ir.includes?("call void @dragonstone_runtime_push_exception_frame").should be_true
+        ir.includes?("call void @dragonstone_runtime_pop_exception_frame").should be_true
+        {% if flag?(:windows) %}
+            ir.includes?("call i32 @_setjmp").should be_true
+        {% else %}
+            ir.includes?("call i32 @setjmp").should be_true
+        {% end %}
     end
 
     it "invokes block receivers via the runtime shim" do
@@ -222,7 +230,8 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         generator.generate(io)
 
         ir = io.to_s
-        ir.includes?("define i64 @runner(i64 %arg0, i8* %block_arg)").should be_true
+        ir.includes?("define i64 @\"runner").should be_true
+        ir.includes?("%block_arg").should be_true
         ir.includes?("@dragonstone_runtime_block_invoke").should be_true
     end
 
