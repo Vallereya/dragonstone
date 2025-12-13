@@ -72,7 +72,10 @@ $files = @(
     ".\examples\physics\math.ds",
     ".\examples\physics\bounce.ds",
     ".\examples\physics\particles.ds",
-    ".\examples\physics\particle_system.ds"
+    ".\examples\physics\particle_system.ds",
+    ".\examples\stdlib_strings_build.ds",
+    ".\examples\stdlib_strings_length.ds",
+    ".\examples\stdlib_file.ds"
 )
 
 

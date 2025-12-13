@@ -2340,23 +2340,13 @@ module Dragonstone
             case obj
 
             when Array
-                case index
-
-                when Int32, Int64
-                    obj[index.to_i]? || nil
-                else
-                    raise "Array index must be integer"
-                end
+                idx = ensure_integer_index(index, "Array")
+                obj[idx]? || nil
 
             when String
-                case index
-
-                when Int32, Int64
-                    char = obj[index.to_i]?
-                    char ? char.to_s : nil
-                else
-                    raise "String index must be integer"
-                end
+                idx = ensure_integer_index(index, "String")
+                char = obj[idx]?
+                char ? char.to_s : nil
             when Bytecode::TupleValue
                 idx = ensure_integer_index(index, "Tuple")
                 obj.elements[idx]? || nil
@@ -2393,6 +2383,8 @@ module Dragonstone
             when Int32
                 index
             when Int64
+                index.to_i
+            when Float64
                 index.to_i
             else
                 raise ::Dragonstone::TypeError.new("#{container} index must be integer")

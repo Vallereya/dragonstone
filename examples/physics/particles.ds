@@ -1,17 +1,18 @@
 #[
     Physics Particles Example
-
-    #! THIS ONLY WORKS WITH THE LLVM BACKEND !#
 ]#
 
 struct Vec3
     property x: float
     property y: float
     property z: float
+
+    def initialize(@x: float, @y: float, @z: float)
+    end
 end
 
 particles = []
-particles << Vec3.new(1.0, 2.0, 3.0)
+particles.push(Vec3.new(1.0, 2.0, 3.0))
 
 part: Vec3 = particles[0]
 echo part.x

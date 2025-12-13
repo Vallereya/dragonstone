@@ -316,7 +316,7 @@ module Dragonstone
       end
 
       if path = artifact.object_path
-        run_process("lli", ["--entry-function=dragonstone_stub", path], stdout, stderr)
+        run_process("lli", [path], stdout, stderr)
       else
         stderr.puts "LLVM artifact did not produce an output file"
         false

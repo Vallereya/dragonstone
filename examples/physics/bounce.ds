@@ -1,7 +1,5 @@
 #[
     Physics Bounce/Time/Loop Example
-
-    #! THIS ONLY WORKS WITH THE LLVM BACKEND !#
 ]#
 
 struct Vec3
@@ -9,11 +7,14 @@ struct Vec3
     property y: float
     property z: float
 
-    def +(other: Vec3) -> Vec3
+    def initialize(@x: float, @y: float, @z: float)
+    end
+
+    def add(other: Vec3) -> Vec3
         return Vec3.new(self.x + other.x, self.y + other.y, self.z + other.z)
     end
 
-    def *(scalar: float) -> Vec3
+    def scale(scalar: float) -> Vec3
         return Vec3.new(self.x * scalar, self.y * scalar, self.z * scalar)
     end
 end
@@ -26,8 +27,8 @@ def main
 
     i = 0
     while i < 10
-        velocity = velocity + (gravity * dt)
-        position = position + (velocity * dt)
+        velocity = velocity.add(gravity.scale(dt))
+        position = position.add(velocity.scale(dt))
 
         echo "Tick #{i}: Height = #{position.y}"
         

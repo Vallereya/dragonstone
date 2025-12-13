@@ -28,6 +28,7 @@ release
 .tmp
 .crystal-cache
 .crystal_cache
+tmp
 
 # Ignore my self-hosting/bootstrap compiler builds and notes.
 LLVM_CHECKLIST.md

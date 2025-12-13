@@ -3,7 +3,6 @@
 
     #! FOR EDEN
     
-    #! THIS ONLY WORKS WITH THE LLVM BACKEND !#
 ]#
 
 #[
@@ -16,11 +15,14 @@ struct Vec3
     property y: float
     property z: float
 
-    def +(other: Vec3) -> Vec3
+    def initialize(@x: float, @y: float, @z: float)
+    end
+
+    def add(other: Vec3) -> Vec3
         return Vec3.new(self.x + other.x, self.y + other.y, self.z + other.z)
     end
 
-    def *(scalar: float) -> Vec3
+    def scale(scalar: float) -> Vec3
         return Vec3.new(self.x * scalar, self.y * scalar, self.z * scalar)
     end
 end
@@ -34,8 +36,8 @@ def main
 
     i = 0
     while i < 5
-        particles << Vec3.new(i * 10.0, 100.0, 0.0)
-        velocities << Vec3.new(0.0, 0.0, 0.0)
+        particles.push(Vec3.new(i * 10.0, 100.0, 0.0))
+        velocities.push(Vec3.new(0.0, 0.0, 0.0))
         i = i + 1
     end
 
@@ -48,8 +50,8 @@ def main
             pos: Vec3 = particles[p_idx]
             vel: Vec3 = velocities[p_idx]
 
-            vel = vel + (gravity * dt)
-            pos = pos + (vel * dt)
+            vel = vel.add(gravity.scale(dt))
+            pos = pos.add(vel.scale(dt))
 
             particles[p_idx] = pos
             velocities[p_idx] = vel

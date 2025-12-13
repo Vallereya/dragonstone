@@ -73,3 +73,6 @@ run ./examples/physics/math.ds
 run ./examples/physics/bounce.ds
 run ./examples/physics/particles.ds
 run ./examples/physics/particle_system.ds
+run ./examples/stdlib_strings_build.ds
+run ./examples/stdlib_strings_length.ds
+run ./examples/stdlib_file.ds

@@ -30,6 +30,17 @@ DS
         result.output.should eq "4\n2\n20\n30\n"
     end
 
+    it "allocates fresh empty array literals" do
+        source = <<-DS
+a = []
+b = []
+a.push(1)
+echo b.length
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "0\n"
+    end
+
     it "retries array iterations when redo is invoked" do
         source = <<-DS
 values = [1, 2, 3]
@@ -150,7 +161,9 @@ DS
     end
 
     it "loads modules via use declarations on the core backend" do
-        dir = File.join(Dir.current, "tmp", "core_use_#{Time.utc.to_unix}_#{Process.pid}")
+        base_tmp = File.join(Dir.current, "tmp")
+        FileUtils.mkdir_p(base_tmp)
+        dir = File.join(base_tmp, "core_use_#{Time.utc.to_unix}_#{Process.pid}")
         FileUtils.rm_rf(dir)
         Dir.mkdir(dir)
         begin

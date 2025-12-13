@@ -653,14 +653,8 @@ module Dragonstone
         end
 
         private def compile_array_literal(node : AST::ArrayLiteral)
-            if node.elements.empty?
-                emit_const([] of Bytecode::Value)
-
-            else
-                node.elements.each { |element| compile_expression(element) }
-                emit(OPC::MAKE_ARRAY, node.elements.size)
-
-            end
+            node.elements.each { |element| compile_expression(element) }
+            emit(OPC::MAKE_ARRAY, node.elements.size)
         end
 
         private def compile_tuple_literal(node : AST::TupleLiteral)
