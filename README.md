@@ -181,7 +181,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Also Ascii and Unicode are supported.
 ```crystal
     class 🔥
-    あ = true
+        あ = true
   
         def 道
             if あ
@@ -377,7 +377,8 @@ echo square.call(6)
 - Built with --release.
 - Results are for this specific benchmark + machine; expect variance across CPUs/Operating Systems.
 - "Nested" means an extra loop layer (measuring loop-overhead vs a single loop), not extra work.
-- <2% overhead at scale. - Near identical for loops vs single.
+- <2% overhead at scale.
+- Near identical for loops vs single.
 
 You can run these yourself from the `./tests/benchmark` directory.
 
