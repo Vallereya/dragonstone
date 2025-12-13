@@ -27,6 +27,9 @@ module Dragonstone
             when Array(RuntimeValue)
                 "Array"
 
+            when MapValue
+                "Map"
+
             when Hash(RuntimeValue, RuntimeValue)
                 "Map"
 
@@ -146,6 +149,10 @@ module Dragonstone
 
             when Array(RuntimeValue)
                 "[#{value.map { |v| format_value(v) }.join(", ")}]"
+
+            when MapValue
+                pairs = value.map { |k, v| "#{format_value(k)} -> #{format_value(v)}" }.join(", ")
+                "{#{pairs}}"
 
             when Hash(RuntimeValue, RuntimeValue)
                 pairs = value.map { |k, v| "#{format_value(k)} -> #{format_value(v)}" }.join(", ")

@@ -5,17 +5,38 @@ module Dragonstone
             getter members : Array(EnumMember)
             getter value_name : String?
             getter value_type : TypeExpression?
+            getter annotations : Array(Annotation)
 
-            def initialize(name : String, members : Array(EnumMember), value_name : String? = nil, value_type : TypeExpression? = nil, location : Location? = nil)
+            def initialize(name : String, members : Array(EnumMember), value_name : String? = nil, value_type : TypeExpression? = nil, annotations : Array(Annotation) = [] of Annotation, location : Location? = nil)
                 super(location: location)
                 @name = name
                 @members = members
                 @value_name = value_name
                 @value_type = value_type
+                @annotations = annotations
             end
 
             def accept(visitor)
                 visitor.visit_enum_definition(self)
+            end
+
+           def to_source(io : IO)
+                io << "enum " << name
+                if vn = value_name
+                    io << "(" << vn
+                    if vt = value_type
+                        io << ": "
+                        vt.to_source(io)
+                    end
+                    io << ")"
+                end
+                io << "\n"
+                members.each do |member|
+                    io << "    "
+                    member.to_source(io)
+                    io << "\n"
+                end
+                io << "end"
             end
         end
     end

@@ -13,6 +13,16 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_while_statement(self)
             end
+
+            def to_source : String
+                String.build do |io|
+                    io << "while " << condition.to_source << "\n"
+                    block.each do |stmt|
+                        io << "  " << stmt.to_source << "\n"
+                    end
+                    io << "end"
+                end
+            end
         end
     end
 end

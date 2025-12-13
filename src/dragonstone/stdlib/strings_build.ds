@@ -1,1 +1,1 @@
-use "./strings/strings_build"
+use "modules/shared/strings/strings_build/module"

@@ -15,6 +15,24 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_unless_statement(self)
             end
+
+            def to_source(io : IO)
+                io << "unless "
+                condition.to_source(io)
+                io << "\n"
+                body.each do |stmt|
+                    stmt.to_source(io)
+                    io << "\n"
+                end
+                if e = else_block
+                    io << "else\n"
+                    e.each do |stmt|
+                        stmt.to_source(io)
+                        io << "\n"
+                    end
+                end
+                io << "end"
+            end
         end
     end
 end

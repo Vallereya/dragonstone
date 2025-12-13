@@ -1,4 +1,6 @@
 require "file_utils"
+require "socket"
+require "http"
 
 # ---------------------------------
 # -------------- FFI --------------
@@ -30,6 +32,10 @@ require "file_utils"
 module Dragonstone
     module FFI
         alias InteropValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(InteropValue)
+
+        @@net_next_handle : Int64 = 1_i64
+        @@net_listeners = {} of Int64 => TCPServer
+        @@net_clients = {} of Int64 => TCPSocket
 
         RUBY_BRIDGE_ENABLED = {{ env("DRAGONSTONE_RUBY_LIB") ? true : false }}
 
@@ -263,6 +269,101 @@ module Dragonstone
                 parent_str = parent.to_s.gsub("\\", "/")
                 parent_str.empty? ? "." : (parent_str == "." ? "./" : parent_str)
 
+            when "net_listen_tcp"
+                host = expect_optional_string(arguments, 0, function_name, default: "0.0.0.0")
+                port = expect_int(arguments, 1, function_name)
+                backlog = expect_optional_int(arguments, 2, function_name, default: 128)
+
+                server = TCPServer.new(host, port, backlog)
+                handle = next_net_handle
+                @@net_listeners[handle] = server
+                handle
+
+            when "net_accept_request"
+                listener_id = expect_int(arguments, 0, function_name)
+                server = @@net_listeners[listener_id]? || raise "#{function_name} unknown listener #{listener_id}"
+
+                client = server.accept?
+                raise "#{function_name} failed to accept connection" unless client
+
+                parsed = HTTP::Request.from_io(client)
+                unless parsed.is_a?(HTTP::Request)
+                    status = parsed.is_a?(HTTP::Status) ? parsed.code : 400
+                    client.puts("HTTP/1.1 #{status} Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    client.flush
+                    client.close
+                    raise "#{function_name} failed to parse request"
+                end
+
+                body_io = parsed.body
+                body = body_io ? body_io.gets_to_end : ""
+                headers = [] of InteropValue
+                parsed.headers.each do |name, values|
+                    values.each do |value|
+                        pair = [] of InteropValue
+                        pair << name
+                        pair << value
+                        headers << pair
+                    end
+                end
+                remote = client.remote_address.to_s
+
+                client_id = next_net_handle
+                @@net_clients[client_id] = client
+
+                result = [] of InteropValue
+                result << client_id
+                result << parsed.method
+                result << parsed.path
+                result << headers
+                result << body
+                result << remote
+                result
+
+            when "net_send_response"
+                client_id = expect_int(arguments, 0, function_name)
+                status = expect_int(arguments, 1, function_name)
+                headers = expect_headers(arguments, 2, function_name)
+                body = expect_optional_string(arguments, 3, function_name, default: "")
+
+                socket = @@net_clients[client_id]? || raise "#{function_name} unknown client #{client_id}"
+
+                reason = status_reason(status)
+
+                # Always ensure Content-Length and Connection headers.
+                has_content_length = false
+                has_connection = false
+
+                socket << "HTTP/1.1 #{status} #{reason}\r\n"
+                headers.each do |pair|
+                    name = pair[0].as(String)
+                    value = pair[1].as(String)
+                    has_content_length ||= name.downcase == "content-length"
+                    has_connection ||= name.downcase == "connection"
+                    socket << "#{name}: #{value}\r\n"
+                end
+
+                unless has_content_length
+                    socket << "Content-Length: #{body.bytesize}\r\n"
+                end
+                socket << "Connection: close\r\n" unless has_connection
+                socket << "\r\n"
+                socket << body
+                socket.flush
+                nil
+
+            when "net_close"
+                handle = expect_int(arguments, 0, function_name)
+                if listener = @@net_listeners.delete(handle)
+                    listener.close
+                    nil
+                elsif client = @@net_clients.delete(handle)
+                    client.close
+                    nil
+                else
+                    raise "#{function_name} unknown handle #{handle}"
+                end
+
             when "env_get"
                 key = expect_string(arguments, 0, function_name)
                 ENV[key]?
@@ -340,6 +441,38 @@ module Dragonstone
             raise "#{function_name} argument #{index + 1} must be a Bool"
         end
 
+        private def self.expect_int(arguments : Array(InteropValue), index : Int32, function_name : String) : Int32
+            value = arguments[index]? || raise "#{function_name} requires argument #{index + 1}"
+            raw = value.as?(Int32) || value.as?(Int64) || raise "#{function_name} argument #{index + 1} must be an Int"
+            raw.to_i
+        rescue TypeCastError
+            raise "#{function_name} argument #{index + 1} must be an Int"
+        end
+
+        private def self.expect_optional_int(arguments : Array(InteropValue), index : Int32, function_name : String, *, default : Int32) : Int32
+            value = arguments[index]?
+            return default unless value
+            raw = value.as?(Int32) || value.as?(Int64) || raise "#{function_name} argument #{index + 1} must be an Int"
+            raw.to_i
+        rescue TypeCastError
+            raise "#{function_name} argument #{index + 1} must be an Int"
+        end
+
+        private def self.expect_headers(arguments : Array(InteropValue), index : Int32, function_name : String) : Array(Array(InteropValue))
+            value = arguments[index]? || [] of Array(InteropValue)
+            headers = value.as?(Array(InteropValue)) || raise "#{function_name} argument #{index + 1} must be an Array of [String, String]"
+            normalized = [] of Array(InteropValue)
+            headers.each do |pair|
+                tuple = pair.as?(Array(InteropValue)) || raise "#{function_name} headers must be an Array of [String, String]"
+                name = tuple[0]?.as?(String) || raise "#{function_name} header name must be a String"
+                val = tuple[1]?.as?(String) || raise "#{function_name} header value must be a String"
+                normalized << [name.as(InteropValue), val.as(InteropValue)]
+            end
+            normalized
+        rescue TypeCastError
+            raise "#{function_name} argument #{index + 1} must be an Array of [String, String]"
+        end
+
         private def self.ensure_parent_directories(path : String)
             parent = File.dirname(path)
             return if parent.nil? || parent.empty? || parent == "."
@@ -369,6 +502,41 @@ module Dragonstone
                 end
             rescue ArgumentError
                 expanded.to_s.gsub("\\", "/")
+            end
+        end
+
+        private def self.next_net_handle : Int64
+            handle = @@net_next_handle
+            @@net_next_handle += 1
+            handle
+        end
+
+        private def self.status_reason(status : Int32) : String
+            case status
+            when 200 then "OK"
+            when 201 then "Created"
+            when 202 then "Accepted"
+            when 204 then "No Content"
+            when 301 then "Moved Permanently"
+            when 302 then "Found"
+            when 304 then "Not Modified"
+            when 400 then "Bad Request"
+            when 401 then "Unauthorized"
+            when 403 then "Forbidden"
+            when 404 then "Not Found"
+            when 405 then "Method Not Allowed"
+            when 408 then "Request Timeout"
+            when 409 then "Conflict"
+            when 413 then "Payload Too Large"
+            when 414 then "URI Too Long"
+            when 415 then "Unsupported Media Type"
+            when 418 then "I'm a teapot"
+            when 429 then "Too Many Requests"
+            when 500 then "Internal Server Error"
+            when 501 then "Not Implemented"
+            when 502 then "Bad Gateway"
+            when 503 then "Service Unavailable"
+            else "OK"
             end
         end
     end

@@ -14,7 +14,7 @@ Usage:
 Examples:
   run_benchmarks.sh
   run_benchmarks.sh --backend core --iterations 3
-  run_benchmarks.sh --program tests/_benchmark_1b.ds --program tests/_benchmark_1m.ds
+  run_benchmarks.sh --program tests/benchmark/1b.ds --program tests/benchmark/1m.ds
 EOF
 }
 
@@ -87,10 +87,10 @@ cd "$repo_root"
 
 if [[ ${#programs[@]} -eq 0 ]]; then
     default_programs=(
-        tests/_benchmark_1b.ds
-        tests/_benchmark_1b_nested.ds
-        tests/_benchmark_1m.ds
-        tests/_benchmark_1m_nested.ds
+        tests/benchmark/1b.ds
+        tests/benchmark/1b_nested.ds
+        tests/benchmark/1m.ds
+        tests/benchmark/1m_nested.ds
     )
     for candidate in "${default_programs[@]}"; do
         [[ -f "$candidate" ]] && programs+=("$candidate")

@@ -1,0 +1,11 @@
+numbers = [1, 2, 3, 4]
+sum = numbers.inject(0) {
+    |total, num| total + num
+}
+
+echo sum
+
+words = ["hello", " ", "world"]
+sentence = words.inject("") { |memo, word| memo + word }
+
+echo sentence

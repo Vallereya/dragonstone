@@ -156,33 +156,33 @@
 #####   <h6 align="center">         `v0.1.1 -> v0.1.2`
 
 ```diff
-- Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
-- Tagged version & signed binaries.
-- Setup installer/uninstaller.
-- Reproducible build notes.
-- Flesh out what the versioned grammar is.
++ Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
++ Tagged version & binaries.
++ Setup installer/uninstaller.
++ Reproducible build notes.
++ Flesh out what the versioned grammar is.
 ```
 
 ###     <h2 align="center">         Phase Three
 #####   <h6 align="center">         `v0.1.2 -> v0.1.3`
 
 ```diff
-- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
-- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
-- Implement support for concurrency.
-- Implement abstract classes and abstract methods.
-- Implement optional Garbage Collection (c-like or crystal-like).
++ Implemented support for abstract classes and abstract def.
++ Extend the LLVM backend be able to compile all current examples, excluding stdlibs.
++ Support for annotations via `@[...]`, this will allow us to use it later but doesn't need anything added yet.
++ Reformat the stdlib and adjust the path/file utilities so we can just use File/Path.
++ Added a simple networking stdlib and simple toml stdlib.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-- Setup a proper build/release pipeline.
-- Set CI + cross-platform builds (Linux/macOS/Windows).
-- Maximize portability/native cross-platform.
-- VM unwind stack w/ exception objects, make a method cache w/ fallback path.
++ Extend the LLVM backend be able to compile all stdlibs.
+- Added support for strip, added to llvm backend as well.
+- Implement optional Garbage Collection (c-like or crystal-like).
 - Implement optional Borrow Checker/Ownership (rust-like).
+- Implement support for concurrency.
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -203,43 +203,43 @@
 
 ```diff
 - Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
-- Start work for the `forge` package manager.
-- Add dev more commands/flags.
-- Setup micro-benchmarks, verify parser & bytecode coverage for all operators.
-- Start expanding and reformat the stdlib, add at least net (socket) stdlib.
+- Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
+- Fix FFI, make sure to do some boilerplate code avoidance, and rebuild how it works via keywords.
+- Expand the bindings of the 3-Way Interop, so Dragonstone can call more.
+- Begin some Bootstrapping work.
 ```
 
 ###     <h2 align="center">         Phase Two
 #####   <h6 align="center">         `v0.1.6 -> v0.1.7`
 
 ```diff
-- Fix FFI and make sure to do some boilerplate code avoidance.
-- Expand the bindings of the 3-Way Interop, so Dragonstone can call more.
-- Start C lib with something basic.
-- Start Crystal lib with something basic.
-- Start Ruby lib with something basic.
+- 
+- 
+- 
+- Add dev more commands/flags.
+- Fix `--backend` flags.
 ```
 
 ###     <h2 align="center">         Phase Three
 #####   <h6 align="center">         `v0.1.7 -> v0.1.8`
 
 ```diff
-- Expand C lib.
-- Expand Crystal lib.
-- Expand Ruby lib.
-- C, Crystal, and Ruby libs expanded into stdlib, they are made separate then added as an stdlib.
-- Port any stdlib to dragonstone if there is any not.
+- Setup more micro-benchmarks.
+- Setup more spec/unit testing.
+- Start C, Crystal, and Ruby lib with something basic.
+- Expand C, Crystal, and Ruby libs into stdlib, they are made separate then added as an stdlib.
+- Expand the stdlib and port any stdlib to dragonstone if there is any not.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.8 -> v0.1.9`
 
 ```diff
-- Begin Bootstrapping.
-- Remove donors so everything runs on dragonstone.
-- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI).
-- Freeze current grammar subset if needed on C side.
-- Fix `--backend` flags.
+- Freeze current grammar subset if needed on C side, and finish target build outs for the compilers.
+- Verify parser & bytecode coverage for all operators, on all backends and on llvm compiler.
+- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
+- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
+- VM unwind stack w/ exception objects, make a method cache w/ fallback path.
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -258,17 +258,17 @@
 
 ```diff
 - Beta Update ->        Documentation, Examples, Tutorials, and ChangeLog.
-- Start building a VSCode extension for language syntax support and running files.
-- Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
-- Start building the website documentation subdomain.
-- Start building the website forge subdomain.
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Two
 #####   <h6 align="center">         `v0.3.0 -> v0.4.0`
 
 ```diff
-- Expand the `forge` package manager.
+- 
 - 
 - 
 - 
@@ -301,11 +301,11 @@
 #####   <h6 align="center">         `v0.6.0 -> v0.7.0`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Start building a VSCode extension for language syntax support and running files.
+- Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
+- Start building the website documentation subdomain.
+- Start building the website forge subdomain.
+- Start work for the `forge` package manager.
 ```
 
 ###     <h2 align="center">         Phase Six
@@ -313,10 +313,10 @@
 
 ```diff
 - Start work on embedded functionality.
-- 
-- 
-- 
-- 
+- Setup a proper build/release pipeline.
+- Set CI + cross-platform builds (Linux/macOS/Windows).
+- Maximize portability/native cross-platform.
+- Add signed binaries.
 ```
 
 ###     <h2 align="center">         Phase Seven

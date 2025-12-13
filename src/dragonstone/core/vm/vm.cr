@@ -34,6 +34,7 @@ module Dragonstone
             property block : Bytecode::BlockValue?
             property signature : Bytecode::FunctionSignature?
             property callable_name : String?
+            property gc_flags : ::Dragonstone::Runtime::GC::Flags
 
             def initialize(
                 @code : CompiledCode,
@@ -41,7 +42,8 @@ module Dragonstone
                 use_locals : Bool = false,
                 block_value : Bytecode::BlockValue? = nil,
                 signature : Bytecode::FunctionSignature? = nil,
-                callable_name : String? = nil
+                callable_name : String? = nil,
+                gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
             )
                 @ip = 0
                 if use_locals
@@ -55,6 +57,7 @@ module Dragonstone
                 @block = block_value
                 @signature = signature
                 @callable_name = callable_name
+                @gc_flags = gc_flags
             end
         end
 
@@ -473,6 +476,9 @@ module Dragonstone
             self_value : Bytecode::Value
         ) : Bytecode::Value
             if fn = container.lookup_method(method)
+                if fn.abstract?
+                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
+                end
                 return with_container_context(container) do
                     call_function_value(fn, args, block_value, self_value)
                 end
@@ -488,6 +494,9 @@ module Dragonstone
             block_value : Bytecode::BlockValue?
         ) : Bytecode::Value
             if fn = instance.klass.lookup_method(method)
+                if fn.abstract?
+                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}")
+                end
                 return with_container_context(instance.klass) do
                     call_function_value(fn, args, block_value, instance)
                 end
@@ -707,6 +716,24 @@ module Dragonstone
             @loop_depth -= 1
         end
 
+        private def enter_gc_context(flags : ::Dragonstone::Runtime::GC::Flags) : Nil
+            if flags.disable
+                @gc_manager.disable
+            end
+            if flags.area
+                @gc_manager.begin_area
+            end
+        end
+
+        private def exit_gc_context(flags : ::Dragonstone::Runtime::GC::Flags) : Nil
+            if flags.area
+                @gc_manager.end_area
+            end
+            if flags.disable
+                @gc_manager.enable
+            end
+        end
+
         private def push_loop_context(condition_ip : Int32, body_ip : Int32, exit_ip : Int32) : Nil
             @loop_stack << LoopContext.new(condition_ip, body_ip, exit_ip, @stack.size)
         end
@@ -895,9 +922,13 @@ module Dragonstone
             @retry_after_ensure = nil
             @singleton_methods = {} of UInt64 => Hash(String, Bytecode::FunctionValue)
             @pending_self = nil
+            @gc_manager = ::Dragonstone::Runtime::GC::Manager(Bytecode::Value).new(
+                ->(value : Bytecode::Value) : Bytecode::Value { ::Dragonstone::Runtime::GC.deep_copy_bytecode(value) }
+            )
 
             # Initialize FFI
             init_ffi_module
+            init_gc_module
             sync_globals_slots
         end
 
@@ -909,6 +940,15 @@ module Dragonstone
                 @global_defined[idx] = true
             end
             @globals["self"] ||= nil
+        end
+
+        private def init_gc_module
+            @globals["gc"] ||= Bytecode::GCHost.new(@gc_manager)
+            if idx = @name_index_cache["gc"]?
+                ensure_global_capacity(idx)
+                @global_slots[idx] = @globals["gc"]
+                @global_defined[idx] = true
+            end
         end
 
         private def ensure_global_capacity(index : Int32)
@@ -1165,6 +1205,7 @@ module Dragonstone
                     push(Bytecode::ModuleValue.new(name))
                 when OPC::MAKE_CLASS
                     name_idx = fetch_byte
+                    abstract_flag = fetch_byte
                     super_idx = fetch_byte
                     name = current_code.names[name_idx]
                     superclass = nil
@@ -1181,7 +1222,7 @@ module Dragonstone
                             end
                         end
                     end
-                    push(Bytecode::ClassValue.new(name, superclass))
+                    push(Bytecode::ClassValue.new(name, superclass, abstract_flag == 1))
                 when OPC::MAKE_STRUCT
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
@@ -1275,7 +1316,7 @@ module Dragonstone
                     name = current_code.names[name_idx]
                     signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
-                    push(Bytecode::FunctionValue.new(name, signature, code))
+                    push(Bytecode::FunctionValue.new(name, signature, code, signature.abstract?))
                 when OPC::MAKE_BLOCK
                     signature_idx = fetch_byte
                     code_idx = fetch_byte
@@ -1701,6 +1742,9 @@ module Dragonstone
                 end
                 raise "Undefined function: #{name}"
             end
+            if value.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{name}")
+            end
             self_value = @pending_self
             @pending_self = nil
             signature = value.signature
@@ -1710,6 +1754,9 @@ module Dragonstone
         end
 
         private def call_function_value(fn : Bytecode::FunctionValue, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?, self_value : Bytecode::Value? = nil) : Bytecode::Value
+            if fn.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{fn.name}")
+            end
             final_args = coerce_call_args(fn.signature, args, block_value, fn.name)
             depth_before = @frames.size
             push_callable_frame(fn.code, fn.signature, final_args, block_value, fn.name, self_value)
@@ -1735,9 +1782,10 @@ module Dragonstone
             use_locals : Bool,
             block_value : Bytecode::BlockValue? = nil,
             signature : Bytecode::FunctionSignature? = nil,
-            callable_name : String? = nil
+            callable_name : String? = nil,
+            gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
         ) : Frame
-            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name)
+            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, gc_flags)
             @frames << frame
             frame
         end
@@ -1751,7 +1799,8 @@ module Dragonstone
             self_value : Bytecode::Value? = nil,
             locals_source : Frame? = nil
         ) : Frame
-            frame = push_frame(code, true, block_value, signature, callable_name)
+            frame = push_frame(code, true, block_value, signature, callable_name, signature.gc_flags)
+            enter_gc_context(frame.gc_flags)
             if ENV["DS_DEBUG_STACK_ENTRY"]?
                 STDERR.puts "ENTER #{callable_name || "<lambda>"} stack_base=#{frame.stack_base} stack=#{@stack.inspect}"
             end
@@ -1787,6 +1836,7 @@ module Dragonstone
         private def cleanup_frames_from(depth_before : Int32) : Nil
             while @frames.size > depth_before
                 frame = @frames.pop
+                exit_gc_context(frame.gc_flags)
                 truncate_stack(frame.stack_base)
             end
         end
@@ -1818,6 +1868,7 @@ module Dragonstone
             result = pop
             frame = @frames.pop?
             raise "Return from empty frame stack" unless frame
+            exit_gc_context(frame.gc_flags)
             if @frames.empty?
                 raise "Return from top-level frame not supported"
             end
@@ -2279,6 +2330,8 @@ module Dragonstone
             when Bytecode::FunctionValue then "Function"
             when Bytecode::BlockValue then "Block"
             when FFIModule then "FFIModule"
+            when ::Dragonstone::Runtime::GC::Area(Bytecode::Value) then "Area"
+            when Bytecode::GCHost then "GC"
             else "Object"
             end
         end
@@ -2287,23 +2340,13 @@ module Dragonstone
             case obj
 
             when Array
-                case index
-
-                when Int32, Int64
-                    obj[index.to_i]? || nil
-                else
-                    raise "Array index must be integer"
-                end
+                idx = ensure_integer_index(index, "Array")
+                obj[idx]? || nil
 
             when String
-                case index
-
-                when Int32, Int64
-                    char = obj[index.to_i]?
-                    char ? char.to_s : nil
-                else
-                    raise "String index must be integer"
-                end
+                idx = ensure_integer_index(index, "String")
+                char = obj[idx]?
+                char ? char.to_s : nil
             when Bytecode::TupleValue
                 idx = ensure_integer_index(index, "Tuple")
                 obj.elements[idx]? || nil
@@ -2340,6 +2383,8 @@ module Dragonstone
             when Int32
                 index
             when Int64
+                index.to_i
+            when Float64
                 index.to_i
             else
                 raise ::Dragonstone::TypeError.new("#{container} index must be integer")
@@ -2564,6 +2609,13 @@ module Dragonstone
             when Bytecode::ClassValue
                 if method == "new"
                     raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
+                    if receiver.abstract?
+                        raise ::Dragonstone::TypeError.new("Cannot instantiate abstract class #{receiver.name}")
+                    end
+                    missing = receiver.unimplemented_abstract_methods
+                    unless missing.empty?
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
+                    end
                     instance = Bytecode::InstanceValue.new(receiver)
                     if init = receiver.lookup_method("initialize")
                         call_function_value(init, args, nil, instance)
@@ -2575,6 +2627,10 @@ module Dragonstone
             when Bytecode::StructValue
                 if method == "new"
                     raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
+                    missing = receiver.unimplemented_abstract_methods
+                    unless missing.empty?
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
+                    end
                     instance = Bytecode::InstanceValue.new(receiver)
                     if init = receiver.lookup_method("initialize")
                         call_function_value(init, args, nil, instance)
@@ -2595,6 +2651,8 @@ module Dragonstone
                 call_range_method(receiver, method, args, block_value)
             when Range(Char, Char)
                 call_range_method(receiver, method, args, block_value)
+            when Bytecode::GCHost
+                call_gc_method(receiver, method, args, block_value)
             else
                 raise "Cannot call method #{method} on #{type_of(receiver)}"
             end
@@ -2655,6 +2713,49 @@ module Dragonstone
             else
                 raise "Unknown FFI method: #{method}"
 
+            end
+        end
+
+        private def call_gc_method(host : Bytecode::GCHost, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            manager = host.manager
+            case method
+            when "disable"
+                raise ArgumentError.new("gc.disable does not take arguments") unless args.empty?
+                manager.disable
+                nil
+            when "enable"
+                raise ArgumentError.new("gc.enable does not take arguments") unless args.empty?
+                manager.enable
+                nil
+            when "with_disabled"
+                raise ArgumentError.new("gc.with_disabled requires a block") unless block_value
+                raise ArgumentError.new("gc.with_disabled does not take arguments") unless args.empty?
+                manager.with_disabled do
+                    call_block(block_value.not_nil!, [] of Bytecode::Value)
+                end
+            when "begin"
+                raise ArgumentError.new("gc.begin does not accept arguments") unless args.empty?
+                manager.begin_area
+            when "end"
+                raise ArgumentError.new("gc.end accepts at most 1 argument") if args.size > 1
+                target = args.first?
+                if target && !target.is_a?(::Dragonstone::Runtime::GC::Area(Bytecode::Value))
+                    raise ArgumentError.new("gc.end expects an Area or no argument")
+                end
+                manager.end_area(target.as?(::Dragonstone::Runtime::GC::Area(Bytecode::Value)))
+                nil
+            when "current_area"
+                raise ArgumentError.new("gc.current_area does not take arguments") unless args.empty?
+                manager.current_area
+            when "copy"
+                raise ArgumentError.new("gc.copy expects 1 argument") unless args.size == 1
+                value = args.first
+                unless value.is_a?(Bytecode::Value)
+                    raise ArgumentError.new("gc.copy expects a value")
+                end
+                manager.copy(value.as(Bytecode::Value))
+            else
+                raise ArgumentError.new("Unknown gc method: #{method}")
             end
         end
         

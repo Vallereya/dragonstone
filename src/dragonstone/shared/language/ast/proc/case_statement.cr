@@ -18,6 +18,29 @@ module Dragonstone
                 visitor.visit_case_statement(self)
             end
 
+            def to_source(io : IO)
+                io << (@kind == :select ? "select" : "case")
+                if expr = @expression
+                    io << " "
+                    expr.to_source(io)
+                end
+                io << "\n"
+                
+                @when_clauses.each do |clause|
+                    clause.to_source(io)
+                end
+                
+                if block = @else_block
+                    io << "else\n"
+                    block.each do |node|
+                        node.to_source(io)
+                        io << "\n"
+                    end
+                end
+                
+                io << "end"
+            end
+
             def select? : Bool
                 @kind == :select
             end

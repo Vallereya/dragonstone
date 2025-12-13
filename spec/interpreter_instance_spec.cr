@@ -155,11 +155,11 @@ describe "Interpreter instance variable support" do
             end
         end
 
-        person = Person.new("Alice")
+        person = Person.new("Jalyn")
         echo person.name
         DS
 
-        run_program(source).should eq("Alice\n")
+        run_program(source).should eq("Jalyn\n")
     end
 
     it "updates state through property setter" do
@@ -223,6 +223,24 @@ describe "Interpreter instance variable support" do
         DS
 
         expect_raises(Dragonstone::InterpreterError) do
+            run_program(source)
+        end
+    end
+
+    it "requires concrete subclasses to implement abstract methods" do
+        source = <<-DS
+        abstract class Animal
+            abstract def speak
+            end
+        end
+
+        class Cat < Animal
+        end
+
+        Cat.new
+        DS
+
+        expect_raises(Dragonstone::TypeError) do
             run_program(source)
         end
     end

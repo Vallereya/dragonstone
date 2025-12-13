@@ -7,6 +7,7 @@ require "../../../shared/language/lexer/lexer"
 require "../../../shared/language/parser/parser"
 require "../../../shared/language/ast/ast"
 require "../../../shared/runtime/symbol"
+require "../../../shared/runtime/gc/gc"
 
 module Dragonstone
     class Compiler
@@ -652,14 +653,8 @@ module Dragonstone
         end
 
         private def compile_array_literal(node : AST::ArrayLiteral)
-            if node.elements.empty?
-                emit_const([] of Bytecode::Value)
-
-            else
-                node.elements.each { |element| compile_expression(element) }
-                emit(OPC::MAKE_ARRAY, node.elements.size)
-
-            end
+            node.elements.each { |element| compile_expression(element) }
+            emit(OPC::MAKE_ARRAY, node.elements.size)
         end
 
         private def compile_tuple_literal(node : AST::TupleLiteral)
@@ -768,6 +763,10 @@ module Dragonstone
         end
 
         private def compile_function_def(node : AST::FunctionDef)
+            if node.abstract && @container_depth == 0
+                raise "'abstract def' is only allowed inside classes or modules"
+            end
+
             if node.receiver
                 compile_singleton_function_def(node)
                 return
@@ -776,7 +775,8 @@ module Dragonstone
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             fn_const_idx = const_index(fn_chunk)
-            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            gc_flags = ::Dragonstone::Runtime::GC.flags_from_annotations(node.annotations)
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract, gc_flags))
             name_idx = name_index(node.name)
 
             emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
@@ -794,7 +794,8 @@ module Dragonstone
             fn_compiler = self.class.new(@name_pool)
             fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
             fn_const_idx = const_index(fn_chunk)
-            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
+            gc_flags = ::Dragonstone::Runtime::GC.flags_from_annotations(node.annotations)
+            signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract, gc_flags))
             name_idx = name_index(node.name)
 
             emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, fn_const_idx)
@@ -862,7 +863,7 @@ module Dragonstone
         private def compile_class_definition(node : AST::ClassDefinition)
             name_idx = name_index(node.name)
             super_idx = node.superclass ? const_index(node.superclass.not_nil!) : -1
-            emit(OPC::MAKE_CLASS, name_idx, super_idx)
+            emit(OPC::MAKE_CLASS, name_idx, node.abstract ? 1 : 0, super_idx)
             if @container_depth > 0
                 emit(OPC::DEFINE_CONST, name_idx)
             else
@@ -990,7 +991,8 @@ module Dragonstone
             end_jumps = [] of Int32
 
             node.when_clauses.each do |clause|
-                condition_jumps = [] of Int32
+                body_entry_jumps = [] of Int32
+
                 clause.conditions.each do |condition|
                     if has_expression
                         emit(OPC::DUP)
@@ -999,29 +1001,39 @@ module Dragonstone
                     else
                         compile_expression(condition)
                     end
-                    condition_jumps << emit(OPC::JMPF, 0)
+                    
+                    skip_jump = emit(OPC::JMPF, 0)
+                    body_entry_jumps << emit(OPC::JMP, 0)
+                    patch_jump(skip_jump, current_ip)
                 end
+
+                next_clause_jump = emit(OPC::JMP, 0)
+
+                body_start = current_ip
+                body_entry_jumps.each { |pos| patch_jump(pos, body_start) }
 
                 emit(OPC::POP) if has_expression
                 compile_block(clause.block)
                 emit_nil
                 end_jumps << emit(OPC::JMP, 0)
-                condition_jumps.each { |pos| patch_jump(pos, current_ip) }
+
+                patch_jump(next_clause_jump, current_ip)
             end
 
             emit(OPC::POP) if has_expression
             if node.else_block
                 compile_block(node.else_block.not_nil!)
             end
+
             emit_nil
             end_jumps.each { |pos| patch_jump(pos, current_ip) }
         end
 
-        private def build_signature(parameters : Array(AST::TypedParameter), return_type : AST::TypeExpression?) : Bytecode::FunctionSignature
+        private def build_signature(parameters : Array(AST::TypedParameter), return_type : AST::TypeExpression?, is_abstract : Bool = false, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new) : Bytecode::FunctionSignature
             specs = parameters.map do |param|
                 Bytecode::ParameterSpec.new(name_index(param.name), param.type, param.instance_var_name)
             end
-            Bytecode::FunctionSignature.new(specs, return_type)
+            Bytecode::FunctionSignature.new(specs, return_type, is_abstract, gc_flags)
         end
 
         private def emit_load_name(sym : String)

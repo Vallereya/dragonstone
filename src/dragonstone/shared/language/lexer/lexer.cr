@@ -57,6 +57,7 @@ module Dragonstone
             do 
             def 
             fun 
+            abstract
             module 
             class 
             return 
@@ -134,7 +135,12 @@ module Dragonstone
                 else
                     case char
                 when '@'
-                    scan_instance_variable
+                    if peek_char == '['
+                        add_token(:ANNOTATION_START, "@[", @line, @column, 2)
+                        advance(2)
+                    else
+                        scan_instance_variable
+                    end
                 when '='
                     case peek_char
                     when '='
@@ -570,6 +576,7 @@ module Dragonstone
                     when "do" then :DO
                     when "def" then :DEF
                     when "fun" then :FUN
+                    when "abstract" then :ABSTRACT
                     when "module" then :MODULE
                     when "class" then :CLASS
                     when "return" then :RETURN

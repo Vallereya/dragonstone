@@ -566,6 +566,12 @@ module Dragonstone
                 end
                 call_ffi_dispatch(node.name, args, node)
 
+            when Runtime::GC::Host
+                if block_value && node.name != "with_disabled"
+                    runtime_error(InterpreterError, "gc.#{node.name} does not accept a block", node)
+                end
+                call_gc_dispatch(receiver, node.name, args, block_value, node)
+
             when DragonEnum
                 case node.name
                 when "new"
@@ -834,6 +840,49 @@ module Dragonstone
             else
                 runtime_error(NameError, "Unknown FFI method: #{method}", node)
 
+            end
+        end
+
+        private def call_gc_dispatch(host : Runtime::GC::Host, method : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall) : RuntimeValue
+            manager = host.manager
+            case method
+            when "disable"
+                runtime_error(InterpreterError, "gc.disable does not take arguments", node) unless args.empty?
+                manager.disable
+                nil
+            when "enable"
+                runtime_error(InterpreterError, "gc.enable does not take arguments", node) unless args.empty?
+                manager.enable
+                nil
+            when "with_disabled"
+                runtime_error(InterpreterError, "gc.with_disabled requires a block", node) unless block_value
+                runtime_error(InterpreterError, "gc.with_disabled does not take arguments", node) unless args.empty?
+                manager.with_disabled do
+                    call_function(block_value.not_nil!, [] of AST::Node, nil, node.location)
+                end
+            when "begin"
+                runtime_error(InterpreterError, "gc.begin does not accept arguments", node) unless args.empty?
+                manager.begin_area
+            when "end"
+                runtime_error(InterpreterError, "gc.end accepts at most 1 argument", node) if args.size > 1
+                target = args.first?
+                if target && !target.is_a?(Runtime::GC::Area(RuntimeValue))
+                    runtime_error(TypeError, "gc.end expects an Area or no argument", node)
+                end
+                manager.end_area(target.as?(Runtime::GC::Area(RuntimeValue)))
+                nil
+            when "current_area"
+                runtime_error(InterpreterError, "gc.current_area does not take arguments", node) unless args.empty?
+                manager.current_area
+            when "copy"
+                runtime_error(InterpreterError, "gc.copy expects 1 argument", node) unless args.size == 1
+                value = args.first
+                unless value.is_a?(RuntimeValue)
+                    runtime_error(TypeError, "gc.copy expects a value", node)
+                end
+                manager.copy(value.as(RuntimeValue))
+            else
+                runtime_error(NameError, "Unknown gc method: #{method}", node)
             end
         end
 
@@ -1312,7 +1361,7 @@ module Dragonstone
                     outcome = execute_loop_iteration(block, [key.as(RuntimeValue), value.as(RuntimeValue)], node)
                     next if outcome[:state] == :next
                     if truthy?(outcome[:value])
-                        result[key.as(RuntimeValue)] = value.as(RuntimeValue)
+                        result[key] = value
                     end
                 end
             end
@@ -1374,21 +1423,21 @@ module Dragonstone
             unless args.size == 1
                 runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
             end
-                map.has_key?(args.first)
+            map.has_key?(args.first)
 
-            when "has_value?", "value?"
-                reject_block(block_value, "Map##{name}", node)
-                unless args.size == 1
-                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
-                end
-                map.has_value?(args.first)
+        when "has_value?", "value?"
+            reject_block(block_value, "Map##{name}", node)
+            unless args.size == 1
+                runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+            end
+            map.has_value?(args.first)
 
-            when "delete"
-                reject_block(block_value, "Map##{name}", node)
-                unless args.size == 1
-                    runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
-                end
-                map.delete(args.first)
+        when "delete"
+            reject_block(block_value, "Map##{name}", node)
+            unless args.size == 1
+                runtime_error(InterpreterError, "Map##{name} expects 1 argument, got #{args.size}", node)
+            end
+            map.delete(args.first)
 
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Map", node)

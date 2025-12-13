@@ -1,0 +1,4 @@
+name: net/net
+entry: module.ds
+# Uses ffi.call_crystal for socket operations; restrict to the native backend.
+requires: native

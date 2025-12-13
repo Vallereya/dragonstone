@@ -59,16 +59,3 @@ module utilities
         path.new
     end
 end
-
-# utilities.file().open("./demo.txt", "r", false)
-# utilities.file().read("./demo.txt")
-# utilities.file().write("./demo.txt", "content", false)
-# utilities.file().append("./demo.txt", "\nextra", true)
-# utilities.file().create("./demo.txt", "initial", true)
-# utilities.file().delete("./demo.txt")
-# utilities.path().create("./bar")
-# utilities.path().normalize("./foo/../bar")
-# utilities.path().parent("foo/bar/baz.ds")
-# utilities.path().base("foo/bar/baz.ds")
-# utilities.path().expand("~/bin")
-# utilities.path().delete("./bar")

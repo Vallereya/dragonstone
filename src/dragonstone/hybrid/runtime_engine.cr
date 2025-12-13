@@ -62,9 +62,9 @@ module Dragonstone
                 when DragonModule
                     Bytecode::ModuleValue.new(value.name)
                 when DragonClass
-                    Bytecode::ClassValue.new(value.name)
+                    Bytecode::ClassValue.new(value.name, nil, value.abstract?)
                 when DragonInstance
-                    Bytecode::InstanceValue.new(Bytecode::ClassValue.new(value.klass.name))
+                    Bytecode::InstanceValue.new(Bytecode::ClassValue.new(value.klass.name, nil, value.klass.abstract?))
                 when DragonEnumMember
                     enum_val = Bytecode::EnumValue.new(value.enum.name)
                     Bytecode::EnumMemberValue.new(enum_val, value.name, value.value)
@@ -98,16 +98,36 @@ module Dragonstone
                         entries[key] = bytecode_to_runtime(entry_value)
                     end
                     NamedTupleValue.new(entries)
+                when Bytecode::MapValue
+                    map = MapValue.new
+                    value.entries.each do |k, v|
+                        map[bytecode_to_runtime(k)] = bytecode_to_runtime(v)
+                    end
+                    map
+                when Bytecode::BagValue
+                    bag = BagValue.new(nil)
+                    value.elements.each { |element| bag.add(bytecode_to_runtime(element)) }
+                    bag
+                when Bytecode::BagConstructorValue
+                    BagConstructor.new(Typing::SimpleDescriptor.new("dynamic"), AST::SimpleTypeExpression.new("dynamic"))
                 when Bytecode::ModuleValue
                     DragonModule.new(value.name)
                 when Bytecode::ClassValue
-                    DragonClass.new(value.name)
+                    DragonClass.new(value.name, is_abstract: value.abstract?)
                 when Bytecode::InstanceValue
-                    DragonInstance.new(DragonClass.new(value.klass.name))
+                    DragonInstance.new(DragonClass.new(value.klass.name, is_abstract: value.klass.abstract?))
                 when Bytecode::EnumValue
                     DragonEnum.new(value.name)
                 when Bytecode::EnumMemberValue
                     DragonEnumMember.new(DragonEnum.new(value.enum.name), value.name, value.value)
+                when Bytecode::GCHost
+                    Runtime::GC::Host.new(Runtime::GC::Manager(RuntimeValue).new(
+                        ->(v : RuntimeValue) { v },
+                        -> { ::GC.disable },
+                        -> { ::GC.enable }
+                    ))
+                when ::Dragonstone::Runtime::GC::Area(Bytecode::Value)
+                    Runtime::GC::Area(RuntimeValue).new
                 else
                     raise "Cannot import #{value.class} into interpreter runtime"
                 end
@@ -132,9 +152,9 @@ module Dragonstone
                     end
                     param_specs << Bytecode::ParameterSpec.new(idx, param.type, param.instance_var_name)
                 end
-                signature = Bytecode::FunctionSignature.new(param_specs, func.return_type)
+                signature = Bytecode::FunctionSignature.new(param_specs, func.return_type, false)
                 name = func.name || "<lambda>"
-                Bytecode::FunctionValue.new(name, signature, chunk)
+                Bytecode::FunctionValue.new(name, signature, chunk, signature.abstract?)
             end
         end
 
@@ -149,6 +169,10 @@ module Dragonstone
                 super(log_to_stdout)
                 @interpreter = interpreter
                 @resolver = resolver
+            end
+
+            def backend_mode : BackendMode
+                BackendMode::Native
             end
 
             def import_variable(name : String, value : ExportValue) : Nil
@@ -181,6 +205,10 @@ module Dragonstone
                 super(log_to_stdout)
                 @globals = {} of String => Bytecode::Value
                 @constant_names = Set(String).new
+            end
+
+            def backend_mode : BackendMode
+                BackendMode::Core
             end
 
             def import_variable(name : String, value : ExportValue) : Nil
@@ -249,7 +277,8 @@ module Dragonstone
                 ast : AST::Program,
                 path : String,
                 typed : Bool? = nil,
-                analysis : Language::Sema::AnalysisResult? = nil
+                analysis : Language::Sema::AnalysisResult? = nil,
+                preferred_backend : BackendMode? = nil
             ) : Unit
                 node = @resolver.graph[path]
                 node_typed = node && node.typed
@@ -264,16 +293,17 @@ module Dragonstone
                 end
                 analysis ||= Language::Sema::TypeChecker.new.analyze(ast, typed: typing_flag)
                 program = IR::Lowering.lower(ast, analysis)
-                compile_or_eval(program, path, typing_flag)
+                compile_or_eval(program, path, typing_flag, preferred_backend)
             end
 
             def compile_or_eval(
                 program : IR::Program,
                 path : String,
-                typed : Bool? = nil
+                typed : Bool? = nil,
+                preferred_backend : BackendMode? = nil
             ) : Unit
                 typing_flag = typed.nil? ? program.typed? : typed
-                backends = backend_candidates(program, typing_flag)
+                backends = backend_candidates(program, typing_flag, preferred_backend)
                 last_error = nil
 
                 backends.each_with_index do |backend, index|
@@ -297,7 +327,7 @@ module Dragonstone
                 raise "Failed to build runtime unit for #{path}"
             end
 
-            private def backend_candidates(program : IR::Program, typing_flag : Bool) : Array(Backend)
+            private def backend_candidates(program : IR::Program, typing_flag : Bool, preferred_backend : BackendMode?) : Array(Backend)
                 candidates = [] of Backend
                 native_only_modules = metadata_conflicts_for(BackendMode::Core)
                 core_only_modules = metadata_conflicts_for(BackendMode::Native)
@@ -312,10 +342,16 @@ module Dragonstone
                     candidates << build_interpreter_backend(typing_flag)
                 else
                     allow_vm = native_only_modules.empty? && !typing_flag && IR::Lowering::Supports.vm?(program.ast)
-                    candidates << VMBackend.new(@log_to_stdout) if allow_vm
-
                     allow_interpreter = core_only_modules.empty?
-                    candidates << build_interpreter_backend(typing_flag) if allow_interpreter
+
+                    # Reorder preference to keep imports on the same backend when possible.
+                    if preferred_backend == BackendMode::Native
+                        candidates << build_interpreter_backend(typing_flag) if allow_interpreter
+                        candidates << VMBackend.new(@log_to_stdout) if allow_vm
+                    else
+                        candidates << VMBackend.new(@log_to_stdout) if allow_vm
+                        candidates << build_interpreter_backend(typing_flag) if allow_interpreter
+                    end
 
                     if candidates.empty?
                         raise_no_available_backend!(native_only_modules, core_only_modules)

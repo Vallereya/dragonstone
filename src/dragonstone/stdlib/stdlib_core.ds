@@ -1,0 +1,6 @@
+# Dragonstone StdLib (Core-only extensions).
+#
+# Import this file in addition to `stdlib` if you need compiler-only
+# modules (e.g., utilities backed by Crystal FFI bindings).
+
+use "./modules/core/**/module"

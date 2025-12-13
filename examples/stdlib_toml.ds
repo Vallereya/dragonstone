@@ -1,0 +1,19 @@
+use "toml"
+
+def main
+    input = "title = \"Example\"\n\n[owner]\nname = \"Kay\"\nage  = 30\n"
+
+    config = TOML.parse(input)
+
+    title = config["title"].as_s
+    echo "title: #{title}"
+
+    echo "\n[owner]"
+    owner = config["owner"].as_h
+    owner_name = owner["name"].as_s
+    owner_age = owner["age"].as_i
+    echo "name: #{owner_name}"
+    echo "age:  #{owner_age}"
+end
+
+main

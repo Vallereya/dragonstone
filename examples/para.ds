@@ -14,9 +14,26 @@ greet = ->(name: str) {
     "Hello, #{name}!" 
 }
 
-echo greet.call("Alice")
+echo greet.call("Jalyn")
 
 # Example Two
 square: para(int, int) = ->(x: int) { x * x }
 
 echo square.call(6)
+
+# Example Three
+x = "Hello"
+y = " again."
+
+test: para(str, int) = ->(x: str, y: str) {
+    x + y
+}
+
+echo test.call(x, y)
+
+# Example Four
+adds = ->(a: int, b: int) {
+    a + b
+}
+
+echo adds.call(5, 3)

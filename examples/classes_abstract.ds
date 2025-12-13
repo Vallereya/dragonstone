@@ -1,0 +1,19 @@
+#[
+    Abstract Class & Abstract Def Example
+]#
+
+abstract class Animal
+    abstract def make_sound
+        
+    end
+end
+
+class Dog < Animal
+    def make_sound
+        "Woof!"
+    end
+end
+
+dog = Dog.new
+echo dog.make_sound
+

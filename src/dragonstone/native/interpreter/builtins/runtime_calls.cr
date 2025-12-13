@@ -1,6 +1,15 @@
 module Dragonstone
     class Interpreter
         private def instantiate_class(klass : DragonClass, args : Array(RuntimeValue), node : AST::MethodCall)
+            if klass.abstract?
+                runtime_error(TypeError, "Cannot instantiate abstract class #{klass.name}", node)
+            end
+
+            missing = klass.unimplemented_abstract_methods
+            unless missing.empty?
+                runtime_error(TypeError, "#{klass.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}", node)
+            end
+
             instance = DragonInstance.new(klass)
             initializer = klass.lookup_method("initialize")
             
@@ -51,101 +60,109 @@ module Dragonstone
         end
 
         private def call_function(func : Function, arg_nodes : Array(AST::Node), block_value : Function?, call_location : Location? = nil)
-            evaluated_args = arg_nodes.map { |arg| arg.accept(self) }
-            final_args = evaluated_args.dup
-            expected_params = func.parameters.size
+            with_gc_context(func.gc_flags) do
+                evaluated_args = arg_nodes.map { |arg| arg.accept(self) }
+                final_args = evaluated_args.dup
+                expected_params = func.parameters.size
 
-            if block_value
-                if final_args.size == expected_params
-                    # Block passed implicitly for yield support.
-                elsif final_args.size + 1 == expected_params
-                    final_args << block_value.as(RuntimeValue)
-                else
+                if block_value
+                    if final_args.size == expected_params
+                        # Block passed implicitly for yield support.
+                    elsif final_args.size + 1 == expected_params
+                        final_args << block_value.as(RuntimeValue)
+                    else
+                        runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{expected_params} arguments, got #{evaluated_args.size}", call_location)
+                    end
+                elsif final_args.size != expected_params
                     runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{expected_params} arguments, got #{evaluated_args.size}", call_location)
                 end
-            elsif final_args.size != expected_params
-                runtime_error(TypeError, "Function #{func.name || "anonymous"} expects #{expected_params} arguments, got #{evaluated_args.size}", call_location)
-            end
 
-            with_block(block_value) do
-                push_scope(func.closure, func.type_closure)
-                push_scope(Scope.new, new_type_scope)
-                scope_index = @scopes.size - 1
-                func.typed_parameters.each_with_index do |param, index|
-                    value = final_args[index]
-                    descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
-                    ensure_type!(descriptor, value, call_location) if descriptor
-                    current_scope[param.name] = value
-                    assign_type_to_scope(scope_index, param.name, descriptor)
-                end
+                with_block(block_value) do
+                    push_scope(func.closure, func.type_closure)
+                    push_scope(Scope.new, new_type_scope)
+                    scope_index = @scopes.size - 1
+                    func.typed_parameters.each_with_index do |param, index|
+                        value = final_args[index]
+                        descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                        ensure_type!(descriptor, value, call_location) if descriptor
+                        current_scope[param.name] = value
+                        assign_type_to_scope(scope_index, param.name, descriptor)
+                    end
 
-                result = nil
-                begin
-                    result = execute_block_with_rescue(func.body, func.rescue_clauses)
-                rescue e : ReturnValue
-                    result = e.value
-                ensure
-                    pop_scope
-                    pop_scope
-                end
+                    result = nil
+                    begin
+                        result = execute_block_with_rescue(func.body, func.rescue_clauses)
+                    rescue e : ReturnValue
+                        result = e.value
+                    ensure
+                        pop_scope
+                        pop_scope
+                    end
 
-                if typing_enabled? && func.return_type
-                    descriptor = descriptor_for(func.return_type.not_nil!)
-                    ensure_type!(descriptor, result, call_location)
+                    if typing_enabled? && func.return_type
+                        descriptor = descriptor_for(func.return_type.not_nil!)
+                        ensure_type!(descriptor, result, call_location)
+                    end
+                    result
                 end
-                result
             end
         end
 
         private def call_bound_method(receiver, method_def : MethodDefinition, args : Array(RuntimeValue), block_value : Function?, call_location : Location? = nil, *, self_object : RuntimeValue? = nil)
-            final_args = args.dup
-            expected_params = method_def.parameters.size
+            with_gc_context(method_def.gc_flags) do
+                final_args = args.dup
+                expected_params = method_def.parameters.size
 
-            if block_value
-                if final_args.size == expected_params
-                    # yield-only block
-                elsif final_args.size + 1 == expected_params
-                    final_args << block_value.as(RuntimeValue)
-                else
+                if method_def.abstract?
+                    runtime_error(TypeError, "Cannot invoke abstract method #{method_def.name}", call_location)
+                end
+
+                if block_value
+                    if final_args.size == expected_params
+                        # yield-only block
+                    elsif final_args.size + 1 == expected_params
+                        final_args << block_value.as(RuntimeValue)
+                    else
+                        runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
+                    end
+                elsif final_args.size != expected_params
                     runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
                 end
-            elsif final_args.size != expected_params
-                runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
-            end
 
-            with_block(block_value) do
-                push_scope(method_def.closure.dup, method_def.type_closure.dup)
-                current_scope["self"] = self_object || receiver
-                scope_index = @scopes.size - 1
-                method_def.typed_parameters.each_with_index do |param, index|
-                    value = final_args[index]
-                    descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
-                    ensure_type!(descriptor, value, call_location) if descriptor
-                    current_scope[param.name] = value
-                    assign_type_to_scope(scope_index, param.name, descriptor)
-                    if param.assigns_instance_variable?
-                        instance = self_object
-                        unless instance && instance.is_a?(DragonInstance)
-                            runtime_error(InterpreterError, "Instance variable parameters require an instance context", call_location)
+                with_block(block_value) do
+                    push_scope(method_def.closure.dup, method_def.type_closure.dup)
+                    current_scope["self"] = self_object || receiver
+                    scope_index = @scopes.size - 1
+                    method_def.typed_parameters.each_with_index do |param, index|
+                        value = final_args[index]
+                        descriptor = typing_enabled? && param.type ? descriptor_for(param.type.not_nil!) : nil
+                        ensure_type!(descriptor, value, call_location) if descriptor
+                        current_scope[param.name] = value
+                        assign_type_to_scope(scope_index, param.name, descriptor)
+                        if param.assigns_instance_variable?
+                            instance = self_object
+                            unless instance && instance.is_a?(DragonInstance)
+                                runtime_error(InterpreterError, "Instance variable parameters require an instance context", call_location)
+                            end
+                            set_instance_variable(instance.as(DragonInstance), param.instance_var_name.not_nil!, value, call_location)
                         end
-                        set_instance_variable(instance.as(DragonInstance), param.instance_var_name.not_nil!, value, call_location)
                     end
-                end
 
-                result = nil
-                begin
-                    result = execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
-                rescue e : ReturnValue
-                    result = e.value
-                ensure
-                    pop_scope
-                end
+                    result = nil
+                    begin
+                        result = execute_block_with_rescue(method_def.body, method_def.rescue_clauses)
+                    rescue e : ReturnValue
+                        result = e.value
+                    ensure
+                        pop_scope
+                    end
 
-                if typing_enabled? && method_def.return_type
-                    descriptor = descriptor_for(method_def.return_type.not_nil!)
-                    ensure_type!(descriptor, result, call_location)
+                    if typing_enabled? && method_def.return_type
+                        descriptor = descriptor_for(method_def.return_type.not_nil!)
+                        ensure_type!(descriptor, result, call_location)
+                    end
+                    result
                 end
-                result
             end
         end
 
@@ -183,6 +200,18 @@ module Dragonstone
                     pop_scope
                 end
                 result
+            end
+        end
+
+        private def with_gc_context(flags : Runtime::GC::Flags, &block)
+            if flags.disable && flags.area
+                @gc_manager.with_disabled { @gc_manager.with_area { yield } }
+            elsif flags.disable
+                @gc_manager.with_disabled { yield }
+            elsif flags.area
+                @gc_manager.with_area { yield }
+            else
+                yield
             end
         end
 

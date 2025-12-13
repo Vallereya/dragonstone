@@ -57,7 +57,7 @@ module Dragonstone
         end
 
         class ModuleMetadata
-            FILE_NAME = ".dragonstone-module.yml"
+            FILE_NAME = "module.yml"
 
             getter name : String
             getter entry : String
@@ -99,9 +99,11 @@ module Dragonstone
             def self.metadata_path_for_entry(entry_path : String) : String?
                 directory_candidate = File.join(File.dirname(entry_path), FILE_NAME)
                 return directory_candidate if File.file?(directory_candidate)
-                base = entry_path.rpartition(".").first
-                inline_candidate = "#{base}.#{FILE_NAME}"
+
+                base = File.basename(entry_path, File.extname(entry_path))
+                inline_candidate = File.join(File.dirname(entry_path), "#{base}.#{FILE_NAME}")
                 return inline_candidate if File.file?(inline_candidate)
+
                 nil
             end
 

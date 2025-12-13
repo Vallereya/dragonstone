@@ -25,9 +25,20 @@ release
 
 # Ignore any Output/Build Cache from testing.
 .cache
+.tmp
+.crystal-cache
+.crystal_cache
+tmp
+
+# Ignore my self-hosting/bootstrap compiler builds and notes.
+LLVM_CHECKLIST.md
+dev/
 
 # Ignore any IDE folders.
 .vscode
 
 # Annoying IDE ignores.
 .fake
+
+# Build output directory (new pipeline).
+bin/build/

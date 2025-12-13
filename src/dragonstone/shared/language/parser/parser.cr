@@ -29,6 +29,7 @@ module Dragonstone
             :RETRY,
             :RAISE,
             :CON, 
+            :ABSTRACT,
             :DEF, 
             :CLASS, 
             :MODULE, 
@@ -65,7 +66,31 @@ module Dragonstone
         ]
 
         METHOD_NAME_KEYWORDS = [
-            :SELECT
+            :SELECT,
+            :BEGIN
+        ]
+
+        OVERLOADABLE_OPERATORS = [
+            :PLUS,
+            :MINUS,
+            :MULTIPLY,
+            :DIVIDE,
+            :MODULO,
+            :POWER,
+            :SHIFT_LEFT,
+            :SHIFT_RIGHT,
+            :BIT_AND,
+            :BIT_OR,
+            :BIT_XOR,
+            :BIT_NOT,
+            :EQUALS,
+            :NOT_EQUALS,
+            :LESS,
+            :LESS_EQUAL,
+            :GREATER,
+            :GREATER_EQUAL,
+            :SPACESHIP,
+            :CASE_EQUALS
         ]
 
         PRECEDENCE = {
@@ -205,6 +230,8 @@ module Dragonstone
         private def parse_statement : AST::Node
             token = current_token
             case token.type
+            when :ANNOTATION_START
+                parse_annotated_statement
             when :IDENTIFIER
                 parse_expression_statement
             when :INSTANCE_VAR
@@ -232,6 +259,8 @@ module Dragonstone
                 parse_module_definition
             when :CLASS
                 parse_class_definition
+            when :ABSTRACT
+                parse_abstract_prefixed_statement
             when :CON
                 parse_constant_declaration
             when :ENUM
@@ -313,6 +342,14 @@ module Dragonstone
             case current_token.type
             when :DEF
                 parse_function_def(visibility)
+            when :ABSTRACT
+                expect(:ABSTRACT)
+                case current_token.type
+                when :DEF
+                    parse_function_def(visibility, is_abstract: true)
+                else
+                    error("Expected def after #{visibility} abstract", current_token)
+                end
             when :GETTER
                 parse_accessor_macro(:getter, visibility)
             when :SETTER
@@ -385,15 +422,27 @@ module Dragonstone
             AST::DebugPrint.new(expression, location: token.location)
         end
 
-        private def parse_module_definition : AST::Node
+        private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             module_token = expect(:MODULE)
             name_token = expect(:IDENTIFIER)
             body = parse_block([:END])
             expect(:END)
-            AST::ModuleDefinition.new(name_token.value.as(String), body, location: module_token.location)
+            AST::ModuleDefinition.new(name_token.value.as(String), body, annotations, location: module_token.location)
         end
 
-        private def parse_class_definition : AST::Node
+        private def parse_abstract_prefixed_statement(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+            expect(:ABSTRACT)
+            case current_token.type
+            when :CLASS
+                parse_class_definition(is_abstract: true, annotations: annotations)
+            when :DEF
+                parse_function_def(:public, is_abstract: true, annotations: annotations)
+            else
+                error("Expected 'class' or 'def' after 'abstract'", current_token)
+            end
+        end
+
+        private def parse_class_definition(is_abstract : Bool = false, annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             class_token = expect(:CLASS)
             name_token = expect(:IDENTIFIER)
             superclass = nil
@@ -403,18 +452,18 @@ module Dragonstone
             end
             body = parse_block([:END])
             expect(:END)
-            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, location: class_token.location)
+            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, is_abstract, annotations, location: class_token.location)
         end
 
-        private def parse_struct_declaration : AST::Node
+        private def parse_struct_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             struct_token = expect(:STRUCT)
             name_token = expect(:IDENTIFIER)
             body = parse_block([:END])
             expect(:END)
-            AST::StructDefinition.new(name_token.value.as(String), body, location: struct_token.location)
+            AST::StructDefinition.new(name_token.value.as(String), body, annotations, location: struct_token.location)
         end
 
-        private def parse_enum_declaration : AST::Node
+        private def parse_enum_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             enum_token = expect(:ENUM)
             name_token = expect(:IDENTIFIER)
 
@@ -446,6 +495,7 @@ module Dragonstone
                 members,
                 value_name: value_name,
                 value_type: value_type,
+                annotations: annotations,
                 location: enum_token.location
             )
         end
@@ -458,7 +508,7 @@ module Dragonstone
             AST::AliasDefinition.new(name_token.value.as(String), type_expr, location: alias_token.location)
         end
 
-        private def parse_function_def(visibility : Symbol = :public) : AST::Node
+        private def parse_function_def(visibility : Symbol = :public, is_abstract : Bool = false, annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             def_token = expect(:DEF)
             receiver_node = nil
             name_token = nil
@@ -479,7 +529,85 @@ module Dragonstone
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionDef.new(name_token.value.as(String), parameters, body, rescue_clauses, return_type, visibility: visibility, receiver: receiver_node, location: def_token.location)
+
+            if is_abstract
+                unless body.empty? && rescue_clauses.empty?
+                    error("Abstract methods cannot have a body", def_token)
+                end
+            end
+
+            AST::FunctionDef.new(
+                name_token.value.as(String),
+                parameters,
+                body,
+                rescue_clauses,
+                return_type,
+                visibility: visibility,
+                receiver: receiver_node,
+                is_abstract: is_abstract,
+                annotations: annotations,
+                location: def_token.location
+            )
+        end
+
+        private def parse_annotations : Array(AST::Annotation)
+            annotations = [] of AST::Annotation
+            while current_token.type == :ANNOTATION_START
+                annotations << parse_annotation
+            end
+            annotations
+        end
+
+        private def parse_annotation : AST::Annotation
+            start_token = expect(:ANNOTATION_START)
+            name_parts = [] of String
+            name_parts << expect(:IDENTIFIER).value.as(String)
+            while current_token.type == :DOT
+                advance
+                name_parts << expect(:IDENTIFIER).value.as(String)
+            end
+
+            args = [] of AST::Node
+            if current_token.type == :LPAREN
+                args = parse_annotation_arguments
+            end
+
+            expect(:RBRACKET)
+            AST::Annotation.new(name_parts.join("."), args, start_token.location)
+        end
+
+        private def parse_annotation_arguments : Array(AST::Node)
+            expect(:LPAREN)
+            args = [] of AST::Node
+            unless current_token.type == :RPAREN
+                args << parse_expression
+                while current_token.type == :COMMA
+                    advance
+                    args << parse_expression
+                end
+            end
+            expect(:RPAREN)
+            args
+        end
+
+        private def parse_annotated_statement : AST::Node
+            annotations = parse_annotations
+            case current_token.type
+            when :DEF
+                parse_function_def(:public, annotations: annotations)
+            when :MODULE
+                parse_module_definition(annotations)
+            when :CLASS
+                parse_class_definition(annotations: annotations)
+            when :STRUCT
+                parse_struct_declaration(annotations)
+            when :ENUM
+                parse_enum_declaration(annotations)
+            when :ABSTRACT
+                parse_abstract_prefixed_statement(annotations)
+            else
+                error("Annotations are only allowed before definitions", current_token)
+            end
         end
 
         private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)
@@ -1432,7 +1560,8 @@ module Dragonstone
 
         private def expect_method_name : Token
             token = current_token
-            if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type)
+            # if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type)
+            if token.type == :IDENTIFIER || METHOD_NAME_KEYWORDS.includes?(token.type) || OVERLOADABLE_OPERATORS.includes?(token.type)
                 advance
                 token
             else

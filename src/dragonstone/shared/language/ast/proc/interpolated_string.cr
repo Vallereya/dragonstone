@@ -12,24 +12,35 @@ module Dragonstone
                 visitor.visit_interpolated_string(self)
             end
 
-            def to_source : String
-                result = String.build do |io|
-                    io << '"'
-                    parts.each do |part|
-                        type, content = part
+            # def to_source : String
+            #     result = String.build do |io|
+            #         io << '"'
+            #         parts.each do |part|
+            #             type, content = part
 
-                        if type == :string
-                            io << content
+            #             if type == :string
+            #                 io << content
+            #             else
+            #                 io << "\#{#{content}}"
+            #             end
+            #         end
+            #         io << '"'
+            #     end
+            #     result
+            # end
 
-                        else
-                            io << "\#{#{content}}"
+            def to_source(io : IO)
+                io << '"'
+                parts.each do |part|
+                    type, content = part
 
-                        end
+                    if type == :string
+                        io << content
+                    else
+                        io << "\#{" << content << "}"
                     end
-
-                    io << '"'
                 end
-                result
+                io << '"'
             end
 
             def normalized_parts : StringParts

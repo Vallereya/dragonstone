@@ -66,4 +66,25 @@ describe Dragonstone::VM do
 
         output.to_s.should eq("\n")
     end
+
+    it "rejects instantiation when abstract methods are not implemented" do
+        source = <<-'DS'
+        abstract class Animal
+            abstract def speak
+            end
+        end
+
+        class Cat < Animal
+        end
+
+        Cat.new
+        DS
+
+        bytecode = compile_bytecode(source)
+        vm = Dragonstone::VM.new(bytecode)
+
+        expect_raises(Dragonstone::TypeError) do
+            vm.run
+        end
+    end
 end

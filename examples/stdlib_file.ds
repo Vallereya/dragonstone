@@ -1,0 +1,38 @@
+#[
+    File Example
+]#
+
+#[
+    It doesn't need to be this complicated
+    just took me several days to figure
+    out the ffi -> dragonstone for 
+    io file handling through crystal
+    so i didn't have to create the whole 
+    system.
+]#
+
+use "file_utilities"
+use "path_utilities"
+
+tmp_dir = "./tmp_examples"
+target = "#{tmp_dir}/demo.txt"
+
+Path.create(tmp_dir)
+
+create = File.create(target, "hello", true)
+echo "create -> #{create}"
+echo "read   -> #{File.read(target)}"
+
+write = File.write(target, "world", true)
+echo "write  -> bytes=#{write}"
+
+append = File.append(target, "!", true)
+echo "append -> bytes=#{append}"
+echo "read   -> #{File.read(target)}"
+
+open = File.open(target, "r", false)
+echo "open   -> #{open}"
+
+echo "delete -> #{File.delete(target)}"
+
+File.delete(tmp_dir)

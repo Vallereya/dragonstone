@@ -1,14 +1,35 @@
-<# 
+<#
+    .NOTES
+        Command Usage:
+            Rebuild: `dragonstone.ps1 --rebuild`
+            Clean: `dragonstone.ps1 --clean`
+            Clean and Rebuild: `dragonstone.ps1 --clean-rebuild`
 
-Commands, I need to remember to rebuild if needed.
+    .SYNOPSIS
+        PowerShell launcher script for Dragonstone.
 
-    Using either commands will add an icon to dragonstone.exe:
-        powershell -ExecutionPolicy Bypass -File .\bin\dragonstone.ps1 --rebuild-exe
-        dragonstone.bat --rebuild-exe
+    .DESCRIPTION
+        This script ensures that the Dragonstone executable is built and up to date,
+        then launches it with any provided arguments. It can also display environment
+        variables related to Dragonstone.
 
-    Using the normal crystal/shards build command does not add icon to dragonstone.exe:
-        shards build
+    .EXAMPLE
+        dragonstone.bat --rebuild
 
+        or
+
+        dragonstone.ps1 --rebuild
+
+        This rebuilds the Dragonstone executable with resources.
+
+    .EXAMPLE
+        dragonstone.bat --clean
+
+        or
+
+        dragonstone.ps1 --clean
+
+        This removes all build artifacts.
 #>
 
 param(
@@ -26,11 +47,17 @@ if ($null -eq $DragonstoneArgs) {
 $scriptPath   = $PSCommandPath
 $scriptRoot   = Split-Path -Parent $scriptPath
 $projectRoot  = Split-Path -Parent $scriptRoot
-$exePath      = Join-Path $scriptRoot 'dragonstone.exe'
-$sourceEntry  = Join-Path $projectRoot 'bin/dragonstone'
+$buildDir     = Join-Path $scriptRoot 'build'
 
+if (-not (Test-Path -Path $buildDir)) {
+    New-Item -ItemType Directory -Path $buildDir | Out-Null
+}
+
+$exePath      = Join-Path $buildDir 'dragonstone.exe'
+$sourceEntry  = Join-Path $projectRoot 'bin/dragonstone'
 $resourceScript = $null
 $resourceOutputBase = $null
+
 $resourceSearchRoots = @(
     (Join-Path $projectRoot 'resources'),
     (Join-Path $scriptRoot 'resources')
@@ -79,6 +106,7 @@ function Show-DragonstoneEnv {
     $Keys = NormalizeArray $Keys
 
     $keyCount = @($Keys).Count
+
     if ($keyCount -eq 0) {
         $Keys = @('DRAGONSTONE_HOME', 'DRAGONSTONE_BIN')
     }
@@ -88,6 +116,55 @@ function Show-DragonstoneEnv {
         if ($null -ne $value) {
             Write-Output "$key=$value"
         }
+    }
+}
+
+function Clean-DragonstoneArtifacts {
+    Write-Host "Cleaning build..........."
+    
+    $itemsToClean = @(
+        @{
+            Path = (Join-Path $scriptRoot 'build')
+            Type = 'Directory'
+            Description = 'build directory'
+        },
+        @{
+            Path = (Join-Path $scriptRoot 'resources/dragonstone.o')
+            Type = 'File'
+            Description = 'dragonstone.o'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/core/runtime/include/dragonstone/core/version.h')
+            Type = 'File'
+            Description = 'version.h'
+        }
+    )
+    
+    $cleanedCount = 0
+
+    foreach ($item in $itemsToClean) {
+        if (Test-Path -Path $item.Path) {
+            try {
+                if ($item.Type -eq 'Directory') {
+                    Remove-Item -Path $item.Path -Recurse -Force -ErrorAction Stop
+                } else {
+                    Remove-Item -Path $item.Path -Force -ErrorAction Stop
+                }
+
+                Write-Host "  Removed: $($item.Description)"
+
+                $cleanedCount++
+
+            } catch {
+                Write-Warning "  Failed to remove build file: $($item.Description): $($_.Exception.Message)"
+            }
+        }
+    }
+    
+    if ($cleanedCount -eq 0) {
+        Write-Host "  No build files found to clean."
+    } else {
+        Write-Host "Cleaned $cleanedCount files(s)."
     }
 }
 
@@ -103,6 +180,7 @@ function Get-RelativePath {
 
     try {
         $base = $BasePath
+
         if (-not ($base.EndsWith([System.IO.Path]::DirectorySeparatorChar) -or $base.EndsWith([System.IO.Path]::AltDirectorySeparatorChar))) {
             $base += [System.IO.Path]::DirectorySeparatorChar
         }
@@ -133,12 +211,14 @@ function CompileDragonstoneResource {
     }
 
     if (-not (Test-Path -Path $ScriptPath -PathType Leaf)) {
-        Write-Warning "WARNING: Resource script not found at: $ScriptPath"
+        Write-Warning "WARNING: Resource not found at: $ScriptPath"
         return $null
     }
 
     $tool = $null
+    # $toolNames = @('llvm-rc', 'x86_64-w64-mingw32-windres', 'windres')
     $toolNames = @('windres', 'x86_64-w64-mingw32-windres', 'llvm-rc')
+
     foreach ($name in $toolNames) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
         if ($command) {
@@ -148,13 +228,14 @@ function CompileDragonstoneResource {
     }
 
     if (-not $tool) {
-        Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the custom icon.'
+        Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the resource.'
         return $null
     }
 
-    Write-Host "Found resource compiler: $($tool.Name)"
+    # Write-Host "Found resource compiler: $($tool.Name)"
 
     $extension = '.res'
+
     if ($tool.Name -notlike 'llvm-rc*') {
         $extension = '.o'
     }
@@ -162,25 +243,32 @@ function CompileDragonstoneResource {
     $outputPath = "$OutputBase$extension"
 
     $outputDir = Split-Path -Parent $outputPath
+
     if (-not (Test-Path -Path $outputDir)) {
         New-Item -ItemType Directory -Path $outputDir | Out-Null
+    }
+
+    if (Test-Path -Path $outputPath -PathType Leaf) {
+        Remove-Item -Path $outputPath -Force -ErrorAction SilentlyContinue
     }
 
     $rcDir = Split-Path -Parent $ScriptPath
     $rcFileName = Split-Path -Leaf $ScriptPath
     $originalLocation = Get-Location
-    
-    Write-Host "Compiling resource from directory: $rcDir"
-    Write-Host "Using Resource file: $rcFileName"
+
+    Write-Host "Compiling, please wait..."
+
+    # Write-Host "Compiling resource from directory: $rcDir"
+    # Write-Host "Using Resource file: $rcFileName"
     
     try {
         Set-Location $rcDir
         
         if ($tool.Name -like 'llvm-rc*') {
-            Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
+            # Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
             & $tool.Path '-fo' $outputPath $rcFileName
         } else {
-            Write-Host "Running: $($tool.Name) $rcFileName -O coff -o $outputPath"
+            # Write-Host "Running: $($tool.Name) $rcFileName -O coff -o $outputPath"
             & $tool.Path $rcFileName '-O' 'coff' '-o' $outputPath
         }
 
@@ -192,7 +280,7 @@ function CompileDragonstoneResource {
             throw "WARNING: Resource compilation appeared to succeed but output file not found at: $outputPath"
         }
 
-        Write-Host "Successfully compiled icon resource: $outputPath"
+        # Write-Host "Successfully compiled icon resource: $outputPath"
         return $outputPath
     } catch {
         Write-Warning "ERROR: Resource compilation failed: $($_.Exception.Message)"
@@ -206,6 +294,7 @@ function EnsureDragonstoneExecutable {
     param([switch] $Force)
 
     $exeExists = Test-Path -Path $exePath -PathType Leaf
+
     if (-not $Force -and $exeExists) {
         return $true
     }
@@ -218,13 +307,14 @@ function EnsureDragonstoneExecutable {
         return $exeExists
     }
 
-    Write-Host 'Building Dragonstone...'
+    Write-Host 'Building Dragonstone.....'
 
     $resourcePath = $null
-    if ($resourceScript) {
-        Write-Host "Running resource script: $resourceScript"
-    } else {
-        Write-Host 'WARNING: The dragonstone.rc resource script was found; But, continuing without embedding an icon to the dragonstone.exe'
+
+    if (-not $resourceScript) {
+    #     Write-Host "Running resource script: $resourceScript"
+    # } else {
+        Write-Host 'WARNING: The dragonstone.rc resource script was found; But, continuing without adding resource to dragonstone.exe'
     }
 
     try {
@@ -239,12 +329,14 @@ function EnsureDragonstoneExecutable {
 
     $envFlagSet = $false
     $resourceLinkArg = $null
+
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
+        # $resourceLinkArg = $resourceLinkArg -replace '\\','/'
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
 
-        Write-Host "Resource object file: $resourceLinkArg"
-        Write-Host "Passing resource to linker: $resourceLinkArg"
+        # Write-Host "Resource object file: $resourceLinkArg"
+        # Write-Host "Passing resource to linker: $resourceLinkArg"
 
         $env:CRFLAGS = "--link-flags `"$resourceLinkArg`""
         $envFlagSet = $true
@@ -253,18 +345,18 @@ function EnsureDragonstoneExecutable {
     try {
         if ($resourceLinkArg -and $script:crystal) {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $resourceLinkArg)
-            Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
-        } elseif ($script:shards) {
-            Write-Host "Building with shards..."
-            if ($resourceLinkArg) {
-                Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
-                Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
-            }
-            & $script:shards.Path 'build'
+        # } elseif ($script:shards) {
+        #     Write-Host "Building with shards..."
+        #     if ($resourceLinkArg) {
+        #         Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
+        #         Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
+        #     }
+        #     & $script:shards.Path 'build'
         } else {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release')
-            Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
         }
 
@@ -290,10 +382,37 @@ function EnsureDragonstoneExecutable {
 $forceRebuild = $false
 
 $argCount = @($DragonstoneArgs).Count
+
 if ($argCount -gt 0) {
     $firstArg = $DragonstoneArgs[0].ToLowerInvariant()
-    if ($firstArg -eq '--rebuild-exe') {
+    
+    # Handles the `--clean` flag.
+    if ($firstArg -eq '--clean') {
+        Clean-DragonstoneArtifacts
+        exit 0
+    }
+
+    # Handles the `--clean-rebuild` flag.
+    if ($firstArg -eq '--clean-rebuild') {
+        Clean-DragonstoneArtifacts
+
+        if (-not (Test-Path -Path $buildDir)) {
+            New-Item -ItemType Directory -Path $buildDir | Out-Null
+        }
+
         $forceRebuild = $true
+
+        if ($argCount -gt 1) {
+            $DragonstoneArgs = $DragonstoneArgs[1..($argCount - 1)]
+        } else {
+            [string[]]$DragonstoneArgs = @()
+        }
+    }
+    
+    # Handles the `--rebuild-exe` flag.
+    if ($firstArg -eq '--rebuild') {
+        $forceRebuild = $true
+
         if ($argCount -gt 1) {
             $DragonstoneArgs = $DragonstoneArgs[1..($argCount - 1)]
         } else {
@@ -303,11 +422,14 @@ if ($argCount -gt 0) {
 }
 
 $argCount = @($DragonstoneArgs).Count
+
 if ($argCount -gt 0 -and $DragonstoneArgs[0].ToLowerInvariant() -eq 'env') {
     $requested = @()
+
     if ($argCount -gt 1) { 
         $requested = $DragonstoneArgs[1..($argCount - 1)]
     }
+    
     Show-DragonstoneEnv $requested
     exit 0
 }

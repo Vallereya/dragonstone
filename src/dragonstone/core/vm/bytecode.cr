@@ -1,11 +1,20 @@
+require "set"
 require "../../shared/language/ast/ast"
 require "../../shared/runtime/ffi_module"
 require "../../shared/runtime/symbol"
+require "../../shared/runtime/gc/gc"
 
 module Dragonstone
     module Bytecode
+        class GCHost
+            getter manager : ::Dragonstone::Runtime::GC::Manager(Value)
+
+            def initialize(@manager : ::Dragonstone::Runtime::GC::Manager(Value))
+            end
+        end
+
         alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule
+        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule | ::Dragonstone::Runtime::GC::Area(Value) | GCHost
 
         class ParameterSpec
             getter name_index : Int32
@@ -19,8 +28,12 @@ module Dragonstone
         class FunctionSignature
             getter parameters : Array(ParameterSpec)
             getter return_type : AST::TypeExpression?
+            getter? abstract : Bool
+            getter gc_flags : ::Dragonstone::Runtime::GC::Flags
 
-            def initialize(@parameters : Array(ParameterSpec), @return_type : AST::TypeExpression?)
+            def initialize(@parameters : Array(ParameterSpec), @return_type : AST::TypeExpression?, is_abstract : Bool = false, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new)
+                @abstract = is_abstract
+                @gc_flags = gc_flags
             end
         end
 
@@ -28,8 +41,10 @@ module Dragonstone
             getter name : String
             getter signature : FunctionSignature
             getter code : CompiledCode
+            getter? abstract : Bool
 
-            def initialize(@name : String, @signature : FunctionSignature, @code : CompiledCode)
+            def initialize(@name : String, @signature : FunctionSignature, @code : CompiledCode, is_abstract : Bool = false)
+                @abstract = is_abstract
             end
         end
 
@@ -166,13 +181,40 @@ module Dragonstone
 
         class ClassValue < ModuleValue
             getter superclass : ClassValue?
+            getter? abstract : Bool
 
-            def initialize(name : String, @superclass : ClassValue? = nil)
+            def initialize(name : String, @superclass : ClassValue? = nil, is_abstract : Bool = false)
                 super(name)
+                @abstract = is_abstract
             end
 
             def lookup_method(name : String)
                 super || @superclass.try &.lookup_method(name)
+            end
+
+            def mark_abstract!
+                @abstract = true
+            end
+
+            def unimplemented_abstract_methods : Set(String)
+                lineage = [] of ClassValue
+                current : ClassValue? = self
+                while current
+                    lineage << current
+                    current = current.superclass
+                end
+
+                pending = Set(String).new
+                lineage.reverse_each do |klass|
+                    klass.methods.each do |name, method|
+                        if method.abstract?
+                            pending.add(name)
+                        else
+                            pending.delete(name)
+                        end
+                    end
+                end
+                pending
             end
         end
 
@@ -243,6 +285,37 @@ module Dragonstone
 
             def message : String
                 value.nil? ? "" : value.to_s
+            end
+        end
+
+        module ::Dragonstone::Runtime::GC
+            def self.deep_copy_bytecode(value : ::Dragonstone::Bytecode::Value) : ::Dragonstone::Bytecode::Value
+                case value
+                when Array(::Dragonstone::Bytecode::Value)
+                    value.map { |element| deep_copy_bytecode(element) }
+                when ::Dragonstone::Bytecode::MapValue
+                    copied = ::Dragonstone::Bytecode::MapValue.new
+                    value.entries.each do |k, v|
+                        copied[deep_copy_bytecode(k)] = deep_copy_bytecode(v)
+                    end
+                    copied
+                when ::Dragonstone::Bytecode::TupleValue
+                    ::Dragonstone::Bytecode::TupleValue.new(value.elements.map { |element| deep_copy_bytecode(element) })
+                when ::Dragonstone::Bytecode::NamedTupleValue
+                    copied = {} of ::Dragonstone::SymbolValue => ::Dragonstone::Bytecode::Value
+                    value.entries.each do |key, entry_value|
+                        copied[key] = deep_copy_bytecode(entry_value)
+                    end
+                    nt = ::Dragonstone::Bytecode::NamedTupleValue.new
+                    copied.each { |k, v| nt.entries[k] = v }
+                    nt
+                when ::Dragonstone::Bytecode::BagValue
+                    bag = ::Dragonstone::Bytecode::BagValue.new(value.element_type)
+                    value.elements.each { |element| bag.add(deep_copy_bytecode(element)) }
+                    bag
+                else
+                    value
+                end
             end
         end
     end

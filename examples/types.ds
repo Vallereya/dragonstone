@@ -52,10 +52,10 @@ end
 😱("Peet")
 
 # Method with dynamic parameters and return type.
-def greet(name)
+def greeting(name)
     echo "Hello, #{name}!"
 end
-greet("V")
+greeting("V")
 
 # Union type example (an argument can be a String or Nil).
 def greet(country: str | nil) -> str

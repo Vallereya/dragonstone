@@ -19,6 +19,20 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_index_assignment(self)
             end
+
+            def to_source(io : IO)
+                @object.to_source(io)
+                io << "["
+                @index.to_source(io)
+                io << "]"
+                io << "?" if @nil_safe
+                
+                io << " "
+                io << @operator if @operator
+                io << "= "
+                
+                @value.to_source(io)
+            end
         end
     end
 end

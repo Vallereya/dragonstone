@@ -1,0 +1,26 @@
+#[
+    TOML Standard Library for Dragonstone
+    
+    This module provides TOML parsing and serialization.
+]#
+use "file_utilities"
+use "path_utilities"
+
+use "modules/shared/toml/proc/exception"
+use "modules/shared/toml/proc/token"
+use "modules/shared/toml/proc/lexer"
+use "modules/shared/toml/proc/parser"
+use "modules/shared/toml/proc/string"
+
+module TOML
+    extend self
+
+    def parse(input)
+        Parser.new(input).parse
+    end
+
+    def parse_file(path)
+        content = File.read(path)
+        Parser.new(content).parse
+    end
+end

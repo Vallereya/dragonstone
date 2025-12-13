@@ -47,6 +47,12 @@ module Dragonstone
             @singleton_classes = {} of UInt64 => SingletonClass
             @module_graph = nil
             set_variable("ffi", FFIModule.new)
+            @gc_manager = Runtime::GC::Manager(RuntimeValue).new(
+                ->(value : RuntimeValue) : RuntimeValue { Runtime::GC.deep_copy_runtime(value) },
+                -> { ::GC.disable },
+                -> { ::GC.enable }
+            )
+            set_variable("gc", Runtime::GC::Host.new(@gc_manager))
         end
 
         def typing_enabled? : Bool
