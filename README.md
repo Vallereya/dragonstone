@@ -23,7 +23,9 @@
 <br>
 
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
-Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language (*some compile targets are still a work in progress*), it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
+
+> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
 <br>
 <br>
 
@@ -52,11 +54,11 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     - After running that command please restart your terminal, then you can use `dragonstone` from anywhere.
 
 ###### **(Linux Alternative)**
-3. Run `shards build --release` for a standard build, PATH.
+3. Run `shards build --release` for a standard build and without PATH.
 
 <br>
 
-> **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` again. For an automated version to do both you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
+> **Tip for Linux Users:** If you want to rebuild the project, after already doing so, you can use `./bin/dragonstone.sh --clean` which will remove the build files, then you can use `./bin/dragonstone.sh --rebuild` to build it again. For an automated version you can use `./bin/dragonstone.sh --clean-rebuild` which will clean first then rebuild for you.
 
 ### *To Build from Source (Windows)*
 ###### **(Windows Recommended)**
@@ -71,7 +73,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 <br>
 
-> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` again. For an automated version to do both you can use `.\bin\dragonstone.bat --clean-rebuild` which will clean first then rebuild for you.
+> **Tip for Windows Users:** If you want to rebuild the project, after already doing so, you can use `.\bin\dragonstone.bat --clean` which will remove the build files, then you can use `.\bin\dragonstone.bat --rebuild` to build it again. For an automated version you can use `.\bin\dragonstone.bat --clean-rebuild` which will clean first then rebuild for you.
 
 > **Tip for Windows Users:** An installer is also available in the [Releases](https://github.com/Vallereya/dragonstone/releases) section.
 
@@ -86,8 +88,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 #### Select a Backend to Use.
-###### For now this is a temporary flag so I can verify some of my --backend build targets, this may change in the future when the self-host/bootstrap process begins.
-> **WARNING:** As of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. Please report any you find so they can be fixed. In regards to the C, Crystal, and Ruby backends these still need built out as only create temporary artifacts for echo/strings.
+###### For now this is a temporary flag so I can verify some of my `--backend` build targets, this may change in the future when the self-host/bootstrap process begins.
 ```bash
     # Select between native (interpreter) or core (compiler) backends.
     dragonstone run --backend native examples/hello_world.ds
@@ -301,7 +302,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Example of using/importing other files with `use`.
 ###### From (./examples/use.ds)
 ```crystal
-    use "test_use.ds"
+    use "./test_use"
 
     echo add(magic, 8)
 ```
@@ -318,15 +319,15 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
 ```crystal
     # Both by file and selectively using `from` with it.
-    use "test_use"
-    use { divide } from "raise"
+    use "./test_use"
+    use { divide } from "./raise"
 
     # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
     # because it was the only thing I could find that would grab the examples from GitHub.
     use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
     use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 ```
-> <small><small> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them. <small><small>
+> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them.
 
 #### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
