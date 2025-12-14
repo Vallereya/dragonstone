@@ -35,7 +35,7 @@ module Dragonstone
         analysis = Language::Sema::TypeChecker.new.analyze(ast, typed: typed)
         program = IR::Lowering.lower(ast, analysis)
         unit = runtime.compile_or_eval(program, entry_path, typed)
-        runtime.unit_cache[entry_path] = unit
+        runtime.unit_cache[{entry_path, unit.backend.backend_mode}] = unit
         RunResult.new(tokens, ast, unit.output)
     end
 
@@ -58,7 +58,7 @@ module Dragonstone
         output_text = if backend_mode == BackendMode::Core
             runtime = Runtime::Engine.new(resolver, log_to_stdout: log_to_stdout, typing_enabled: typed, backend_mode: backend_mode)
             unit = runtime.compile_or_eval(program, inline_path, typed)
-            runtime.unit_cache[inline_path] = unit
+            runtime.unit_cache[{inline_path, unit.backend.backend_mode}] = unit
             unit.output
         else
             interpreter = Interpreter.new(log_to_stdout: log_to_stdout, typing_enabled: typed)

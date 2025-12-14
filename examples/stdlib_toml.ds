@@ -1,6 +1,7 @@
 use "toml"
 
 def main
+    echo "---- Raw Input ----"
     input = "title = \"Example\"\n\n[owner]\nname = \"Kay\"\nage  = 30\n"
 
     config = TOML.parse(input)
@@ -14,6 +15,15 @@ def main
     owner_age = owner["age"].as_i
     echo "name: #{owner_name}"
     echo "age:  #{owner_age}"
+
+    echo "\n---- File Input ----"
+    toml_path = "./tests/test.toml"
+    test_config = TOML.parse_file(toml_path)
+
+    echo "[TEST]"
+    test_table = test_config["TEST"].as_h
+    test_name = test_table["name"].as_s
+    echo "name: #{test_name}"
 end
 
 main

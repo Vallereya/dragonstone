@@ -262,7 +262,7 @@ module Dragonstone
         end
 
         class Engine
-            getter unit_cache : Hash(String, Unit)
+            getter unit_cache : Hash(Tuple(String, BackendMode), Unit)
 
             def initialize(
                 @resolver : ModuleResolver,
@@ -270,7 +270,7 @@ module Dragonstone
                 @typing_enabled : Bool = false,
                 @backend_mode : BackendMode = BackendMode::Auto
             )
-                @unit_cache = {} of String => Unit
+                @unit_cache = {} of Tuple(String, BackendMode) => Unit
             end
 
             def compile_or_eval(
@@ -315,7 +315,7 @@ module Dragonstone
                         end
                         unit.execute(program)
                         unit.capture_exports!
-                        @unit_cache[path] = unit
+                        @unit_cache[{path, unit.backend.backend_mode}] = unit
                         return unit
                     rescue ex
                         last_error = ex

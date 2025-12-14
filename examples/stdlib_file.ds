@@ -32,7 +32,11 @@ echo "read   -> #{File.read(target)}"
 
 open = File.open(target, "r", false)
 echo "open   -> #{open}"
+echo "read   -> #{File.read(target)}"
+
+File.write(target, "Hello World", true)
+File.append(target, "!", true)
+echo "read   -> #{File.read(target)}"
 
 echo "delete -> #{File.delete(target)}"
-
 File.delete(tmp_dir)

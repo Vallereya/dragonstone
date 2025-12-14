@@ -38,12 +38,13 @@ module Dragonstone
     end
 
     private def load_unit(path : String, preferred_backend : BackendMode)
-      if u = @runtime.unit_cache[path]?
+      if u = @runtime.unit_cache[{path, preferred_backend}]?
         return u
       end
       ast = @resolver.cache.get(path) || raise "Internal: missing AST for #{path}"
       unit = @runtime.compile_or_eval(ast, path, preferred_backend: preferred_backend)
-      @runtime.unit_cache[path] = unit
+      @runtime.unit_cache[{path, preferred_backend}] = unit
+      @runtime.unit_cache[{path, unit.backend.backend_mode}] = unit
       unit
     end
   end
