@@ -2,9 +2,13 @@
     Testing CLI Module in Dragonstone.
 ]#
 
-# def Test(name: str = "Jules") -> str
-#     echo "Hello, #{name}!"
-# end
+def alpha(name: str = "Jules") -> str
+    echo "Hello, #{name}!"
+end
+
+def bravo(name = "Jules")
+    echo "Hello, #{name}!"
+end
 
 def run_command(args: array(str)) -> str
     if args.length == 0
@@ -22,4 +26,5 @@ def run(argv: nil, stdout: nil, stderr: nil) -> int
     return 1
 end
 
-# Test
+alpha
+bravo

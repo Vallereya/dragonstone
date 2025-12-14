@@ -97,10 +97,12 @@ module Dragonstone
             getter name : String
             getter type : TypeExpression?
             getter instance_var_name : String?
+            getter default_value : Node?
 
-            def initialize(@name : String, @type : TypeExpression? = nil, @instance_var_name : String? = nil)
+            def initialize(@name : String, @type : TypeExpression? = nil, @instance_var_name : String? = nil, @default_value : Node? = nil)
                 @instance_var_name = instance_var_name
                 @type = type
+                @default_value = default_value
             end
 
             def to_source(io : IO)
@@ -113,6 +115,11 @@ module Dragonstone
                 if t = @type
                     io << ": "
                     t.to_source(io)
+                end
+
+                if default_value = @default_value
+                    io << " = "
+                    default_value.to_source(io)
                 end
             end
 

@@ -522,6 +522,17 @@ module Dragonstone
             end
 
             parameters = parse_parameter_list
+            seen_default = false
+            parameters.each do |param|
+                if param.default_value
+                    seen_default = true
+                elsif seen_default
+                    error(
+                        "Default parameters must come after all required parameters",
+                        name_token
+                    )
+                end
+            end
             return_type = parse_optional_return_type
             body = parse_block([:END, :RESCUE])
             rescue_clauses = [] of AST::RescueClause
@@ -646,11 +657,24 @@ module Dragonstone
                 advance
                 param_annotation = parse_type_expression
             end
+
+            default_value = nil
+            if current_token.type == :ASSIGN
+                advance
+                default_value = parse_expression
+                unless default_value.is_a?(AST::Literal)
+                    error(
+                        "Default parameter values must be literals for now",
+                        name_token,
+                        hint: "Use a literal like \"text\", 123, 3.14, true/false, or nil."
+                    )
+                end
+            end
             name = name_token.value.as(String)
             if instance_var
-                AST::TypedParameter.new(name, param_annotation, name)
+                AST::TypedParameter.new(name, param_annotation, name, default_value)
             else
-                AST::TypedParameter.new(name, param_annotation)
+                AST::TypedParameter.new(name, param_annotation, nil, default_value)
             end
         end
 

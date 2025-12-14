@@ -1,6 +1,7 @@
 require "set"
 require "../language/lexer/lexer"
 require "../language/parser/parser"
+require "../language/transforms/default_arguments"
 require "./program"
 
 module Dragonstone
@@ -199,7 +200,7 @@ module Dragonstone
             end
 
             def lower(program : AST::Program, analysis : Language::Sema::AnalysisResult) : Program
-                Program.new(program, analysis)
+                Program.new(Language::Transforms::DefaultArguments.apply(program), analysis)
             end
         end
     end

@@ -73,3 +73,15 @@ greet("Portugal")
 def find_user(id: int) -> User?
     # Would return user or nil.
 end
+
+# Method with typed parameters, return type and default values.
+def alpha(name: str = "Jules") -> str
+    echo "Hello, #{name}!"
+end
+
+def bravo(name = "Jules")
+    echo "Hello, #{name}!"
+end
+
+alpha
+bravo
