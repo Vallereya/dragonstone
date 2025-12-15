@@ -1,0 +1,20 @@
+#[
+    Visibility Example
+]#
+
+class Database
+    def connect
+        echo "Public: Connecting..."
+        internal_config
+    end
+
+    private def internal_config
+        echo "Private: Configuring..."
+    end
+end
+
+db = Database.new
+db.connect
+
+# Uncommenting the next line should raise a visibility error
+# db.internal_config

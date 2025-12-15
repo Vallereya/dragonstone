@@ -1,0 +1,21 @@
+#[
+    Type Casting/Switching Example
+]#
+
+def process(input)
+    case input
+
+    when input: str
+        echo "It is a string: #{input}"
+    when input: int
+        echo "It is a number: #{input}"
+    when input: bool
+        echo "It is a boolean"
+    else
+        echo "Unknown type"
+    end
+end
+
+process("Hello")
+process(42)
+process(true)

@@ -41,6 +41,8 @@ module Dragonstone
                             true
                         when AST::Variable
                             true
+                        when AST::ArgvExpression
+                            true
                         when AST::Assignment
                             node_supported?(node.value)
                         when AST::AliasDefinition

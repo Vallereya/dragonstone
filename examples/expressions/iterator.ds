@@ -1,0 +1,28 @@
+#[
+    Custom Iterator Example
+    
+    Using yield to allow a custom class to be iterated over.
+]#
+
+class Countdown
+    def initialize(start)
+        @start = start
+    end
+
+    def each
+        current = @start
+        
+        while current > 0
+            yield current
+            current = current - 1
+        end
+
+        yield "Blastoff!"
+    end
+end
+
+timer = Countdown.new(3)
+
+timer.each do |tick|
+    echo tick
+end

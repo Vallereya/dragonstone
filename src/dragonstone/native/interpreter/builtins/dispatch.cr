@@ -1111,7 +1111,7 @@ module Dragonstone
                 reject_block(block_value, "Array##{name}", node)
                 array.last?
 
-            when "empty"
+            when "empty", "empty?"
                 reject_block(block_value, "Array##{name}", node)
                 array.empty?
 
@@ -1241,7 +1241,7 @@ module Dragonstone
                 reject_block(block_value, "Map##{name}", node)
                 map.values.map { |value| value.as(RuntimeValue) }
 
-            when "empty"
+            when "empty", "empty?"
                 reject_block(block_value, "Map##{name}", node)
                 map.empty?
 
@@ -1471,7 +1471,7 @@ module Dragonstone
                 end
                 bag.size
 
-            when "empty"
+            when "empty", "empty?"
                 reject_block(block_value, "Bag##{name}", node)
                 unless args.empty?
                     runtime_error(InterpreterError, "Bag##{name} does not take arguments", node)
@@ -1633,7 +1633,7 @@ module Dragonstone
                 reject_block(block_value, "String##{name}", node)
                 string.reverse
 
-            when "empty"
+            when "empty", "empty?"
                 reject_block(block_value, "String##{name}", node)
                 string.empty?
 

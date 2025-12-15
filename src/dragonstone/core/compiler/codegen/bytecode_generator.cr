@@ -198,6 +198,9 @@ module Dragonstone
             when AST::Variable
                 emit_load_name(node.name)
 
+            when AST::ArgvExpression
+                emit(OPC::LOAD_ARGV)
+
             when AST::Assignment
                 compile_assignment(node)
             when AST::InstanceVariable
@@ -1102,7 +1105,7 @@ module Dragonstone
         private def adjust_stack(opcode : Int32, operands : Array(Int32))
             case opcode
 
-            when OPC::CONST, OPC::LOAD
+            when OPC::CONST, OPC::LOAD, OPC::LOAD_ARGV
                 stack_push
 
             when OPC::STORE

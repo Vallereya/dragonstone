@@ -2,6 +2,11 @@ require "spec"
 require "../src/dragonstone"
 
 describe "language features" do
+    it "supports Array#empty? in the native backend" do
+        result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
+        result.output.should eq "false\n"
+    end
+
     it "creates and uses para literals" do
         source = <<-DS
 #! typed

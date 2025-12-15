@@ -24,7 +24,7 @@
     nil     = null/nil
     bool    = Boolean
     int     = Integer                           # TODO: add support for different signed/unsigned, right now just catch all.
-    float   = float                             # TODO: same here as int but for float 32/64. (could just expand through ffi without me needing too?)
+    float   = float                             # TODO: same here as int but for float 32/64. (could just expand through ffi without me needing too? might not need to since its added via llvm for i32/i64/f32/f64?)
     char    = Character
     str     = String
     sym     = Symbol

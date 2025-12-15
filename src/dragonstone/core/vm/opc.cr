@@ -96,5 +96,6 @@ module Dragonstone
         CHECK_TYPE      = 69    # [CHECK_TYPE, type_const]                                  -> ensure top-of-stack matches type
         RETRY           = 95    # RETRY                                                     -> restart current begin/rescue block
         DEFINE_SINGLETON_METHOD = 96 # DEFINE_SINGLETON_METHOD                               -> pop function and receiver, attach method to receiver
+        LOAD_ARGV        = 97   # LOAD_ARGV                                                 -> push argv array
     end
 end

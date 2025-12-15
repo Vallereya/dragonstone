@@ -1,0 +1,29 @@
+#[
+    Accessor Macros Example
+    
+    Use 'property', 'getter', and 'setter' to automatically 
+    generate instance variable access methods.
+]#
+
+class User
+    # Generates @name, def name, and def name=(val)
+    property name: str
+
+    # Generates @id and def id (read-only)
+    getter id: int
+
+    # Generates @secret and def secret=(val) (write-only)
+    setter secret: str
+
+    def initialize(name: str, id: int)
+        @name = name
+        @id = id
+        @secret = "default"
+    end
+end
+
+u = User.new("Jules", 1)
+echo u.name     # Getter
+
+u.name = "V"    # Setter
+echo u.name

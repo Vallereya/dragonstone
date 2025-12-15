@@ -285,6 +285,19 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         ir.includes?("(i8* %closure, i64 %argc, i8** %argv)").should be_true
     end
 
+    it "exposes command line argv via runtime helper" do
+        program = build_program([Dragonstone::AST::ArgvExpression.new] of Dragonstone::AST::Node)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        io = IO::Memory.new
+
+        generator.generate(io)
+
+        ir = io.to_s
+        ir.includes?("define i32 @main(i32 %argc, i8** %argv)").should be_true
+        ir.includes?("@dragonstone_runtime_set_argv").should be_true
+        ir.includes?("@dragonstone_runtime_argv()").should be_true
+    end
+
     it "unboxes typed block parameters" do
         block_literal = Dragonstone::AST::BlockLiteral.new(
             [Dragonstone::AST::TypedParameter.new("value", Dragonstone::AST::SimpleTypeExpression.new("Int32"))],

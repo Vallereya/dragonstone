@@ -178,7 +178,7 @@ module Dragonstone
                 raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
                 raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
                 bag.size
-            when "empty"
+            when "empty", "empty?"
                 raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
                 raise ArgumentError.new("Bag##{method} does not accept a block") if block_value
                 bag.elements.empty?
@@ -294,7 +294,7 @@ module Dragonstone
                 raise ArgumentError.new("Map##{method} does not accept a block") if block_value
                 raise ArgumentError.new("Map##{method} does not take arguments") unless args.empty?
                 map.values
-            when "empty"
+            when "empty", "empty?"
                 raise ArgumentError.new("Map##{method} does not accept a block") if block_value
                 raise ArgumentError.new("Map##{method} does not take arguments") unless args.empty?
                 map.empty?
@@ -890,10 +890,12 @@ module Dragonstone
         @retry_after_ensure : Int32?
         @singleton_methods : Hash(UInt64, Hash(String, Bytecode::FunctionValue))
         @pending_self : Bytecode::Value?
+        @argv_value : Array(Bytecode::Value)
 
         def initialize(
             @bytecode : CompiledCode,
             globals : Hash(String, Bytecode::Value)? = nil,
+            argv : Array(String) = [] of String,
             *,
             stdout_io : IO = IO::Memory.new,
             log_to_stdout : Bool = false,
@@ -922,6 +924,7 @@ module Dragonstone
             @retry_after_ensure = nil
             @singleton_methods = {} of UInt64 => Hash(String, Bytecode::FunctionValue)
             @pending_self = nil
+            @argv_value = argv.map { |arg| arg.as(Bytecode::Value) }
             @gc_manager = ::Dragonstone::Runtime::GC::Manager(Bytecode::Value).new(
                 ->(value : Bytecode::Value) : Bytecode::Value { ::Dragonstone::Runtime::GC.deep_copy_bytecode(value) }
             )
@@ -1019,6 +1022,8 @@ module Dragonstone
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
                     push(resolve_variable(name_idx, name))
+                when OPC::LOAD_ARGV
+                    push(@argv_value)
                 when OPC::LOAD_CONST_PATH
                     const_idx = fetch_byte
                     segments = current_code.consts[const_idx].as(Array(Bytecode::Value))
@@ -2491,7 +2496,7 @@ module Dragonstone
                 when "last"
                     raise ArgumentError.new("Array##{method} does not accept a block") if block_value
                     array.last?
-                when "empty"
+                when "empty", "empty?"
                     raise ArgumentError.new("Array##{method} does not accept a block") if block_value
                     array.empty?
                 when "pop"

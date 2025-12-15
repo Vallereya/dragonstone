@@ -1,0 +1,13 @@
+#[
+    Argument Vector Example
+]#
+
+#[
+    This example demonstrates how to access command-line arguments.
+]#
+
+echo "argv = #{argv}"
+
+if argv.empty?
+    echo "Try: dragonstone run examples/argv.ds one two three"
+end

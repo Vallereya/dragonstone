@@ -201,7 +201,7 @@ module Dragonstone
         end
 
         class VMBackend < Backend
-            def initialize(log_to_stdout : Bool)
+            def initialize(log_to_stdout : Bool, @argv : Array(String) = [] of String)
                 super(log_to_stdout)
                 @globals = {} of String => Bytecode::Value
                 @constant_names = Set(String).new
@@ -242,6 +242,7 @@ module Dragonstone
                 vm = VM.new(
                     compiled,
                     globals: @globals,
+                    argv: @argv,
                     stdout_io: stdout_io,
                     log_to_stdout: @log_to_stdout,
                     typing_enabled: program.typed?
@@ -268,7 +269,8 @@ module Dragonstone
                 @resolver : ModuleResolver,
                 @log_to_stdout : Bool = false,
                 @typing_enabled : Bool = false,
-                @backend_mode : BackendMode = BackendMode::Auto
+                @backend_mode : BackendMode = BackendMode::Auto,
+                @argv : Array(String) = [] of String
             )
                 @unit_cache = {} of Tuple(String, BackendMode) => Unit
             end
@@ -336,7 +338,7 @@ module Dragonstone
                 when BackendMode::Core
                     ensure_core_supported!(program, typing_flag)
                     ensure_no_metadata_conflicts!(BackendMode::Core, native_only_modules)
-                    candidates << VMBackend.new(@log_to_stdout)
+                    candidates << VMBackend.new(@log_to_stdout, @argv)
                 when BackendMode::Native
                     ensure_no_metadata_conflicts!(BackendMode::Native, core_only_modules)
                     candidates << build_interpreter_backend(typing_flag)
@@ -347,9 +349,9 @@ module Dragonstone
                     # Reorder preference to keep imports on the same backend when possible.
                     if preferred_backend == BackendMode::Native
                         candidates << build_interpreter_backend(typing_flag) if allow_interpreter
-                        candidates << VMBackend.new(@log_to_stdout) if allow_vm
+                        candidates << VMBackend.new(@log_to_stdout, @argv) if allow_vm
                     else
-                        candidates << VMBackend.new(@log_to_stdout) if allow_vm
+                        candidates << VMBackend.new(@log_to_stdout, @argv) if allow_vm
                         candidates << build_interpreter_backend(typing_flag) if allow_interpreter
                     end
 
@@ -362,7 +364,7 @@ module Dragonstone
             end
 
             private def build_interpreter_backend(typing_flag : Bool) : Backend
-                interpreter = Interpreter.new(log_to_stdout: @log_to_stdout, typing_enabled: typing_flag)
+                interpreter = Interpreter.new(@argv, log_to_stdout: @log_to_stdout, typing_enabled: typing_flag)
                 InterpreterBackend.new(interpreter, @resolver, @log_to_stdout)
             end
 

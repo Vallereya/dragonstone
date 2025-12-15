@@ -113,6 +113,8 @@ module Dragonstone
               bag_constructor: String,
               ivar_get: String,
               ivar_set: String,
+              argv_get: String,
+              argv_set: String,
               root_self: String,
               singleton_define: String,
               define_class: String,
@@ -218,6 +220,8 @@ module Dragonstone
                 type_of: "dragonstone_runtime_typeof",
                 ivar_get: "dragonstone_runtime_ivar_get",
                 ivar_set: "dragonstone_runtime_ivar_set",
+                argv_get: "dragonstone_runtime_argv",
+                argv_set: "dragonstone_runtime_set_argv",
                 root_self: "dragonstone_runtime_root_self",
                 singleton_define: "dragonstone_runtime_define_singleton_method",
                 define_class: "dragonstone_runtime_define_class",
@@ -834,6 +838,8 @@ module Dragonstone
               io << "declare i64 @#{@runtime[:unbox_i64]}(i8*)\n"
               io << "declare i32 @#{@runtime[:unbox_bool]}(i8*)\n"
               io << "declare double @#{@runtime[:unbox_float]}(i8*)\n"
+              io << "declare void @#{@runtime[:argv_set]}(i64, i8**)\n"
+              io << "declare i8* @#{@runtime[:argv_get]}()\n"
               io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
               io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -993,13 +999,17 @@ module Dragonstone
                 stmt.is_a?(AST::FunctionDef) && stmt.receiver.nil?
               }
 
+              argc_reg = ctx.fresh("argc64")
+              ctx.io << "  %#{argc_reg} = zext i32 %argc to i64\n"
+              ctx.io << "  call void @#{@runtime[:argv_set]}(i64 %#{argc_reg}, i8** %argv)\n"
+
               terminated = generate_block(ctx, top_level)
 
               ctx.io << "  ret i32 0\n" unless terminated
 
               emit_postamble(ctx)
 
-              io << "define i32 @main() {\n"
+              io << "define i32 @main(i32 %argc, i8** %argv) {\n"
               io << "entry:\n"
               io << ctx.alloca_buffer.to_s
               io << body_io.to_s
@@ -1017,12 +1027,13 @@ module Dragonstone
 
             private def expression_statement?(stmt : AST::Node) : Bool
               case stmt
-              when AST::Literal,
-                   AST::Variable,
-                   AST::BinaryOp,
-                   AST::UnaryOp,
-                   AST::MethodCall,
-                   AST::ArrayLiteral,
+	              when AST::Literal,
+	                   AST::Variable,
+	                   AST::ArgvExpression,
+	                   AST::BinaryOp,
+	                   AST::UnaryOp,
+	                   AST::MethodCall,
+	                   AST::ArrayLiteral,
                    AST::BagConstructor,
                    AST::MapLiteral,
                    AST::TupleLiteral,
@@ -1479,6 +1490,8 @@ module Dragonstone
                 generate_literal(ctx, node)
               when AST::Variable
                 generate_variable_reference(ctx, node.name)
+              when AST::ArgvExpression
+                runtime_call(ctx, "i8*", @runtime[:argv_get], [] of CallArg)
               when AST::BinaryOp
                 case node.operator
                 when :"&&", :"and"
@@ -2428,12 +2441,13 @@ module Dragonstone
 
             private def expression_node?(node : AST::Node) : Bool
               case node
-              when AST::Literal,
-                   AST::Variable,
-                   AST::BinaryOp,
-                   AST::MethodCall,
-                   AST::UnaryOp,
-                   AST::ArrayLiteral,
+	              when AST::Literal,
+	                   AST::Variable,
+	                   AST::ArgvExpression,
+	                   AST::BinaryOp,
+	                   AST::MethodCall,
+	                   AST::UnaryOp,
+	                   AST::ArrayLiteral,
                    AST::BagConstructor,
                    AST::MapLiteral,
                    AST::BlockLiteral,

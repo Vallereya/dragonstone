@@ -241,6 +241,8 @@ module Dragonstone
                 else
                     parse_expression_statement
                 end
+            when :ARGV
+                parse_expression_statement
             when :ECHO
                 parse_keyword_method_call
             when :DEBUG_PRINT
@@ -1037,6 +1039,9 @@ module Dragonstone
             when :SYMBOL
                 advance
                 AST::Literal.new(token.value.as(SymbolValue), location: token.location)
+            when :ARGV
+                advance
+                AST::ArgvExpression.new(location: token.location)
             when :YIELD
                 parse_yield_expression
             when :IDENTIFIER

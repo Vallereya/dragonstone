@@ -9,7 +9,7 @@ private def evaluate_statements(statements : Array(AST::Node)) : Dragonstone::In
     program = AST::Program.new(statements)
     graph = Dragonstone::ModuleGraph.new
     graph.add(Dragonstone::ModuleNode.new("<native-evaluator>", program, false))
-    interpreter = Dragonstone::Interpreter.new(false, false)
+    interpreter = Dragonstone::Interpreter.new(log_to_stdout: false, typing_enabled: false)
     interpreter.interpret(program, graph)
     interpreter
 end

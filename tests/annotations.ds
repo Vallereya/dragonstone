@@ -1,0 +1,39 @@
+#[
+    Annotations Example
+]#
+
+#[
+    !# This currently does not work.
+
+    I have the infrastructure for annotations
+    (parsing and semantic storage) fully
+    implemented, but no application for 
+    using them for anything other than the 
+    Garbage Collection flags at the moment.
+    I will soon allow you to define and read 
+    custom annotations. Currently, Dragonstone 
+    does store these annotations. The runtime
+    doesn't fully act on them yet.
+]#
+
+# Example One
+# @[Deprecated(message: "Use new_method instead")]
+# def old_method
+#     echo "This is old."
+# end
+
+# old_method
+
+# Example Two
+# @[Author(name: "V", version: "1.0")]
+# class Calculator
+    
+#     @[Deprecated(message: "Use add instead")]
+#     def sum(a, b)
+#         return a + b
+#     end
+
+#     def add(a, b)
+#         return a + b
+#     end
+# end

@@ -14,15 +14,16 @@ module Dragonstone
     EXECUTABLE_SUFFIX = {% if flag?(:windows) %} ".exe" {% else %} "" {% end %}
     LLVM_RUNTIME_STUB = "src/dragonstone/core/compiler/targets/llvm/runtime_stub.c"
 
-    private struct CLIOptions
-      getter typed : Bool
-      getter output_dir : String?
-      getter targets : Array(Core::Compiler::Target)
-      getter filename : String
+	    private struct CLIOptions
+	      getter typed : Bool
+	      getter output_dir : String?
+	      getter targets : Array(Core::Compiler::Target)
+	      getter filename : String
+	      getter argv : Array(String)
 
-      def initialize(@typed : Bool, @output_dir : String?, @targets : Array(Core::Compiler::Target), @filename : String)
-      end
-    end
+	      def initialize(@typed : Bool, @output_dir : String?, @targets : Array(Core::Compiler::Target), @filename : String, @argv : Array(String))
+	      end
+	    end
 
     alias TargetArtifact = NamedTuple(
       target: Core::Compiler::Target,
@@ -66,11 +67,11 @@ module Dragonstone
 
         warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
 
-        artifacts = build_targets(program, options.targets, options.output_dir, stdout, stderr)
-        run_artifacts(program, artifacts, stdout, stderr) ? 0 : 1
-      rescue e : Dragonstone::Error
-        stderr.puts "ERROR: #{e.message}"
-        return 1
+	        artifacts = build_targets(program, options.targets, options.output_dir, stdout, stderr)
+	        run_artifacts(program, artifacts, stdout, stderr, options.argv) ? 0 : 1
+	      rescue e : Dragonstone::Error
+	        stderr.puts "ERROR: #{e.message}"
+	        return 1
       rescue e
         stderr.puts "UNEXPECTED ERROR: #{e.message}"
         return 1
@@ -81,13 +82,14 @@ module Dragonstone
       targets << target unless targets.includes?(target)
     end
 
-    private def parse_cli_options(args : Array(String), stdout : IO, stderr : IO) : CLIOptions?
-      typed = false
-      output_dir : String? = nil
-      targets = [] of Core::Compiler::Target
-      filename = nil
+	    private def parse_cli_options(args : Array(String), stdout : IO, stderr : IO) : CLIOptions?
+	      typed = false
+	      output_dir : String? = nil
+	      targets = [] of Core::Compiler::Target
+	      filename = nil
+	      script_argv = [] of String
 
-      idx = 0
+	      idx = 0
 
       while idx < args.size
         arg = args[idx]
@@ -126,12 +128,11 @@ module Dragonstone
         elsif arg.starts_with?("--")
           stderr.puts "Unknown option: #{arg}"
           return nil
-        elsif filename.nil?
-          filename = arg
-        else
-          stderr.puts "Too many arguments for build command"
-          return nil
-        end
+	        elsif filename.nil?
+	          filename = arg
+	        else
+	          script_argv << arg
+	        end
 
         idx += 1
       end
@@ -141,9 +142,9 @@ module Dragonstone
         return nil
       end
 
-      add_target(targets, Core::Compiler::Target::Bytecode) if targets.empty?
-      CLIOptions.new(typed, output_dir, targets, filename)
-    end
+	      add_target(targets, Core::Compiler::Target::Bytecode) if targets.empty?
+	      CLIOptions.new(typed, output_dir, targets, filename, script_argv)
+	    end
 
     private def parse_target_flag(value : String, stderr : IO) : Core::Compiler::Target?
       normalized = value.downcase
@@ -235,35 +236,35 @@ module Dragonstone
       artifacts
     end
 
-    private def run_artifacts(program : IR::Program, artifacts : Array(TargetArtifact), stdout : IO, stderr : IO) : Bool
-      artifacts.each do |entry|
-        target = entry[:target]
-        # stdout.puts "Running #{target_label(target)} artifact..."
-        return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr, entry[:linked_path])
-      end
+	    private def run_artifacts(program : IR::Program, artifacts : Array(TargetArtifact), stdout : IO, stderr : IO, argv : Array(String)) : Bool
+	      artifacts.each do |entry|
+	        target = entry[:target]
+	        # stdout.puts "Running #{target_label(target)} artifact..."
+	        return false unless run_build_artifact(program, target, entry[:artifact], stdout, stderr, entry[:linked_path], argv)
+	      end
 
       true
     end
 
-    private def run_build_artifact(program : IR::Program, target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?) : Bool
-      case target
-      when Core::Compiler::Target::Bytecode
-        run_bytecode_artifact(program, artifact, stdout, stderr)
-      when Core::Compiler::Target::Ruby
-        run_ruby_artifact(artifact, stdout, stderr)
-      when Core::Compiler::Target::Crystal
-        run_crystal_artifact(artifact, stdout, stderr)
-      when Core::Compiler::Target::C
-        run_c_artifact(artifact, stdout, stderr)
-      when Core::Compiler::Target::LLVM
-        run_llvm_artifact(artifact, stdout, stderr, linked_path)
-      else
-        stderr.puts "Cannot execute #{target_label(target)} artifacts yet"
-        false
-      end
-    end
+	    private def run_build_artifact(program : IR::Program, target : Core::Compiler::Target, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?, argv : Array(String)) : Bool
+	      case target
+	      when Core::Compiler::Target::Bytecode
+	        run_bytecode_artifact(program, artifact, stdout, stderr, argv)
+	      when Core::Compiler::Target::Ruby
+	        run_ruby_artifact(artifact, stdout, stderr, argv)
+	      when Core::Compiler::Target::Crystal
+	        run_crystal_artifact(artifact, stdout, stderr, argv)
+	      when Core::Compiler::Target::C
+	        run_c_artifact(artifact, stdout, stderr, argv)
+	      when Core::Compiler::Target::LLVM
+	        run_llvm_artifact(artifact, stdout, stderr, linked_path, argv)
+	      else
+	        stderr.puts "Cannot execute #{target_label(target)} artifacts yet"
+	        false
+	      end
+	    end
 
-    private def run_bytecode_artifact(program : IR::Program, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
+	    private def run_bytecode_artifact(program : IR::Program, artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
       bytecode = artifact.bytecode
 
       unless bytecode
@@ -272,7 +273,7 @@ module Dragonstone
       end
 
       output = IO::Memory.new
-      vm = VM.new(bytecode, stdout_io: output, typing_enabled: program.typed?)
+	      vm = VM.new(bytecode, argv: argv, stdout_io: output, typing_enabled: program.typed?)
       vm.run
       stdout << output.to_s
       true
@@ -281,30 +282,30 @@ module Dragonstone
       false
     end
 
-    private def run_ruby_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
-      if path = artifact.object_path
-        run_process("ruby", [path], stdout, stderr)
-      else
-        stderr.puts "Ruby artifact did not produce an output file"
-        false
-      end
-    end
+	    private def run_ruby_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
+	      if path = artifact.object_path
+	        run_process("ruby", [path] + argv, stdout, stderr)
+	      else
+	        stderr.puts "Ruby artifact did not produce an output file"
+	        false
+	      end
+	    end
 
-    private def run_crystal_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
-      if path = artifact.object_path
-        run_process("crystal", ["run", path], stdout, stderr)
-      else
-        stderr.puts "Crystal artifact did not produce an output file"
-        false
-      end
-    end
+	    private def run_crystal_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
+	      if path = artifact.object_path
+	        run_process("crystal", ["run", path, "--"] + argv, stdout, stderr)
+	      else
+	        stderr.puts "Crystal artifact did not produce an output file"
+	        false
+	      end
+	    end
 
-    private def run_llvm_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?) : Bool
+	    private def run_llvm_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?, argv : Array(String)) : Bool
       if linked_path && File.exists?(linked_path)
         linked_stdout = IO::Memory.new
         linked_stderr = IO::Memory.new
 
-        linked_ok = run_process(linked_path, [] of String, linked_stdout, linked_stderr, lookup: false)
+	        linked_ok = run_process(linked_path, argv, linked_stdout, linked_stderr, lookup: false)
         if linked_ok
           stdout << linked_stdout.to_s
           stderr << linked_stderr.to_s
@@ -315,15 +316,15 @@ module Dragonstone
         stderr << linked_stderr.to_s unless linked_stderr.empty?
       end
 
-      if path = artifact.object_path
-        run_process("lli", [path], stdout, stderr)
-      else
-        stderr.puts "LLVM artifact did not produce an output file"
-        false
-      end
-    end
+	      if path = artifact.object_path
+	        run_process("lli", [path] + argv, stdout, stderr)
+	      else
+	        stderr.puts "LLVM artifact did not produce an output file"
+	        false
+	      end
+	    end
 
-    private def run_c_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : Bool
+	    private def run_c_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
       path = artifact.object_path
 
       unless path
@@ -356,12 +357,12 @@ module Dragonstone
         return false
       end
 
-      run_process(binary_path, [] of String, stdout, stderr, lookup: false)
-    ensure
-      if binary_path && File.exists?(binary_path)
-        File.delete(binary_path)
-      end
-    end
+	      run_process(binary_path, argv, stdout, stderr, lookup: false)
+	    ensure
+	      if binary_path && File.exists?(binary_path)
+	        File.delete(binary_path)
+	      end
+	    end
 
     private def c_binary_path(source_path : String) : String
       dir = File.dirname(source_path)

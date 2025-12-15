@@ -8,6 +8,7 @@ module Dragonstone
         def run_command(args : Array(String), stdout : IO, stderr : IO) : Int32
             typed        = false
             filename     = nil
+            script_argv  = [] of String
 
             backend_mode : BackendMode? = nil
 
@@ -43,8 +44,7 @@ module Dragonstone
                     filename = arg
 
                 else
-                    stderr.puts "Too many arguments for run command"
-                    return 1
+                    script_argv << arg
                 end
 
                 idx += 1
@@ -57,12 +57,12 @@ module Dragonstone
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
 
-            run_file(filename, stdout, stderr, typed: typed, backend: backend_mode)
+            run_file(filename, stdout, stderr, typed: typed, backend: backend_mode, argv: script_argv)
         end
 
-        def run_file(filename : String, stdout : IO, stderr : IO, typed : Bool = false, backend : BackendMode? = nil) : Int32
+        def run_file(filename : String, stdout : IO, stderr : IO, typed : Bool = false, backend : BackendMode? = nil, argv : Array(String) = [] of String) : Int32
             begin
-                result = Dragonstone.run_file(filename, log_to_stdout: false, typed: typed, backend: backend)
+                result = Dragonstone.run_file(filename, argv, log_to_stdout: false, typed: typed, backend: backend)
                 stdout.puts result.output
                 return 0
             rescue e : Dragonstone::Error

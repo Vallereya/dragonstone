@@ -160,6 +160,10 @@ module Dragonstone
             runtime_error(NameError, "Undefined variable or constant: #{node.name}", node)
         end
 
+        def visit_argv_expression(_node : AST::ArgvExpression) : RuntimeValue?
+            argv_value
+        end
+
         def visit_constant_path(node : AST::ConstantPath) : RuntimeValue?
             base = lookup_constant_value(node.head)
             unless base

@@ -152,6 +152,9 @@ static DSExceptionFrame *top_exception_frame = NULL;
 static void *current_exception_object = NULL;
 static DSSingletonMethod *singleton_methods = NULL;
 static DSValue *root_self_box = NULL;
+static int64_t ds_program_argc = 0;
+static char **ds_program_argv = NULL;
+static DSValue *ds_program_argv_box = NULL;
 
 void dragonstone_runtime_push_exception_frame(void *frame_ptr) {
     DSExceptionFrame *frame = (DSExceptionFrame *)frame_ptr;
@@ -345,6 +348,8 @@ void *dragonstone_runtime_negate(void *value);
 void *dragonstone_runtime_to_string(void *value);
 void *dragonstone_runtime_tuple_literal(int64_t l, void **e);
 void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v);
+void dragonstone_runtime_set_argv(int64_t argc, char **argv);
+void *dragonstone_runtime_argv(void);
 
 void *dragonstone_runtime_gt(void *lhs, void *rhs);
 void *dragonstone_runtime_lt(void *lhs, void *rhs);
@@ -1821,6 +1826,35 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
     }
     
     return false;
+}
+
+void dragonstone_runtime_set_argv(int64_t argc, char **argv) {
+    ds_program_argc = argc;
+    ds_program_argv = argv;
+    ds_program_argv_box = NULL;
+}
+
+void *dragonstone_runtime_argv(void) {
+    if (ds_program_argv_box) return ds_program_argv_box;
+
+    int64_t count = 0;
+    if (ds_program_argc > 1 && ds_program_argv) {
+        count = ds_program_argc - 1;
+    }
+
+    DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
+    array->length = count;
+    array->items = count > 0 ? (void **)ds_alloc(sizeof(void *) * (size_t)count) : NULL;
+
+    for (int64_t i = 0; i < count; ++i) {
+        array->items[i] = ds_strdup(ds_program_argv[i + 1]);
+    }
+
+    DSValue *box = ds_new_box(DS_VALUE_ARRAY);
+    box->as.ptr = array;
+
+    ds_program_argv_box = box;
+    return box;
 }
 
 void *dragonstone_runtime_array_literal(int64_t length, void **elements) { return ds_create_array_box(length, elements); }

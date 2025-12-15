@@ -78,9 +78,9 @@ FILES=(
     ./examples/types.ds
     ./examples/use.ds
     ./examples/interop.ds
-    ./examples/stdlib_strings_build.ds
-    ./examples/stdlib_strings_length.ds
-    ./examples/stdlib_file.ds
+    ./examples/stdlib/strings_build.ds
+    ./examples/stdlib/strings_length.ds
+    ./examples/stdlib/file.ds
     # ./examples/physics/math.ds
     # ./examples/physics/bounce.ds
     # ./examples/physics/particles.ds

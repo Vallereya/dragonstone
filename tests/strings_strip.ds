@@ -38,23 +38,24 @@ def strip(str: str) -> str
 end
 
 
-echo "--- Basic Usage ---"
+# Basic Usage
 text = "   Dragonstone   "
 echo "Original: '#{text}'"
 echo "Stripped: '#{strip(text)}'"
 
-echo "\n--- Tabs and Newlines ---"
+# Tabs and Newlines
 complex = "\t\tIndented Line\n"
 echo "Raw:      '#{complex}'"
 echo "Stripped: '#{strip(complex)}'"
 
-echo "\n--- Edge Cases ---"
+# Edge Cases
 only_space = "     "
 echo "Spaces:   '#{only_space}' -> '#{strip(only_space)}'"
 
 # Already clean string
 clean = "Clean"
 echo "Clean:    '#{clean}' -> '#{strip(clean)}'"
+
 # Empty string
 empty = ""
 echo "Empty:    '#{empty}' -> '#{strip(empty)}'"
