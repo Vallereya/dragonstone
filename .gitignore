@@ -1,44 +1,32 @@
 # 
-# Here I'm putting in files and folders
-# to be ignored from git.
+#   .gitignore for Dragonstone.
 #
 
-# Ignore any Output/Build Files.
-dragonstone.exe
-dragonstone.pdb
+# Ignore any Output/Build Files and Directories.
+install-dragonstone.iss
+bin/build/
+dragonstone-dev
 dragonstone.res
 dragonstone.o
-dragonstone-dev
-gc.dll
-iconv-2.dll
-pcre2-8.dll
-zlib1.dll
-libssl-3-x64.dll
-libcrypto-3-x64.dll
-yaml.dll
 version.h
 NUL
-.dragonstone
-install-dragonstone.iss
-installer
-release
+
+# Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
+# dev/
+dev/.dragonstone/
+dev/build/
+dev/notes/
+dev/tests/
+dev/release/
+dev/installer/
 
 # Ignore any Output/Build Cache from testing.
 .cache
-.tmp
-.crystal-cache
-.crystal_cache
-tmp
-
-# Ignore my self-hosting/bootstrap compiler builds and notes.
-LLVM_CHECKLIST.md
-dev/
+.cache/
 
 # Ignore any IDE folders.
 .vscode
+.idea
 
 # Annoying IDE ignores.
 .fake
-
-# Build output directory (new pipeline).
-bin/build/

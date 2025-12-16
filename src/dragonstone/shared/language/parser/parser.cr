@@ -233,7 +233,11 @@ module Dragonstone
             when :ANNOTATION_START
                 parse_annotated_statement
             when :IDENTIFIER
-                parse_expression_statement
+                if invoke_statement_start?
+                    parse_invoke_statement
+                else
+                    parse_expression_statement
+                end
             when :INSTANCE_VAR
                 next_token = peek_token
                 if next_token && next_token.type == :COLON
@@ -1747,6 +1751,122 @@ module Dragonstone
             end
             expect(:RPAREN)
             arguments
+        end
+
+        # Parse "Invoke" statements for native interop.
+        private def invoke_statement_start? : Bool
+            # Check for "Invoke" identifier
+            return false unless current_token.type == :IDENTIFIER && current_token.value == "Invoke"
+            
+            # Peek next token: <Language> (must be Identifier)
+            lang_token = peek_token(1)
+            return false unless lang_token && lang_token.type == :IDENTIFIER
+            
+            # Peek second token: with (must be :WITH keyword)
+            with_token = peek_token(2)
+            return false unless with_token && with_token.type == :WITH
+            
+            true
+        end
+
+        # Parse "Invoke" statement and return corresponding AST node.
+        private def parse_invoke_statement : AST::Node
+
+            # Consumes "Invoke"
+            invoke_token = expect(:IDENTIFIER)
+            
+            # Parse Language (Ruby, Crystal, C, etc.)
+            language_token = expect(:IDENTIFIER)
+            language_name = language_token.value.as(String)
+            
+            # Parse 'with' <Method>
+            expect(:WITH)
+            
+            # Method name can be an Identifier or a keyword like 'puts' (:ECHO).
+            method_name = if current_token.type == :IDENTIFIER
+                expect(:IDENTIFIER).value.as(String)
+            elsif current_token.type == :ECHO
+                # Handle a keyword like 'puts' which maps to :ECHO but value is "puts".
+                token = current_token
+                advance
+                token.value.to_s
+            else
+                # Allow string literals "method_name"
+                if current_token.type == :STRING
+                    expect(:STRING).value.as(String)
+                else
+                    error("Expected method name identifier or string after 'with'", current_token)
+                end
+            end
+            
+            # Parse 'as' { <Args> }
+            args = [] of AST::Node
+
+            if current_token.type == :AS
+                expect(:AS)
+                expect(:LBRACE)
+                
+                unless current_token.type == :RBRACE
+                    args << parse_expression
+                    while current_token.type == :COMMA
+                        advance
+                        args << parse_expression
+                    end
+                end
+                
+                expect(:RBRACE)
+            end
+            
+            expect(:END)
+            
+            # Option 1: Simplified AST construction
+            # Prepare Arguments 
+            #! WRAPPER NODES NEEDED HERE
+            # 'method_name' (String) and 'args' (Array of Nodes), 
+            # wrap them so they can be arguments in the generated method call.
+            method_arg = AST::Literal.new(method_name, location: invoke_token.location)
+            args_array = AST::ArrayLiteral.new(args, location: invoke_token.location)
+
+            # The 'ffi' variable (The builtin native object).
+            ffi_receiver = AST::Variable.new(
+                name: "ffi", 
+                location: invoke_token.location
+            )
+
+            # Construct method name (e.g. "Ruby" -> "call_ruby").
+            native_method_name = "call_#{language_name.downcase}"
+
+            # Create the MethodCall node.
+            AST::MethodCall.new(
+                name: native_method_name,
+                arguments: [method_arg, args_array] of AST::Node, 
+                receiver: ffi_receiver,
+                location: invoke_token.location
+            )
+
+            # Option 2: More explicit AST construction
+            # Equivalent to: FFI::Invoke.<Language>.call("Method", [Args])
+            # ffi_base = AST::ConstantPath.new(
+            #     names: ["FFI", "Invoke"], 
+            #     location: invoke_token.location
+            # )
+            
+            # lang_factory_call = AST::MethodCall.new(
+            #     name: language_name,
+            #     arguments: [] of AST::Node,
+            #     receiver: ffi_base,
+            #     location: language_token.location
+            # )
+            
+            # method_arg = AST::Literal.new(method_name, location: language_token.location)
+            # args_array = AST::ArrayLiteral.new(args, location: language_token.location)
+            
+            # AST::MethodCall.new(
+            #     name: "call",
+            #     arguments: [method_arg, args_array] of AST::Node,
+            #     receiver: lang_factory_call,
+            #     location: invoke_token.location
+            # )
         end
     end
 end

@@ -1,1 +1,0 @@
-Measure-Command { .\bin\dragonstone.exe run tests\benchmark\1b.ds | Out-Null } | Select-Object TotalSeconds, TotalMinutes

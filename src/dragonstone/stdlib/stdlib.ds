@@ -1,8 +1,12 @@
-# Dragonstone Standard Library entry point.
-#
-# Loading this file will load every module that ships with
-# Dragonstone. Individual modules can also be imported directly (e.g.
-# `use "string_length"`).
+#[
+    #! INSIDE LIBRARIES
+    
+    Dragonstone Standard Library Entry Point.
+
+    Loading this file will load every module that ships with
+    Dragonstone. Individual modules can also be imported directly (e.g.
+    `use "string_length"`).
+]#
 
 module Dragonstone
     module StdLib

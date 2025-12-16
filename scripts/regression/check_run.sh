@@ -81,10 +81,10 @@ FILES=(
     ./examples/stdlib/strings_build.ds
     ./examples/stdlib/strings_length.ds
     ./examples/stdlib/file.ds
-    # ./examples/physics/math.ds
-    # ./examples/physics/bounce.ds
-    # ./examples/physics/particles.ds
-    # ./examples/physics/particle_system.ds
+    ./examples/physics/math.ds
+    ./examples/physics/bounce.ds
+    ./examples/physics/particles.ds
+    ./examples/physics/particle_system.ds
 )
 
 for file in "${FILES[@]}"; do

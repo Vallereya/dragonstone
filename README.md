@@ -347,28 +347,35 @@ echo square.call(6)
 ```
 
 #### Examples the interop (some done but still a work in progress).
-###### This calling convention will change when I expand the FFI.
 ```crystal
-    # Call puts from Ruby
-    ffi.call_ruby("puts", ["Hello from Ruby!"])
+    # Call puts from Ruby.
+    # This works too: ffi.call_ruby("puts", ["Hello from Ruby!"])
+    Invoke Ruby
+        with puts
 
-    # Call puts from Crystal
-    ffi.call_crystal("puts", ["Hello from Crystal!"])
+        as {
+            "Hello from Ruby!"
+        }
+    end
 
-    # Call printf from C
-    ffi.call_c("printf", ["Hello from C!"])
-```
+    # Call puts from Crystal.
+    # This works too: ffi.call_crystal("puts", ["Hello from Crystal!"])
+    Invoke Crystal
+        with puts
 
-###### Like I said, the ffi is still a work in progress but I have settled on what it will look like, the only reason it doesn't work yet is because I'm still deciding on whether I want it as something from the stdlib by `use "ffi"` or through extending the actual ffi to support it, doing that would require a rewrite in some places that already use the current ffi.
-```crystal
-    #! This does not currently work but just to give you an ideal of where its going.
+        as {
+            "Hello from Crystal!"
+        }
+    end
+
+    # Call printf from C.
+    # This works too: ffi.call_c("printf", ["Hello from C!"])
     Invoke C
         with printf
 
         as {
             "Hello from C!"
         }
-
     end
 ```
 

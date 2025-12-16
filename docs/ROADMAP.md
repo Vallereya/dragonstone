@@ -180,7 +180,7 @@
 ```diff
 + Updated functions to allow default values directly.
 + Added support for command line arguments using `argv`.
-- 
++ Change FFI to use a new calling convention/syntax, maintains direct calls. 
 - 
 - 
 ```
@@ -203,29 +203,10 @@
 
 ```diff
 - Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
-
-- Extend the LLVM backend be able to compile all stdlibs.
-- Added support for strip, added to llvm backend as well.
-- Implement optional Garbage Collection (c-like or crystal-like).
-- Implement optional Borrow Checker/Ownership (rust-like).
-- Implement support for concurrency.
-
-- Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
-- Fix FFI, make sure to do some boilerplate code avoidance, and rebuild how it works via keywords.
-- Expand the bindings of the 3-Way Interop, so Dragonstone can call more.
-- Begin some Bootstrapping work.
-
-- Setup more micro-benchmarks.
-- Setup more spec/unit testing.
-- Start C, Crystal, and Ruby lib with something basic.
-- Expand C, Crystal, and Ruby libs into stdlib, they are made separate then added as an stdlib.
-- Expand the stdlib and port any stdlib to dragonstone if there is any not.
-
-- Freeze current grammar subset if needed on C side, and finish target build outs for the compilers.
-- Verify parser & bytecode coverage for all operators, on all backends and on llvm compiler.
-- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
-- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
-- VM unwind stack w/ exception objects, make a method cache w/ fallback path.
+- 
+- 
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Two
