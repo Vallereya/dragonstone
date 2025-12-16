@@ -9,7 +9,7 @@ describe "Import caching across backend fallback" do
     begin
       header_dir = File.join(dir, "version_test")
       header_file = File.join(header_dir, "test_file.h")
-      toml_path = File.expand_path("tests/test.toml", Dir.current)
+      toml_path = File.expand_path("examples/test.toml", Dir.current)
 
       File.tempfile("dragonstone-import-cache", suffix: ".ds", dir: dir) do |file|
         file.print <<-DS

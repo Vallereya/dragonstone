@@ -1,4 +1,5 @@
 require "spec"
+require "file_utils"
 require "../src/dragonstone/cli/cli"
 require "../src/dragonstone/cli/cli_build"
 
@@ -56,17 +57,21 @@ describe "Default parameters" do
   it "works when compiled via LLVM target when clang is available" do
     pending!("clang is not available; skipping LLVM default parameter test") unless clang_available?
 
-    dir = File.join(".tmp", "default_params_llvm_spec")
-    Dir.mkdir_p(dir)
-    source_file = File.join(dir, "default_params.ds")
-    File.write(source_file, program)
+    dir = File.join("dev", "build", "spec", "default_params_llvm_spec_#{Random::Secure.hex(8)}")
+    FileUtils.mkdir_p(dir)
+    begin
+      source_file = File.join(dir, "default_params.ds")
+      File.write(source_file, program)
 
-    stdout = IO::Memory.new
-    stderr = IO::Memory.new
-    status = Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source_file], stdout, stderr)
-    status.should eq(0)
-    stderr.to_s.should_not contain("ERROR:")
-    stdout.to_s.should contain("Hello, Jules!")
-    stdout.to_s.should contain("Hello, Ringo!")
+      stdout = IO::Memory.new
+      stderr = IO::Memory.new
+      status = Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source_file], stdout, stderr)
+      status.should eq(0)
+      stderr.to_s.should_not contain("ERROR:")
+      stdout.to_s.should contain("Hello, Jules!")
+      stdout.to_s.should contain("Hello, Ringo!")
+    ensure
+      FileUtils.rm_rf(dir)
+    end
   end
 end
