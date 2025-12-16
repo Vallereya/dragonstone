@@ -11,7 +11,7 @@ dragonstone.o
 version.h
 NUL
 
-# Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
+# Ignore Dev Build Files, Directories, and Notes.
 # dev/
 dev/.dragonstone/
 dev/build/
@@ -19,6 +19,9 @@ dev/notes/
 dev/tests/
 dev/release/
 dev/installer/
+
+# Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
+bootstrap/
 
 # Ignore any Output/Build Cache from testing.
 .cache
