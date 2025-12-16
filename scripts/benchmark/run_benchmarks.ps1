@@ -15,7 +15,7 @@ Usage:
 Examples:
   .\run_benchmarks.ps1
   .\run_benchmarks.ps1 -Backend core -Iterations 3
-  .\run_benchmarks.ps1 -Programs tests\benchmark\1b.ds,tests\benchmark\1m.ds
+  .\run_benchmarks.ps1 -Programs scripts\benchmark\1b.ds,scripts\benchmark\1m.ds
 "@
 }
 
@@ -30,10 +30,10 @@ Set-Location $repoRoot
 
 if (-not $Programs -or $Programs.Count -eq 0) {
     $defaultPrograms = @(
-        "tests\benchmark\1b.ds",
-        "tests\benchmark\1b_nested.ds",
-        "tests\benchmark\1m.ds",
-        "tests\benchmark\1m_nested.ds"
+        "scripts\benchmark\1b.ds",
+        "scripts\benchmark\1b_nested.ds",
+        "scripts\benchmark\1m.ds",
+        "scripts\benchmark\1m_nested.ds"
     ) | Where-Object { Test-Path $_ }
     $Programs = $defaultPrograms
 }
@@ -43,7 +43,7 @@ if (-not $Programs -or $Programs.Count -eq 0) {
     exit 1
 }
 
-$cliPath = Join-Path $repoRoot "bin\dragonstone.exe"
+$cliPath = Join-Path $repoRoot "bin\build\dragonstone.exe"
 if (-not (Test-Path $cliPath)) {
     $cliPath = Join-Path $repoRoot "bin\dragonstone"
 }
