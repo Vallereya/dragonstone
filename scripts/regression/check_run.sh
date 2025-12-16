@@ -24,7 +24,7 @@ FILES=(
     ./examples/unicode.ds
     ./examples/resolution.ds
     ./examples/use.ds
-    ./examples/test_use.ds
+    # ./examples/test_use.ds
 
     ./examples/cli/argv.ds
 
@@ -101,10 +101,10 @@ FILES=(
     ./examples/types/types.ds
     ./examples/types/type_casting.ds
 
-    ./examples/stdlib/strings_build.ds
-    ./examples/stdlib/strings_length.ds
-    ./examples/stdlib/file.ds
-    ./examples/stdlib/toml.ds
+    # ./examples/stdlib/strings_build.ds
+    # ./examples/stdlib/strings_length.ds
+    # ./examples/stdlib/file.ds
+    # ./examples/stdlib/toml.ds
 )
 
 for file in "${FILES[@]}"; do

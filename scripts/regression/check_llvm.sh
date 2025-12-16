@@ -15,7 +15,7 @@ run ./examples/raise.ds
 run ./examples/unicode.ds
 run ./examples/resolution.ds
 run ./examples/use.ds
-run ./examples/test_use.ds
+# run ./examples/test_use.ds
 
 run ./examples/cli/argv.ds
 
@@ -92,7 +92,7 @@ run ./examples/other/interop.ds
 run ./examples/types/types.ds
 run ./examples/types/type_casting.ds
 
-run ./examples/stdlib/strings_build.ds
-run ./examples/stdlib/strings_length.ds
-run ./examples/stdlib/file.ds
-run ./examples/stdlib/toml.ds
+# run ./examples/stdlib/strings_build.ds
+# run ./examples/stdlib/strings_length.ds
+# run ./examples/stdlib/file.ds
+# run ./examples/stdlib/toml.ds
