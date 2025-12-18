@@ -94,6 +94,7 @@ module Dragonstone
             extend
             with
             yield
+            super
         ]
 
         getter source_name : String
@@ -611,6 +612,7 @@ module Dragonstone
                     when "extend" then :EXTEND
                     when "with" then :WITH
                     when "yield" then :YIELD
+                    when "super" then :SUPER
                     else
                         :IDENTIFIER
                     end

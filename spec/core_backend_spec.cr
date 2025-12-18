@@ -3,6 +3,135 @@ require "file_utils"
 require "../src/dragonstone"
 
 describe "core backend execution" do
+    it "supports operator overloading operators in class methods" do
+        source = <<-DS
+class Number
+    def initialize(@value: int)
+    end
+
+    def +(other)
+        @value + other
+    end
+
+    def -(other)
+        @value - other
+    end
+
+    def *(other)
+        @value * other
+    end
+
+    def **(other)
+        @value ** other
+    end
+
+    def /(other)
+        @value / other
+    end
+
+    def //(other)
+        @value // other
+    end
+
+    def %(other)
+        @value % other
+    end
+
+    def ==(other)
+        @value == other
+    end
+
+    def !=(other)
+        @value != other
+    end
+
+    def <(other)
+        @value < other
+    end
+
+    def >(other)
+        @value > other
+    end
+
+    def <=(other)
+        @value <= other
+    end
+
+    def >=(other)
+        @value >= other
+    end
+
+    def <<(other)
+        @value << other
+    end
+
+    def >>(other)
+        @value >> other
+    end
+end
+
+num = Number.new(5)
+echo num + 3
+echo num - 3
+echo num * 4
+echo num ** 2
+echo num / 2
+echo num // 2
+echo num % 3
+echo num == 5
+echo num != 3
+echo num < 10
+echo num > 2
+echo num <= 5
+echo num >= 6
+echo num << 2
+echo num >> 1
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
+    end
+
+    it "supports super calls in class methods" do
+        source = <<-DS
+class Person
+    def greet(msg)
+        echo "Hello, \#{msg}"
+    end
+end
+
+class Employee < Person
+    def greet(msg)
+        super(msg)
+        super("again")
+    end
+end
+
+Employee.new.greet("everyone")
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Hello, everyone\nHello, again\n"
+    end
+
+    it "raises when super is used outside a method on the core backend" do
+        expect_raises(Dragonstone::InterpreterError) do
+            Dragonstone.run("super(1)\n", backend: Dragonstone::BackendMode::Core)
+        end
+    end
+
+    it "evaluates conditional expressions (ternary operator)" do
+        source = <<-DS
+age = 20
+status = age >= 18 ? "Adult" : "Minor"
+echo "Status: \#{status}"
+
+score = 85
+grade = score > 90 ? "A" : (score > 80 ? "B" : "C")
+echo "Grade: \#{grade}"
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Status: Adult\nGrade: B\n"
+    end
+
     it "evaluates array enumerators with block control flow" do
         source = <<-DS
 numbers = [1, 2, 3, 4]

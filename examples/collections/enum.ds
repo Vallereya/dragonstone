@@ -2,7 +2,7 @@
     Enum Example
 ]#
 
-# TODO: Enums should start at 1
+# TODO: Enums should start at 1?
 
 # Example One
 enum Color

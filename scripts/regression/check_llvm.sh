@@ -60,6 +60,8 @@ run ./examples/methods/classes_abstract.ds
 run ./examples/methods/constants.ds
 run ./examples/methods/self.ds
 run ./examples/methods/visibility.ds
+run ./examples/methods/super.ds
+run ./examples/methods/overloading.ds
 
 run ./examples/handling/break.ds
 run ./examples/handling/next.ds

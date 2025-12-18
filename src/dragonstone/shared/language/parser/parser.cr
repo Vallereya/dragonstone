@@ -259,6 +259,8 @@ module Dragonstone
                 parse_while_statement
             when :WITH
                 parse_with_expression
+            when :SUPER
+                parse_expression_statement
             when :DEF
                 parse_function_def
             when :MODULE
@@ -995,17 +997,25 @@ module Dragonstone
                     end
                     left = AST::MethodCall.new(name, arguments, left, location: method_token.location)
                 when :DO
-                    unless left.is_a?(AST::MethodCall)
+                    unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         error("Unexpected 'do' without preceding method call", current_token)
                     end
                     block_literal = parse_do_block_literal
-                    left.as(AST::MethodCall).arguments << block_literal
+                    if left.is_a?(AST::MethodCall)
+                        left.as(AST::MethodCall).arguments << block_literal
+                    else
+                        left.as(AST::SuperCall).arguments << block_literal
+                    end
                 when :LBRACE
-                    unless left.is_a?(AST::MethodCall)
+                    unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         break
                     end
                     block_literal = parse_brace_block_literal
-                    left.as(AST::MethodCall).arguments << block_literal
+                    if left.is_a?(AST::MethodCall)
+                        left.as(AST::MethodCall).arguments << block_literal
+                    else
+                        left.as(AST::SuperCall).arguments << block_literal
+                    end
                 else
                     break
                 end
@@ -1048,6 +1058,8 @@ module Dragonstone
                 AST::ArgvExpression.new(location: token.location)
             when :YIELD
                 parse_yield_expression
+            when :SUPER
+                parse_super_call
             when :IDENTIFIER
                 parse_identifier_expression
             when :INSTANCE_VAR
@@ -1366,6 +1378,26 @@ module Dragonstone
                 end
             end
             AST::YieldExpression.new(arguments, location: yield_token.location)
+        end
+
+        private def parse_super_call : AST::Node
+            super_token = expect(:SUPER)
+            explicit_arguments = false
+
+            arguments = [] of AST::Node
+            if current_token.type == :LPAREN
+                explicit_arguments = true
+                arguments = parse_argument_list
+            elsif !argument_terminator?(current_token)
+                explicit_arguments = true
+                arguments << parse_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_expression
+                end
+            end
+
+            AST::SuperCall.new(arguments, explicit_arguments: explicit_arguments, location: super_token.location)
         end
 
         private def parse_para_literal : AST::Node

@@ -599,6 +599,61 @@ module Dragonstone
             invoke_block(block.not_nil!, args, node.location)
         end
 
+        def visit_super_call(node : AST::SuperCall) : RuntimeValue?
+            frame = @method_call_stack.last?
+            runtime_error(InterpreterError, "'super' used outside of a method", node) unless frame
+
+            owner = frame.not_nil!.owner
+            unless owner.is_a?(DragonClass)
+                runtime_error(InterpreterError, "'super' is only supported inside classes", node)
+            end
+
+            args = [] of RuntimeValue
+            block_value : Function? = nil
+
+            arg_nodes = [] of AST::Node
+            block_node = nil
+            node.arguments.each do |argument|
+                if argument.is_a?(AST::BlockLiteral)
+                    block_node = argument.as(AST::BlockLiteral)
+                else
+                    arg_nodes << argument
+                end
+            end
+
+            if block_node
+                block_value = block_node.not_nil!.accept(self).as(Function)
+            else
+                block_value = frame.not_nil!.block
+            end
+
+            if node.explicit_arguments?
+                args = evaluate_arguments(arg_nodes)
+            else
+                args = frame.not_nil!.args.dup
+            end
+
+            receiver_self = frame.not_nil!.receiver
+            receiver_class = receiver_self.is_a?(DragonInstance) ? receiver_self.as(DragonInstance).klass : receiver_self.as?(DragonClass)
+            runtime_error(InterpreterError, "'super' requires a class receiver", node) unless receiver_class
+
+            super_class = owner.as(DragonClass).superclass
+            runtime_error(NameError, "No superclass available for #{owner.as(DragonClass).name}", node) unless super_class
+
+            method_name = frame.not_nil!.method.name
+            super_method = super_class.not_nil!.lookup_method(method_name)
+            runtime_error(NameError, "Undefined method '#{method_name}' for superclass of #{owner.as(DragonClass).name}", node) unless super_method
+
+            super_owner = super_method.not_nil!.owner
+            unless super_owner.is_a?(DragonClass)
+                runtime_error(InterpreterError, "Superclass method '#{method_name}' must belong to a class", node)
+            end
+
+            with_container(super_owner) do
+                call_bound_method(super_owner, super_method.not_nil!, args, block_value, node.location, self_object: receiver_self)
+            end
+        end
+
         def visit_bag_constructor(node : AST::BagConstructor) : RuntimeValue?
             descriptor = descriptor_for(node.element_type)
             BagConstructor.new(descriptor, node.element_type)

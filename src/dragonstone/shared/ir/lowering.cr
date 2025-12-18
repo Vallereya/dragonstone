@@ -54,6 +54,12 @@ module Dragonstone
                         when AST::UnaryOp
                             SUPPORTED_UNARY_OPERATORS.includes?(node.operator) &&
                                 node_supported?(node.operand)
+                        when AST::ConditionalExpression
+                            node_supported?(node.condition) &&
+                                node_supported?(node.then_branch) &&
+                                node_supported?(node.else_branch)
+                        when AST::SuperCall
+                            nodes_supported?(node.arguments)
                         when AST::MethodCall
                             receiver_supported = node.receiver.nil? || node_supported?(node.receiver.not_nil!)
                             receiver_supported && nodes_supported?(node.arguments)

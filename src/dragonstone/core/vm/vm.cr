@@ -34,6 +34,7 @@ module Dragonstone
             property block : Bytecode::BlockValue?
             property signature : Bytecode::FunctionSignature?
             property callable_name : String?
+            property method_owner : Bytecode::ClassValue?
             property gc_flags : ::Dragonstone::Runtime::GC::Flags
 
             def initialize(
@@ -43,6 +44,7 @@ module Dragonstone
                 block_value : Bytecode::BlockValue? = nil,
                 signature : Bytecode::FunctionSignature? = nil,
                 callable_name : String? = nil,
+                method_owner : Bytecode::ClassValue? = nil,
                 gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
             )
                 @ip = 0
@@ -57,6 +59,7 @@ module Dragonstone
                 @block = block_value
                 @signature = signature
                 @callable_name = callable_name
+                @method_owner = method_owner
                 @gc_flags = gc_flags
             end
         end
@@ -475,15 +478,27 @@ module Dragonstone
             block_value : Bytecode::BlockValue?,
             self_value : Bytecode::Value
         ) : Bytecode::Value
-            if fn = container.lookup_method(method)
+            if container.is_a?(Bytecode::ClassValue)
+                klass = container.as(Bytecode::ClassValue)
+                info = klass.lookup_method_with_owner(method)
+                raise "Unknown method '#{method}' for #{container.name}" unless info
+                fn = info[:method]
+                owner = info[:owner]
                 if fn.abstract?
                     raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
                 end
                 return with_container_context(container) do
-                    call_function_value(fn, args, block_value, self_value)
+                    call_function_value(fn, args, block_value, self_value, method_owner: owner)
                 end
-            else
-                raise "Unknown method '#{method}' for #{container.name}"
+            end
+
+            fn = container.lookup_method(method)
+            raise "Unknown method '#{method}' for #{container.name}" unless fn
+            if fn.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
+            end
+            with_container_context(container) do
+                call_function_value(fn, args, block_value, self_value)
             end
         end
 
@@ -493,15 +508,15 @@ module Dragonstone
             args : Array(Bytecode::Value),
             block_value : Bytecode::BlockValue?
         ) : Bytecode::Value
-            if fn = instance.klass.lookup_method(method)
-                if fn.abstract?
-                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}")
-                end
-                return with_container_context(instance.klass) do
-                    call_function_value(fn, args, block_value, instance)
-                end
-            else
-                raise "Undefined method '#{method}' for instance of #{instance.klass.name}"
+            info = instance.klass.lookup_method_with_owner(method)
+            raise "Undefined method '#{method}' for instance of #{instance.klass.name}" unless info
+            fn = info[:method]
+            owner = info[:owner]
+            if fn.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}")
+            end
+            with_container_context(instance.klass) do
+                call_function_value(fn, args, block_value, instance, method_owner: owner)
             end
         end
 
@@ -1122,10 +1137,12 @@ module Dragonstone
                     push(unary_positive(value))
                 when OPC::EQ
                     b, a = pop, pop
-                    push(a == b)
+                    overload = invoke_operator_overload(a, "==", b)
+                    push(overload.nil? ? (a == b) : overload)
                 when OPC::NE
                     b, a = pop, pop
-                    push(a != b)
+                    overload = invoke_operator_overload(a, "!=", b)
+                    push(overload.nil? ? (a != b) : overload)
                 when OPC::LT
                     b, a = pop, pop
                     push(compare_lt(a, b))
@@ -1154,6 +1171,9 @@ module Dragonstone
                 when OPC::BIT_NOT
                     value = pop
                     push(bitwise_not(value))
+                when OPC::POW
+                    b, a = pop, pop
+                    push(pow(a, b))
                 when OPC::ECHO
                     argc = fetch_byte
                     args = pop_values(argc)
@@ -1299,6 +1319,17 @@ module Dragonstone
                     args = pop_values(argc)
                     receiver = pop
                     result = invoke_method(receiver, current_code.names[name_idx], args, block_value)
+                    push(result)
+                when OPC::INVOKE_SUPER
+                    argc = fetch_byte
+                    args = pop_values(argc)
+                    result = invoke_super_method(args, current_frame.block)
+                    push(result)
+                when OPC::INVOKE_SUPER_BLOCK
+                    argc = fetch_byte
+                    block_value = pop_block
+                    args = pop_values(argc)
+                    result = invoke_super_method(args, block_value)
                     push(result)
                 when OPC::CALL
                     argc = fetch_byte
@@ -1758,13 +1789,20 @@ module Dragonstone
             frame.block = block_value
         end
 
-        private def call_function_value(fn : Bytecode::FunctionValue, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?, self_value : Bytecode::Value? = nil) : Bytecode::Value
+        private def call_function_value(
+            fn : Bytecode::FunctionValue,
+            args : Array(Bytecode::Value),
+            block_value : Bytecode::BlockValue?,
+            self_value : Bytecode::Value? = nil,
+            *,
+            method_owner : Bytecode::ClassValue? = nil
+        ) : Bytecode::Value
             if fn.abstract?
                 raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{fn.name}")
             end
             final_args = coerce_call_args(fn.signature, args, block_value, fn.name)
             depth_before = @frames.size
-            push_callable_frame(fn.code, fn.signature, final_args, block_value, fn.name, self_value)
+            push_callable_frame(fn.code, fn.signature, final_args, block_value, fn.name, self_value, method_owner: method_owner)
             result = execute_with_frame_cleanup(depth_before)
             pop
             result
@@ -1788,9 +1826,10 @@ module Dragonstone
             block_value : Bytecode::BlockValue? = nil,
             signature : Bytecode::FunctionSignature? = nil,
             callable_name : String? = nil,
+            method_owner : Bytecode::ClassValue? = nil,
             gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
         ) : Frame
-            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, gc_flags)
+            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, gc_flags)
             @frames << frame
             frame
         end
@@ -1802,9 +1841,10 @@ module Dragonstone
             block_value : Bytecode::BlockValue?,
             callable_name : String? = nil,
             self_value : Bytecode::Value? = nil,
-            locals_source : Frame? = nil
+            locals_source : Frame? = nil,
+            method_owner : Bytecode::ClassValue? = nil
         ) : Frame
-            frame = push_frame(code, true, block_value, signature, callable_name, signature.gc_flags)
+            frame = push_frame(code, true, block_value, signature, callable_name, method_owner, signature.gc_flags)
             enter_gc_context(frame.gc_flags)
             if ENV["DS_DEBUG_STACK_ENTRY"]?
                 STDERR.puts "ENTER #{callable_name || "<lambda>"} stack_base=#{frame.stack_base} stack=#{@stack.inspect}"
@@ -1957,6 +1997,8 @@ module Dragonstone
                 stringify(a) + stringify(b)
 
             else
+                overload = invoke_operator_overload(a, "+", b)
+                return overload unless overload.nil?
                 raise "Cannot add #{type_of(a)} and #{type_of(b)}"
 
             end
@@ -1978,11 +2020,16 @@ module Dragonstone
                 end
                 a % rhs
             else
+                overload = invoke_operator_overload(a, "%", b)
+                return overload unless overload.nil?
                 raise "Type error"
             end
         end
 
         private def floor_div(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "//", b)
+            return overload unless overload.nil?
+
             if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
@@ -1996,22 +2043,32 @@ module Dragonstone
         end
 
         private def bit_and(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "&", b)
+            return overload unless overload.nil?
             integer_op(a, b) { |x, y| x & y }
         end
 
         private def bit_or(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "|", b)
+            return overload unless overload.nil?
             integer_op(a, b) { |x, y| x | y }
         end
 
         private def bit_xor(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "^", b)
+            return overload unless overload.nil?
             integer_op(a, b) { |x, y| x ^ y }
         end
 
         private def shift_left(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "<<", b)
+            return overload unless overload.nil?
             integer_op(a, b) { |x, y| x << y }
         end
 
         private def shift_right(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, ">>", b)
+            return overload unless overload.nil?
             integer_op(a, b) { |x, y| x >> y }
         end
 
@@ -2028,16 +2085,29 @@ module Dragonstone
                 raise "Type error"
             end
         end
+
+        private def invoke_operator_overload(receiver : Bytecode::Value, method : String, arg : Bytecode::Value) : Bytecode::Value?
+            return nil unless receiver.is_a?(Bytecode::InstanceValue) || receiver.is_a?(Bytecode::ClassValue) || receiver.is_a?(Bytecode::ModuleValue)
+            invoke_method(receiver, method, [arg] of Bytecode::Value, nil)
+        rescue
+            nil
+        end
         
         private def sub(a, b)
+            overload = invoke_operator_overload(a, "-", b)
+            return overload unless overload.nil?
             numeric_op(a, b) { |x, y| x - y }
         end
         
         private def mul(a, b)
+            overload = invoke_operator_overload(a, "*", b)
+            return overload unless overload.nil?
             numeric_op(a, b) { |x, y| x * y }
         end
         
         private def div(a, b)
+            overload = invoke_operator_overload(a, "/", b)
+            return overload unless overload.nil?
             if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
@@ -2064,18 +2134,26 @@ module Dragonstone
         end
         
         private def compare_lt(a, b)
+            overload = invoke_operator_overload(a, "<", b)
+            return overload unless overload.nil?
             numeric_compare(a, b) { |x, y| x < y }
         end
         
         private def compare_le(a, b)
+            overload = invoke_operator_overload(a, "<=", b)
+            return overload unless overload.nil?
             numeric_compare(a, b) { |x, y| x <= y }
         end
         
         private def compare_gt(a, b)
+            overload = invoke_operator_overload(a, ">", b)
+            return overload unless overload.nil?
             numeric_compare(a, b) { |x, y| x > y }
         end
         
         private def compare_ge(a, b)
+            overload = invoke_operator_overload(a, ">=", b)
+            return overload unless overload.nil?
             numeric_compare(a, b) { |x, y| x >= y }
         end
         
@@ -2099,6 +2177,15 @@ module Dragonstone
         end
 
         private def spaceship_compare(a, b) : Int64
+            overload = invoke_operator_overload(a, "<=>", b)
+            if overload
+                if overload.is_a?(Int64)
+                    return overload
+                elsif overload.is_a?(Int32)
+                    return overload.to_i64
+                end
+            end
+
             case a
             when Int32, Int64, Float64
                 numeric_spaceship(a, b)
@@ -2106,6 +2193,45 @@ module Dragonstone
                 string_spaceship(a, b)
             else
                 raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
+            end
+        end
+
+        private def pow(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
+            overload = invoke_operator_overload(a, "**", b)
+            return overload unless overload.nil?
+
+            case a
+            when Int32, Int64
+                base = a.to_i64
+                exp = case b
+                    when Int32, Int64 then b.to_i64
+                    when Float64 then b.to_i64
+                    else
+                        raise "Type error"
+                    end
+
+                return base.to_f64 ** exp.to_f64 if exp < 0
+
+                result = 1_i64
+                factor = base
+                power = exp
+                while power > 0
+                    result *= factor if (power & 1) == 1
+                    power >>= 1
+                    break if power == 0
+                    factor *= factor
+                end
+                result
+            when Float64
+                exponent = case b
+                    when Int32, Int64 then b.to_f64
+                    when Float64 then b
+                    else
+                        raise "Type error"
+                    end
+                a ** exponent
+            else
+                raise "Type error"
             end
         end
 
@@ -2622,8 +2748,8 @@ module Dragonstone
                         raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
                     end
                     instance = Bytecode::InstanceValue.new(receiver)
-                    if init = receiver.lookup_method("initialize")
-                        call_function_value(init, args, nil, instance)
+                    if init_info = receiver.lookup_method_with_owner("initialize")
+                        call_function_value(init_info[:method], args, nil, instance, method_owner: init_info[:owner])
                     end
                     instance
                 else
@@ -2637,8 +2763,8 @@ module Dragonstone
                         raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
                     end
                     instance = Bytecode::InstanceValue.new(receiver)
-                    if init = receiver.lookup_method("initialize")
-                        call_function_value(init, args, nil, instance)
+                    if init_info = receiver.lookup_method_with_owner("initialize")
+                        call_function_value(init_info[:method], args, nil, instance, method_owner: init_info[:owner])
                     end
                     instance
                 else
@@ -2661,6 +2787,33 @@ module Dragonstone
             else
                 raise "Cannot call method #{method} on #{type_of(receiver)}"
             end
+        end
+
+        private def invoke_super_method(args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            frame = current_frame
+            owner = frame.method_owner
+            method_name = frame.callable_name
+
+            unless owner && method_name && method_name != "<block>"
+                raise ::Dragonstone::InterpreterError.new("'super' used outside of a method")
+            end
+
+            receiver_self = current_self_safe
+            raise ::Dragonstone::InterpreterError.new("'super' requires a receiver") unless receiver_self
+
+            super_class = owner.not_nil!.superclass
+            raise ::Dragonstone::NameError.new("No superclass available for #{owner.not_nil!.name}") unless super_class
+
+            info = super_class.not_nil!.lookup_method_with_owner(method_name.not_nil!)
+            raise ::Dragonstone::NameError.new("Undefined method '#{method_name}' for superclass of #{owner.not_nil!.name}") unless info
+
+            fn = info.not_nil![:method]
+            super_owner = info.not_nil![:owner]
+            if fn.abstract?
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method_name} on #{super_owner.name}")
+            end
+
+            call_function_value(fn, args, block_value, receiver_self, method_owner: super_owner)
         end
 
         private def call_function_method(

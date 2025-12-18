@@ -2,18 +2,17 @@
     Math Example
 ]#
 
-# TODO: / and // cross out words? I either added it somewhere, which is doubtful, or its the temp dragonstone VSCode extension I made messing it up.
 #[
     Just a few.
 
     ** 	    exponentiation
     &** 	wrapping exponentiation
 
-\    * 	    multiplication
+    * 	    multiplication
     &* 	    wrapping multiplication
 
     / 	    division
-\   // 	    floor division
+    // 	    floor division
     
     % 	    modulus
 ]#

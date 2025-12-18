@@ -69,6 +69,8 @@ FILES=(
     ./examples/methods/constants.ds
     ./examples/methods/self.ds
     ./examples/methods/visibility.ds
+    ./examples/methods/super.ds
+    ./examples/methods/overloading.ds
 
     ./examples/handling/break.ds
     ./examples/handling/next.ds

@@ -192,6 +192,13 @@ module Dragonstone
                 super || @superclass.try &.lookup_method(name)
             end
 
+            def lookup_method_with_owner(name : String) : NamedTuple(method: FunctionValue, owner: ClassValue)?
+                if fn = methods[name]?
+                    return {method: fn, owner: self}
+                end
+                @superclass.try &.lookup_method_with_owner(name)
+            end
+
             def mark_abstract!
                 @abstract = true
             end

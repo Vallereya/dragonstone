@@ -48,6 +48,7 @@ module Dragonstone
             @type_aliases = {} of String => AST::TypeExpression
             @alias_descriptor_cache = {} of String => Typing::Descriptor
             @block_stack = [] of Function?
+            @method_call_stack = [] of MethodCallFrame
             @singleton_classes = {} of UInt64 => SingletonClass
             @module_graph = nil
             set_variable("ffi", FFIModule.new)

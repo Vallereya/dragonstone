@@ -2,7 +2,6 @@
     Struct Example
 ]#
 
-
 struct Point
     property x: int
     property y: int

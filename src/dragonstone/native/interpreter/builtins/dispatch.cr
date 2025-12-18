@@ -139,10 +139,20 @@ module Dragonstone
                 triple_equals(left, right, node)
 
             when :==
-                left == right
+                if left == right
+                    true
+                else
+                    overload = invoke_operator_overload(left, :"==", right, node)
+                    overload.nil? ? false : overload
+                end
 
             when :!=
-                left != right
+                if left != right
+                    true
+                else
+                    overload = invoke_operator_overload(left, :"!=", right, node)
+                    overload.nil? ? false : overload
+                end
 
             when :<, :<=, :>, :>=, :<=>
                 compare_values(left, operator, right, node)
@@ -156,6 +166,47 @@ module Dragonstone
             else
                 runtime_error(InterpreterError, "Unknown operator: #{operator}", node)
 
+            end
+        end
+
+        private def operator_overload_name(operator : Symbol) : String
+            case operator
+            when :"&+" then "+"
+            when :"&-" then "-"
+            when :"&*" then "*"
+            when :"&**" then "**"
+            else
+                operator.to_s
+            end
+        end
+
+        private def invoke_operator_overload(left, operator : Symbol, right, node : AST::Node) : RuntimeValue?
+            return nil unless supports_custom_methods?(left)
+
+            method_name = operator_overload_name(operator)
+            args = [right.as(RuntimeValue)] of RuntimeValue
+
+            case left
+            when DragonInstance
+                method = left.klass.lookup_method(method_name)
+                return nil unless method
+                with_container(left.klass) do
+                    return call_bound_method(left.klass, method.not_nil!, args, nil, node.location, self_object: left)
+                end
+            when DragonClass
+                method = left.lookup_method(method_name)
+                return nil unless method
+                with_container(left) do
+                    return call_bound_method(left, method.not_nil!, args, nil, node.location)
+                end
+            when DragonModule
+                method = left.lookup_method(method_name)
+                return nil unless method
+                with_container(left) do
+                    return call_bound_method(left, method.not_nil!, args, nil, node.location)
+                end
+            else
+                nil
             end
         end
 
@@ -178,22 +229,33 @@ module Dragonstone
                 (left + right.as(Array(RuntimeValue))).map { |v| v }
 
             else
+                overload = invoke_operator_overload(left, :+, right, node)
+                return overload unless overload.nil?
                 runtime_error(TypeError, "Unsupported operands for +", node)
 
             end
         end
 
         private def subtract_values(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :-, right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
             numeric_subtract(lnum, rnum)
         end
 
         private def multiply_values(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :*, right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
             numeric_multiply(lnum, rnum)
         end
 
         private def divide_values(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :/, right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
@@ -204,6 +266,9 @@ module Dragonstone
         end
 
         private def modulo_values(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :%, right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
@@ -218,11 +283,34 @@ module Dragonstone
         end
 
         private def power_values(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :"**", right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
-            lnum.to_f64 ** rnum.to_f64
+            if lnum.is_a?(Float64) || rnum.is_a?(Float64)
+                lnum.to_f64 ** rnum.to_f64
+            else
+                base = lnum.to_i64
+                exp = rnum.to_i64
+                return base.to_f64 ** exp.to_f64 if exp < 0
+
+                result = 1_i64
+                factor = base
+                power = exp
+                while power > 0
+                    result *= factor if (power & 1) == 1
+                    power >>= 1
+                    break if power == 0
+                    factor *= factor
+                end
+                result
+            end
         end
 
         private def bitwise_values(left, operator : Symbol, right, node : AST::Node)
+            overload = invoke_operator_overload(left, operator, right, node)
+            return overload unless overload.nil?
+
             lint = to_int(left, node)
             rint = to_int(right, node)
 
@@ -250,6 +338,9 @@ module Dragonstone
         end
 
         private def compare_values(left, operator : Symbol, right, node : AST::Node)
+            overload = invoke_operator_overload(left, operator, right, node)
+            return overload unless overload.nil?
+
             case left
                 
             when Int64, Float64
@@ -442,6 +533,9 @@ module Dragonstone
         end
 
         private def perform_floor_division(left, right, node : AST::Node)
+            overload = invoke_operator_overload(left, :"//", right, node)
+            return overload unless overload.nil?
+
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
