@@ -182,7 +182,7 @@
 + Added support for command line arguments using `argv`.
 + Change FFI to use a new calling convention/syntax, maintains direct calls. 
 + Added support for `super` classes. 
-+ Fixed Operator overloading issues, now works correctly on all run options and llvm backend. 
++ Fixed Operator overloading issues, implemented ones now work correctly on all run options/llvm.
 ```
 
 ###     <h2 align="center">         Phase Five

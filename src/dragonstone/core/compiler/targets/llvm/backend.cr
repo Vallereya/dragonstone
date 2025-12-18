@@ -3046,6 +3046,32 @@ module Dragonstone
                   return
                 end
 
+                # Allow primitive locals to accept boxed values by unboxing them.
+                # This is necessary when a local starts as an integer/float and later participates in
+                # an operation that routes through the boxed runtime helpers (e.g. array element math).
+                if value[:type] == "i8*"
+                  case slot[:type]
+                  when "i32"
+                    unboxed = runtime_call(ctx, "i32", @runtime[:unbox_i32], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store i32 #{unboxed[:ref]}, i32* #{slot[:ptr]}\n"
+                    return
+                  when "i64"
+                    unboxed = runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store i64 #{unboxed[:ref]}, i64* #{slot[:ptr]}\n"
+                    return
+                  when "double"
+                    unboxed = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store double #{unboxed[:ref]}, double* #{slot[:ptr]}\n"
+                    return
+                  when "i1"
+                    raw = runtime_call(ctx, "i32", @runtime[:unbox_bool], [{type: "i8*", ref: value[:ref]}])
+                    reg = ctx.fresh("bool_i1")
+                    ctx.io << "  %#{reg} = icmp ne i32 #{raw[:ref]}, 0\n"
+                    ctx.io << "  store i1 %#{reg}, i1* #{slot[:ptr]}\n"
+                    return
+                  end
+                end
+
                 raise "Type mismatch assigning to #{name}: expected #{slot[:type]}, got #{value[:type]}"
               end
 

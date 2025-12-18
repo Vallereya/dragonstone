@@ -206,4 +206,38 @@ DS
             FileUtils.rm_rf(dir)
         end
     end
+
+    it "executes boxed arithmetic inside loops when clang is available" do
+        pending!("clang is not available; skipping LLVM loop arithmetic integration test") unless clang_available?
+
+        dir = File.join("dev", "build", "spec", "cli_llvm_loop_arithmetic_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(dir)
+        begin
+            source = File.join(dir, "sum_array.ds")
+            File.write(source, <<-DS)
+def sum_array(arr)
+    total = 0
+    i = 0
+
+    while i < arr.length
+        total = total + arr[i]
+        i = i + 1
+    end
+
+    return total
+end
+
+numbers = [1, 2, 3, 4, 5]
+echo sum_array(numbers)
+DS
+
+            stdout = IO::Memory.new
+            stderr = IO::Memory.new
+            Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
+            stderr.to_s.should_not contain("ERROR:")
+            stdout.to_s.should eq("15\n")
+        ensure
+            FileUtils.rm_rf(dir)
+        end
+    end
 end

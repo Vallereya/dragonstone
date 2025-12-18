@@ -30,6 +30,14 @@ module Dragonstone
       artifact: Core::Compiler::BuildArtifact,
       linked_path: String?)
 
+    private def emit_warnings(warnings : Array(String), targets : Array(Core::Compiler::Target), stderr : IO) : Nil
+      filtered = warnings
+      if targets.includes?(Core::Compiler::Target::LLVM)
+        filtered = warnings.reject { |warning| warning.starts_with?("Symbol ") && warning.includes?(" redefined as ") }
+      end
+      filtered.each { |warning| stderr.puts "WARNING: #{warning}" }
+    end
+
     def build_command(args : Array(String), stdout : IO, stderr : IO) : Int32
       options = parse_cli_options(args, stdout, stderr)
       return 1 unless options
@@ -41,7 +49,7 @@ module Dragonstone
 
       begin
         program, warnings = build_program(filename, typed: options.typed)
-        warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
+        emit_warnings(warnings, options.targets, stderr)
         build_targets(program, options.targets, options.output_dir, stdout, stderr)
         return 0
       rescue e : Dragonstone::Error
@@ -65,7 +73,7 @@ module Dragonstone
       begin
         program, warnings = build_program(filename, typed: options.typed)
 
-        warnings.each { |warning| stderr.puts "WARNING: #{warning}" }
+        emit_warnings(warnings, options.targets, stderr)
 
 	        artifacts = build_targets(program, options.targets, options.output_dir, stdout, stderr)
 	        run_artifacts(program, artifacts, stdout, stderr, options.argv) ? 0 : 1
