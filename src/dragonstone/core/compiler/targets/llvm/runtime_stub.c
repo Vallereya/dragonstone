@@ -215,6 +215,7 @@ void *dragonstone_runtime_to_string(void *value);
 void *dragonstone_runtime_box_bool(int32_t value);
 void *dragonstone_runtime_box_i64(int64_t value);
 void *dragonstone_runtime_array_literal(int64_t length, void **elements);
+_Bool dragonstone_runtime_is_truthy(void *value);
 
 static int ds_mkdir_one(const char *path) {
 #if defined(_WIN32)
@@ -347,6 +348,10 @@ void *dragonstone_runtime_array_push(void *array_val, void *value);
 void *dragonstone_runtime_block_invoke(void *block_val, int64_t argc, void **argv);
 void *dragonstone_runtime_bag_constructor(void *element_type);
 void *dragonstone_runtime_add(void *lhs, void *rhs);
+void *dragonstone_runtime_sub(void *lhs, void *rhs);
+void *dragonstone_runtime_mul(void *lhs, void *rhs);
+void *dragonstone_runtime_div(void *lhs, void *rhs);
+void *dragonstone_runtime_mod(void *lhs, void *rhs);
 void *dragonstone_runtime_negate(void *value);
 void *dragonstone_runtime_to_string(void *value);
 void *dragonstone_runtime_tuple_literal(int64_t l, void **e);
@@ -2241,6 +2246,126 @@ static void *ds_try_invoke_operator(void *lhs, const char *op, void *rhs) {
     return ds_call_method(meth->func_ptr, lhs, 1, args);
 }
 
+void *dragonstone_runtime_sub(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "-", rhs);
+    if (over) return over;
+
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_float(ld - rd);
+        }
+
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_i64(li - ri);
+        }
+    }
+
+    dragonstone_runtime_raise("Unsupported operands for -");
+    return NULL;
+}
+
+void *dragonstone_runtime_mul(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "*", rhs);
+    if (over) return over;
+
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_float(ld * rd);
+        }
+
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_i64(li * ri);
+        }
+    }
+
+    dragonstone_runtime_raise("Unsupported operands for *");
+    return NULL;
+}
+
+void *dragonstone_runtime_div(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "/", rhs);
+    if (over) return over;
+
+    if (ds_is_boxed(rhs)) {
+        DSValue *r = (DSValue *)rhs;
+        if ((r->kind == DS_VALUE_INT32 && r->as.i32 == 0) || (r->kind == DS_VALUE_INT64 && r->as.i64 == 0) || (r->kind == DS_VALUE_FLOAT && r->as.f64 == 0.0)) {
+            dragonstone_runtime_raise("Division by zero");
+            return NULL;
+        }
+    }
+
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_float(ld / rd);
+        }
+
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            double ld = (l->kind == DS_VALUE_INT32) ? (double)l->as.i32 : (double)l->as.i64;
+            double rd = (r->kind == DS_VALUE_INT32) ? (double)r->as.i32 : (double)r->as.i64;
+            return dragonstone_runtime_box_float(ld / rd);
+        }
+    }
+
+    dragonstone_runtime_raise("Unsupported operands for /");
+    return NULL;
+}
+
+void *dragonstone_runtime_mod(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "%", rhs);
+    if (over) return over;
+
+    if (ds_is_boxed(rhs)) {
+        DSValue *r = (DSValue *)rhs;
+        if ((r->kind == DS_VALUE_INT32 && r->as.i32 == 0) || (r->kind == DS_VALUE_INT64 && r->as.i64 == 0) || (r->kind == DS_VALUE_FLOAT && r->as.f64 == 0.0)) {
+            dragonstone_runtime_raise("Division by zero");
+            return NULL;
+        }
+    }
+
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            double ld = dragonstone_runtime_unbox_float(lhs);
+            double rd = dragonstone_runtime_unbox_float(rhs);
+            return dragonstone_runtime_box_float(fmod(ld, rd));
+        }
+
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            int64_t li = (l->kind == DS_VALUE_INT32) ? l->as.i32 : l->as.i64;
+            int64_t ri = (r->kind == DS_VALUE_INT32) ? r->as.i32 : r->as.i64;
+            return dragonstone_runtime_box_i64(li % ri);
+        }
+    }
+
+    dragonstone_runtime_raise("Unsupported operands for %");
+    return NULL;
+}
+
 static int64_t ds_int_floor_div(int64_t lhs, int64_t rhs) {
     int64_t q = lhs / rhs;
     int64_t r = lhs % rhs;
@@ -2502,7 +2627,31 @@ void *dragonstone_runtime_eq(void *lhs, void *rhs) {
     void *over = ds_try_invoke_operator(lhs, "==", rhs);
     if (over) return ds_is_boxed(over) && ((DSValue *)over)->kind == DS_VALUE_BOOL ? over : ds_box_truthy(over);
 
-    return dragonstone_runtime_box_bool(dragonstone_runtime_case_compare(lhs, rhs));
+    if (ds_is_boxed(lhs) && ds_is_boxed(rhs)) {
+        DSValue *l = (DSValue *)lhs;
+        DSValue *r = (DSValue *)rhs;
+
+        if ((l->kind == DS_VALUE_INT32 || l->kind == DS_VALUE_INT64) &&
+            (r->kind == DS_VALUE_INT32 || r->kind == DS_VALUE_INT64)) {
+            return dragonstone_runtime_box_bool(dragonstone_runtime_unbox_i64(lhs) == dragonstone_runtime_unbox_i64(rhs));
+        }
+
+        if (l->kind == DS_VALUE_FLOAT || r->kind == DS_VALUE_FLOAT) {
+            return dragonstone_runtime_box_bool(dragonstone_runtime_unbox_float(lhs) == dragonstone_runtime_unbox_float(rhs));
+        }
+
+        if (l->kind == DS_VALUE_BOOL && r->kind == DS_VALUE_BOOL) {
+            return dragonstone_runtime_box_bool(l->as.boolean == r->as.boolean);
+        }
+
+        return dragonstone_runtime_box_bool(dragonstone_runtime_case_compare(lhs, rhs));
+    }
+
+    if (!ds_is_boxed(lhs) && !ds_is_boxed(rhs)) {
+        return dragonstone_runtime_box_bool(strcmp((const char *)lhs, (const char *)rhs) == 0);
+    }
+
+    return dragonstone_runtime_box_bool(false);
 }
 
 void *dragonstone_runtime_ne(void *lhs, void *rhs) {
@@ -2515,7 +2664,9 @@ void *dragonstone_runtime_ne(void *lhs, void *rhs) {
         return dragonstone_runtime_box_bool(!v);
     }
 
-    return dragonstone_runtime_box_bool(!dragonstone_runtime_case_compare(lhs, rhs));
+    void *fallback_eq = dragonstone_runtime_eq(lhs, rhs);
+    _Bool v = dragonstone_runtime_is_truthy(fallback_eq);
+    return dragonstone_runtime_box_bool(!v);
 }
 
 _Bool dragonstone_runtime_is_truthy(void *value) {

@@ -431,6 +431,9 @@ module Dragonstone
 
     private def link_with_clang(ir_path : String, runtime_obj : String, binary_path : String, stdout : IO, stderr : IO) : Bool
       args = ["-Wno-override-module", ir_path, runtime_obj, "-o", binary_path]
+      {% if flag?(:linux) %}
+        args << "-lm"
+      {% end %}
       run_clang(args, stdout, stderr)
     end
 

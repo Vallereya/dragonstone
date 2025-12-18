@@ -108,6 +108,10 @@ module Dragonstone
               unbox_struct: String,
               array_push: String,
               generic_add: String,
+              generic_sub: String,
+              generic_mul: String,
+              generic_div: String,
+              generic_mod: String,
               generic_negate: String,
               generic_shl: String,
               generic_shr: String,
@@ -222,6 +226,10 @@ module Dragonstone
                 unbox_struct: "dragonstone_runtime_unbox_struct",
                 array_push: "dragonstone_runtime_array_push",
                 generic_add: "dragonstone_runtime_add",
+                generic_sub: "dragonstone_runtime_sub",
+                generic_mul: "dragonstone_runtime_mul",
+                generic_div: "dragonstone_runtime_div",
+                generic_mod: "dragonstone_runtime_mod",
                 generic_negate: "dragonstone_runtime_negate",
                 generic_shl: "dragonstone_runtime_shl",
                 generic_shr: "dragonstone_runtime_shr",
@@ -889,6 +897,10 @@ module Dragonstone
               io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
               io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:generic_add]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_sub]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_mul]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_div]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_mod]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:generic_negate]}(i8*)\n"
               io << "declare i8* @#{@runtime[:generic_shl]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:generic_shr]}(i8*, i8*)\n"
@@ -3132,6 +3144,26 @@ module Dragonstone
 
               case operator
               when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>", :&, :|, :^, :>>, :%
+                if lhs[:type] == "i8*" || rhs[:type] == "i8*"
+                  runtime_func = case operator
+                                 when :+, :"&+" then @runtime[:generic_add]
+                                 when :-, :"&-" then @runtime[:generic_sub]
+                                 when :*, :"&*" then @runtime[:generic_mul]
+                                 when :/        then @runtime[:generic_div]
+                                 when :%        then @runtime[:generic_mod]
+                                 else                nil
+                                 end
+
+                  if runtime_func
+                    lhs_boxed = box_value(ctx, lhs)
+                    rhs_boxed = box_value(ctx, rhs)
+                    return runtime_call(ctx, "i8*", runtime_func, [
+                      {type: "i8*", ref: lhs_boxed[:ref]},
+                      {type: "i8*", ref: rhs_boxed[:ref]},
+                    ])
+                  end
+                end
+
                 if operator == :"//" && (lhs[:type] == "i8*" || rhs[:type] == "i8*")
                   lhs_boxed = box_value(ctx, lhs)
                   rhs_boxed = box_value(ctx, rhs)

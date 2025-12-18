@@ -16,7 +16,7 @@ module Dragonstone
                     extend self
                     @@last_failure : String?
 
-                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :&, :|, :^, :<<, :>>, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
+                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :"**", :"&**", :&, :|, :^, :<<, :>>, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
                     SUPPORTED_RANGE_OPERATORS = Set{:"..", :"..."}
                     SUPPORTED_UNARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :!, :~}
 
