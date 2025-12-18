@@ -1,5 +1,12 @@
 module Dragonstone
     class Interpreter
+        private record MethodCallFrame,
+            owner : DragonModule,
+            method : MethodDefinition,
+            receiver : RuntimeValue,
+            args : Array(RuntimeValue),
+            block : Function?
+
         private def instantiate_class(klass : DragonClass, args : Array(RuntimeValue), node : AST::MethodCall)
             if klass.abstract?
                 runtime_error(TypeError, "Cannot instantiate abstract class #{klass.name}", node)
@@ -117,6 +124,9 @@ module Dragonstone
                     runtime_error(TypeError, "Cannot invoke abstract method #{method_def.name}", call_location)
                 end
 
+                receiver_self = (self_object || receiver).as(RuntimeValue)
+                @method_call_stack << MethodCallFrame.new(method_def.owner, method_def, receiver_self, args.dup, block_value)
+
                 if block_value
                     if final_args.size == expected_params
                         # yield-only block
@@ -131,7 +141,7 @@ module Dragonstone
 
                 with_block(block_value) do
                     push_scope(method_def.closure.dup, method_def.type_closure.dup)
-                    current_scope["self"] = self_object || receiver
+                    current_scope["self"] = receiver_self
                     scope_index = @scopes.size - 1
                     method_def.typed_parameters.each_with_index do |param, index|
                         value = final_args[index]
@@ -164,6 +174,8 @@ module Dragonstone
                     result
                 end
             end
+        ensure
+            @method_call_stack.pop?
         end
 
         private def invoke_block(block : Function, args : Array(RuntimeValue), call_location : Location? = nil)

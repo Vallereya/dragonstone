@@ -2,6 +2,11 @@ require "spec"
 require "../src/dragonstone"
 
 describe "language features" do
+    it "supports Array#empty? in the native backend" do
+        result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
+        result.output.should eq "false\n"
+    end
+
     it "creates and uses para literals" do
         source = <<-DS
 #! typed
@@ -34,6 +39,121 @@ echo Phrase.loud
 DS
         result = Dragonstone.run(source)
         result.output.should eq "HELLO!\nHI\n"
+    end
+
+    it "supports super calls in the native backend" do
+        source = <<-DS
+class Person
+    def greet(msg)
+        echo "Hello, \#{msg}"
+    end
+end
+
+class Employee < Person
+    def greet(msg)
+        super(msg)
+        super("again")
+    end
+end
+
+Employee.new.greet("everyone")
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "Hello, everyone\nHello, again\n"
+    end
+
+    it "supports operator overloading operators in the native backend" do
+        source = <<-DS
+class Number
+    def initialize(@value: int)
+    end
+
+    def +(other)
+        @value + other
+    end
+
+    def -(other)
+        @value - other
+    end
+
+    def *(other)
+        @value * other
+    end
+
+    def **(other)
+        @value ** other
+    end
+
+    def /(other)
+        @value / other
+    end
+
+    def //(other)
+        @value // other
+    end
+
+    def %(other)
+        @value % other
+    end
+
+    def ==(other)
+        @value == other
+    end
+
+    def !=(other)
+        @value != other
+    end
+
+    def <(other)
+        @value < other
+    end
+
+    def >(other)
+        @value > other
+    end
+
+    def <=(other)
+        @value <= other
+    end
+
+    def >=(other)
+        @value >= other
+    end
+
+    def <<(other)
+        @value << other
+    end
+
+    def >>(other)
+        @value >> other
+    end
+end
+
+num = Number.new(5)
+echo num + 3
+echo num - 3
+echo num * 4
+echo num ** 2
+echo num / 2
+echo num // 2
+echo num % 3
+echo num == 5
+echo num != 3
+echo num < 10
+echo num > 2
+echo num <= 5
+echo num >= 6
+echo num << 2
+echo num >> 1
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
+    end
+
+    it "raises when super is used outside a method in the native backend" do
+        expect_raises(Dragonstone::InterpreterError) do
+            Dragonstone.run("super(1)\n", backend: Dragonstone::BackendMode::Native)
+        end
     end
 
     it "supports with blocks as implicit receivers" do

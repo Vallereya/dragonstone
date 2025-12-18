@@ -1,0 +1,20 @@
+#[
+    Struct Example
+]#
+
+struct Point
+    property x: int
+    property y: int
+
+    def initialize(@x: int, @y: int)
+    end
+end
+
+point = Point.new(10, 20)
+
+with point
+    echo x
+    echo y
+end
+
+echo "x: #{point.x}, y: #{point.y}"

@@ -3,8 +3,9 @@
     
     This module provides TOML parsing and serialization.
 ]#
-use "file_utilities"
-use "path_utilities"
+# NOTE: Avoid importing `file_utilities` / `path_utilities` here because they
+# define global `File`/`Path` bindings and can cause name collisions when users
+# also import them; `parse_file` uses `ffi.call_crystal("file_read", ...)` directly.
 
 use "modules/shared/toml/proc/exception"
 use "modules/shared/toml/proc/token"
@@ -20,7 +21,9 @@ module TOML
     end
 
     def parse_file(path)
-        content = File.read(path)
+        # Use the underlying file utilities FFI directly; this keeps `parse_file`
+        # working even when `File.read` isn't available in the current backend context.
+        content = ffi.call_crystal("file_read", [path])
         Parser.new(content).parse
     end
 end

@@ -1,0 +1,29 @@
+use "toml"
+
+def main
+    echo "---- Raw Input ----"
+    input = "title = \"Example\"\n\n[owner]\nname = \"Kay\"\nage  = 30\n"
+
+    config = TOML.parse(input)
+
+    title = config["title"].as_s
+    echo "title: #{title}"
+
+    echo "\n[owner]"
+    owner = config["owner"].as_h
+    owner_name = owner["name"].as_s
+    owner_age = owner["age"].as_i
+    echo "name: #{owner_name}"
+    echo "age:  #{owner_age}"
+
+    echo "\n---- File Input ----"
+    toml_path = "./examples/test.toml"
+    test_config = TOML.parse_file(toml_path)
+
+    echo "[TEST]"
+    test_table = test_config["TEST"].as_h
+    test_name = test_table["name"].as_s
+    echo "name: #{test_name}"
+end
+
+main

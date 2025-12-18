@@ -55,5 +55,11 @@ describe Dragonstone::IR do
             Dragonstone::IR::Lowering::Supports.vm?(ast).should be_true
             Dragonstone::IR::Lowering::Supports.interpreter?(ast).should be_true
         end
+
+        it "rejects assignment to argv keyword" do
+            expect_raises(Dragonstone::ParserError) do
+                parse_program("argv = 1")
+            end
+        end
     end
 end

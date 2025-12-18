@@ -96,5 +96,9 @@ module Dragonstone
         CHECK_TYPE      = 69    # [CHECK_TYPE, type_const]                                  -> ensure top-of-stack matches type
         RETRY           = 95    # RETRY                                                     -> restart current begin/rescue block
         DEFINE_SINGLETON_METHOD = 96 # DEFINE_SINGLETON_METHOD                               -> pop function and receiver, attach method to receiver
+        LOAD_ARGV        = 97   # LOAD_ARGV                                                 -> push argv array
+        INVOKE_SUPER     = 98   # [INVOKE_SUPER, argc]                                      -> invoke superclass method of current callable
+        INVOKE_SUPER_BLOCK = 99 # [INVOKE_SUPER_BLOCK, argc]                                -> invoke superclass method with explicit block
+        POW             = 100  # POW                                                       -> pop rhs, pop lhs, push lhs ** rhs
     end
 end

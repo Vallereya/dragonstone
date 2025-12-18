@@ -26,7 +26,68 @@
 Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
 
 > **WARNING:** Some compile targets are still a work in progress, as of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
+
 <br>
+
+<table align="center">
+    <tr align="center">
+        <td align="center">
+            <b>Information</b>
+        </td>
+        <td align="center">
+            <b>Description</b>
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            Implementation language
+        </td>
+        <td align="center">
+            Current Version v5: Crystal, C
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            Platform
+        </td>
+        <td align="center">
+            Supports: x86, x86_64, AArch64 
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            Operating System
+        </td>
+        <td align="center">
+            Supports: Windows, Linux, MacOS
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            File Extension
+        </td>
+        <td align="center">
+            .ds, .dragonstone  
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            Influenced by
+        </td>
+        <td align="center">
+            Ruby, Crystal, Python, Go, Nim  
+        </td>
+    </tr>
+    <tr align="center">
+        <td align="center">
+            Website
+        </td>
+        <td align="center">
+            <a href="https://dragonstone-lang.org/">dragonstone-lang.org</a>
+        </td>
+    </tr>
+</table>
+
 <br>
 
 ## ⚙️ Project Setup
@@ -149,9 +210,20 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 #### Some Examples:
 ###### Example of a String.
 ```crystal
+    # Using echo
     name = "Ringo"
 
     echo name
+
+    # OUTPUT: Ringo
+```
+
+```crystal
+    # Using e!
+    name = "Jules"
+    e! name         
+    
+    # OUTPUT: name # -> "Jules"
 ```
 
 ###### Example of a `def` Method and String Interpolation.
@@ -194,7 +266,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     🔥.道
 ```
 
-###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules.
+###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules and `.` for classes.
 ```crystal
     module Grades
         con Score = 100
@@ -208,6 +280,37 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
     echo Grades::Score
     echo Grades::Greeting.greet
+```
+
+###### Example of a `Abstract Class` and `Super`.
+```crystal
+    abstract class Animal
+        def make_sound(sound)
+            echo "#{sound}"
+        end
+    end
+
+    class Dog < Animal
+        def make_sound(sound)
+            super(sound)
+            super("The sound a dog makes!")
+        end
+    end
+
+    dog = Dog.new
+    echo dog.make_sound("Woof!")
+```
+
+###### Two examples of a ternary and being nested.
+```crystal
+    age = 20
+    status = age >= 18 ? "Adult" : "Minor"
+    echo "Status: #{status}"
+
+    # Nested ternary
+    score = 85
+    grade = score > 90 ? "A" : (score > 80 ? "B" : "C")
+    echo "Grade: #{grade}"
 ```
 
 ###### Example of a Map literal with key -> value pairs.
@@ -224,6 +327,20 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
     e! ages.keys
     e! ages.values
+```
+
+###### Example of `enum`.
+```crystal
+    enum Direction
+        North
+        East
+        South
+        West
+    end
+
+    Direction.each do |direction|
+        echo "Direction: #{direction}"
+    end
 ```
 
 #### Some More Examples but with Optional Types:
@@ -270,7 +387,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     person.greet
 ```
 
-###### Two examples of `struct`.
+###### Examples of `struct`.
 ```crystal
     struct Point
         property x: int
@@ -284,19 +401,25 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     echo "x: #{point.x}, y: #{point.y}"
 ```
 
-###### With this example showing `with`.
+###### Examples of Type Casting/Switching.
 ```crystal
-    struct Point
-        property x: int
-        property y: int
+    def process(input)
+        case input
+
+        when input: str
+            echo "It is a string: #{input}"
+        when input: int
+            echo "It is a number: #{input}"
+        when input: bool
+            echo "It is a boolean"
+        else
+            echo "Unknown type"
+        end
     end
 
-    point = Point.new(x: 1, y: 2)
-
-    with point
-        echo x
-        echo y
-    end
+    process("Hello")
+    process(42)
+    process(true)
 ```
 
 #### Example of using/importing other files with `use`.
@@ -347,28 +470,35 @@ echo square.call(6)
 ```
 
 #### Examples the interop (some done but still a work in progress).
-###### This calling convention will change when I expand the FFI.
 ```crystal
-    # Call puts from Ruby
-    ffi.call_ruby("puts", ["Hello from Ruby!"])
+    # Call puts from Ruby.
+    # This works too: ffi.call_ruby("puts", ["Hello from Ruby!"])
+    Invoke Ruby
+        with puts
 
-    # Call puts from Crystal
-    ffi.call_crystal("puts", ["Hello from Crystal!"])
+        as {
+            "Hello from Ruby!"
+        }
+    end
 
-    # Call printf from C
-    ffi.call_c("printf", ["Hello from C!"])
-```
+    # Call puts from Crystal.
+    # This works too: ffi.call_crystal("puts", ["Hello from Crystal!"])
+    Invoke Crystal
+        with puts
 
-###### Like I said, the ffi is still a work in progress but I have settled on what it will look like, the only reason it doesn't work yet is because I'm still deciding on whether I want it as something from the stdlib by `use "ffi"` or through extending the actual ffi to support it, doing that would require a rewrite in some places that already use the current ffi.
-```crystal
-    #! This does not currently work but just to give you an ideal of where its going.
+        as {
+            "Hello from Crystal!"
+        }
+    end
+
+    # Call printf from C.
+    # This works too: ffi.call_c("printf", ["Hello from C!"])
     Invoke C
         with printf
 
         as {
             "Hello from C!"
         }
-
     end
 ```
 
@@ -418,6 +548,41 @@ You can run these yourself from the `./tests/benchmark` directory.
     PyPy                = ~10-20 seconds    (using JIT)
     Node.js             = ~10-30 seconds    (using V8)
 ```
+
+## 📜 Project History
+> **Note from V on the history of Dragonstone** 
+
+The current Dragonstone implementation in this repository is v5. Development on v5 began in April 2025, but this repository only started receiving those updates and commits in October 2025.
+
+Dragonstone has gone through multiple full rewrites, not because earlier versions "*failed*", but because each one taught me what the project actually needed to become the language I had in my head.
+
+### v1: Python
+Dragonstone started roughly in the Summer of 2023 as a "for fun" experiment written in Python. Building a programming language was something I’d wanted to do for a long time, and v1 was my way of trying it out, out of curiosity.
+
+After about three months, it stopped feeling like just a toy. I realized the idea could become something genuinely serious. Which also meant I needed a better foundation than what I’d built in the initial prototype.
+
+### v2: A Ruby Rewrite
+So I restarted as v2, rebuilding in Ruby. I worked on this version for roughly 6 months, but performance quickly became an issue. It wasn’t just "slow", it was unusably slow. At its worst, even something as simple as running `Hello World!` could take around 15 seconds.
+
+That was the moment I accepted that if Dragonstone was going to actually be something, the strategy needed to change.
+
+### v3: A Ruby & C Hybrid
+Next came v3, a much larger build that lasted about 9 months. This version was with Ruby and C, trying to put the critical pieces into native code.
+
+It helped, but it also introduced a new problem. Bridging Ruby <-> C constantly was annoying, and the parts that had to stay on the Ruby side still felt slow. Over time, the complexity and glue started to outweigh the benefits, so I eventually scrapped v3 as well.
+
+### v4: Another Hybrid with Ruby, Crystal, & C
+After that, I built v4, using Ruby, Crystal, and C, and spent around another 9 months on it. The goal was to get the best of both worlds by keeping the high-level flexibility while improving performance and structure using Crystal and native modules.
+
+In practice, though, I ran into many of the same issues as v3. Just too much cross-language complexity and too many moving parts. Eventually I burned out on the architecture, even though the idea of making Dragonstone still wouldn’t let go.
+
+### The Gap
+From January 2025 to April 2025, I stepped back, researched, and experimented. During that time, I was also thinking seriously about my larger EDEN project which I wanted a top-to-bottom system where high-performance compiled modules would need to cooperate smoothly with high-level scripted logic.
+
+That requirement made some questions. What implementation path gives me long-term performance without constant friction/issues? and would allow me to use an FFI to include others? I explored several systems language options, with C, C++, GO, and Rust as the main contenders.
+
+### v5: Crystal & C (April 2025 to Present)
+By that point, I had a lot of prior work and ideas tied up in Ruby, Crystal, and C. But, Ruby kept being the recurring issue. So for v5, I made a cut, I just dropped Ruby and shrank C. Most of the core ideas from v1-v4 were carried over (either directly ported or reimplemented), with Crystal being the largest part, but v5 is where the project finally feels like it’s going in the right direction.
 
 ## 📝 Contact
     Project:

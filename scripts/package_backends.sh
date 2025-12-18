@@ -17,7 +17,7 @@ EOF
 }
 
 backend="all"
-output_root="release/backends"
+output_root="dev/release/backends"
 create_zip=true
 
 while [[ $# -gt 0 ]]; do
@@ -65,14 +65,14 @@ esac
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output_root="$(cd "$repo_root" && mkdir -p "$output_root" && cd "$output_root" && pwd)"
-mkdir -p "$repo_root/release"
-archive_root="$(cd "$repo_root/release" && pwd)"
+mkdir -p "$repo_root/dev/release"
+archive_root="$(cd "$repo_root/dev/release" && pwd)"
 
 COMMON_PATHS=(
     "LICENSE"
     "README.md"
     "bin/dragonstone"
-    "bin/dragonstone.exe"
+    "bin/build/dragonstone.exe"
     "bin/dragonstone.ps1"
     "bin/dragonstone.bat"
 )

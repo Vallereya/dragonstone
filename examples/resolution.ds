@@ -9,6 +9,10 @@
 module MyModule
     con Test = 100
 
+    def Alpha
+        "Hello from MyModule"
+    end
+
     class MyClass
         def greet
             "Hello from MyClass"
@@ -18,6 +22,8 @@ end
 
 # Access the constant via the module scope.
 echo MyModule::Test
+
+echo MyModule.Alpha
 
 # Access the class method via the module and class scope.
 echo MyModule::MyClass.greet

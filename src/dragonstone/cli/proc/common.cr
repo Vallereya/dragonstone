@@ -11,7 +11,7 @@ module Dragonstone
         end
 
         def print_version(io : IO) : Int32
-            io.puts "Dragonstone #{Dragonstone::VERSION}"
+            io.puts "Dragonstone v#{Dragonstone::VERSION}"
             return 0
         end
 

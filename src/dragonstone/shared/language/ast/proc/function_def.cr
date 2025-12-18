@@ -35,13 +35,7 @@ module Dragonstone
             def to_source : String
                 header = "def #{name}"
                 unless typed_parameters.empty?
-                    params = typed_parameters.map do |param|
-                        if type = param.type
-                            "#{param.name} : #{type.to_source}"
-                        else
-                            param.name
-                        end
-                    end.join(", ")
+                    params = typed_parameters.map(&.to_source).join(", ")
                     header += "(#{params})"
                 end
                 if type = return_type

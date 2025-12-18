@@ -1,0 +1,16 @@
+#[
+    Constants Example
+    
+    Constants are immutable values defined with 'con' 
+    or by using Uppercase names (depending on your specific semantics).
+]#
+
+con MAX_RETRIES = 5
+con VERSION = "1.0.0"
+
+echo "Running version: #{VERSION}"
+
+# This currently does not raise a syntax or runtime error,
+# but it is discouraged to reassign constants as it returns
+# nil as its not allowed.
+# echo MAX_RETRIES = 10

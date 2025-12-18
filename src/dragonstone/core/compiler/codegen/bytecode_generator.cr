@@ -46,6 +46,7 @@ module Dragonstone
         @stack_depth : Int32
         @max_stack : Int32
         @container_depth : Int32
+        @parameter_name_stack : Array(Array(String))
 
         def initialize(name_pool : NamePool? = nil)
             @name_pool = name_pool || NamePool.new
@@ -54,6 +55,7 @@ module Dragonstone
             @stack_depth = 0
             @max_stack = 0
             @container_depth = 0
+            @parameter_name_stack = [] of Array(String)
         end
 
         def compile(ast : AST::Program) : CompiledCode
@@ -198,6 +200,9 @@ module Dragonstone
             when AST::Variable
                 emit_load_name(node.name)
 
+            when AST::ArgvExpression
+                emit(OPC::LOAD_ARGV)
+
             when AST::Assignment
                 compile_assignment(node)
             when AST::InstanceVariable
@@ -216,6 +221,10 @@ module Dragonstone
                 compile_if(node)
             when AST::UnlessStatement
                 compile_unless(node)
+            when AST::ConditionalExpression
+                compile_conditional_expression(node)
+            when AST::SuperCall
+                compile_super_call(node)
 
             when AST::WhileStatement
                 compile_while(node)
@@ -277,6 +286,41 @@ module Dragonstone
             end
         end
 
+        private def compile_conditional_expression(node : AST::ConditionalExpression)
+            compile_expression(node.condition)
+            jump_false = emit(OPC::JMPF, 0)
+
+            compile_expression(node.then_branch)
+            after_then = emit(OPC::JMP, 0)
+
+            patch_jump(jump_false, current_ip)
+            compile_expression(node.else_branch)
+
+            patch_jump(after_then, current_ip)
+        end
+
+        private def compile_super_call(node : AST::SuperCall)
+            arg_info = extract_call_arguments(node.arguments)
+            args = arg_info[:args]
+            block_node = arg_info[:block]
+
+            if !node.explicit_arguments?
+                args = [] of AST::Node
+                if params = @parameter_name_stack.last?
+                    params.each { |name| args << AST::Variable.new(name) }
+                end
+            end
+
+            args.each { |arg| compile_expression(arg) }
+
+            if block_node
+                compile_block_literal(block_node)
+                emit(OPC::INVOKE_SUPER_BLOCK, args.size)
+            else
+                emit(OPC::INVOKE_SUPER, args.size)
+            end
+        end
+
         private def compile_assignment(node : AST::Assignment)
             if operator = node.operator
                 emit_load_name(node.name)
@@ -317,6 +361,8 @@ module Dragonstone
             :/   => OPC::DIV,
             :"//" => OPC::FLOOR_DIV,
             :%   => OPC::MOD,
+            :"**" => OPC::POW,
+            :"&**" => OPC::POW,
             :&   => OPC::BIT_AND,
             :|   => OPC::BIT_OR,
             :^   => OPC::BIT_XOR,
@@ -595,10 +641,15 @@ module Dragonstone
             @stack_depth = 0
         end
 
-        def compile_function_body(statements : Array(AST::Node), preserve_last : Bool = false) : CompiledCode
-            compile_statements(statements, preserve_last)
-            use_default_nil = !preserve_last || @stack_depth == 0
-            finalize_function_chunk(use_default_nil)
+        def compile_function_body(statements : Array(AST::Node), preserve_last : Bool = false, parameter_names : Array(String) = [] of String) : CompiledCode
+            @parameter_name_stack << parameter_names
+            begin
+                compile_statements(statements, preserve_last)
+                use_default_nil = !preserve_last || @stack_depth == 0
+                finalize_function_chunk(use_default_nil)
+            ensure
+                @parameter_name_stack.pop
+            end
         end
 
         private def finalize_function_chunk(use_default_nil : Bool = true) : CompiledCode
@@ -773,7 +824,7 @@ module Dragonstone
             end
 
             fn_compiler = self.class.new(@name_pool)
-            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             fn_const_idx = const_index(fn_chunk)
             gc_flags = ::Dragonstone::Runtime::GC.flags_from_annotations(node.annotations)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract, gc_flags))
@@ -792,7 +843,7 @@ module Dragonstone
 
             name_index("self")
             fn_compiler = self.class.new(@name_pool)
-            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            fn_chunk = fn_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             fn_const_idx = const_index(fn_chunk)
             gc_flags = ::Dragonstone::Runtime::GC.flags_from_annotations(node.annotations)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type, node.abstract, gc_flags))
@@ -804,7 +855,7 @@ module Dragonstone
 
         private def compile_function_literal(node : AST::FunctionLiteral)
             fn_compiler = self.class.new(@name_pool)
-            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             chunk_idx = const_index(chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
             name_idx = name_index("<lambda>")
@@ -813,7 +864,7 @@ module Dragonstone
 
         private def compile_para_literal(node : AST::ParaLiteral)
             fn_compiler = self.class.new(@name_pool)
-            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true)
+            chunk = fn_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             chunk_idx = const_index(chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
             name_idx = name_index("<lambda>")
@@ -822,7 +873,7 @@ module Dragonstone
 
         private def compile_block_literal(node : AST::BlockLiteral)
             block_compiler = self.class.new(@name_pool)
-            chunk = block_compiler.compile_function_body(node.body, preserve_last: true)
+            chunk = block_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             chunk_idx = const_index(chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, nil))
             emit(OPC::MAKE_BLOCK, signature_idx, chunk_idx)
@@ -1102,7 +1153,7 @@ module Dragonstone
         private def adjust_stack(opcode : Int32, operands : Array(Int32))
             case opcode
 
-            when OPC::CONST, OPC::LOAD
+            when OPC::CONST, OPC::LOAD, OPC::LOAD_ARGV
                 stack_push
 
             when OPC::STORE

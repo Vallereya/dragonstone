@@ -48,6 +48,7 @@ module Dragonstone
         KEYWORDS = %w[
             echo
             puts 
+            argv
             if 
             else 
             elsif 
@@ -93,6 +94,7 @@ module Dragonstone
             extend
             with
             yield
+            super
         ]
 
         getter source_name : String
@@ -568,6 +570,7 @@ module Dragonstone
                     when "nil" then :NIL
                     when "elseif" then :ELSIF
                     when "echo", "puts" then :ECHO
+                    when "argv" then :ARGV
                     when "if" then :IF
                     when "else" then :ELSE
                     when "elsif" then :ELSIF
@@ -609,6 +612,7 @@ module Dragonstone
                     when "extend" then :EXTEND
                     when "with" then :WITH
                     when "yield" then :YIELD
+                    when "super" then :SUPER
                     else
                         :IDENTIFIER
                     end

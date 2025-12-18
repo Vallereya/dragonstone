@@ -22,12 +22,14 @@ require "./repl/session"
 module Dragonstone
     class Interpreter
         getter output : String
+        getter argv : Array(String)
+        getter argv_value : Array(RuntimeValue)
         @type_scopes : Array(TypeScope)
         @typing_context : Typing::Context?
         @descriptor_cache : Typing::DescriptorCache
         @module_graph : ModuleGraph?
 
-        def initialize(log_to_stdout : Bool = false, typing_enabled : Bool = false)
+        def initialize(argv : Array(String) = [] of String, log_to_stdout : Bool = false, typing_enabled : Bool = false)
             @global_scope = Scope.new
             @scopes = [@global_scope]
             @type_scopes = [new_type_scope]
@@ -36,6 +38,8 @@ module Dragonstone
             @typing_context = nil
             @output = String.new
             @log_to_stdout = log_to_stdout
+            @argv = argv.dup
+            @argv_value = @argv.map { |arg| arg.as(RuntimeValue) }
             @container_stack = [] of DragonModule
             @loop_depth = 0
             @rescue_depth = 0
@@ -44,6 +48,7 @@ module Dragonstone
             @type_aliases = {} of String => AST::TypeExpression
             @alias_descriptor_cache = {} of String => Typing::Descriptor
             @block_stack = [] of Function?
+            @method_call_stack = [] of MethodCallFrame
             @singleton_classes = {} of UInt64 => SingletonClass
             @module_graph = nil
             set_variable("ffi", FFIModule.new)

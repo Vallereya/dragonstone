@@ -1,6 +1,7 @@
 require "set"
 require "../language/lexer/lexer"
 require "../language/parser/parser"
+require "../language/transforms/default_arguments"
 require "./program"
 
 module Dragonstone
@@ -15,7 +16,7 @@ module Dragonstone
                     extend self
                     @@last_failure : String?
 
-                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :&, :|, :^, :<<, :>>, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
+                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :"**", :"&**", :&, :|, :^, :<<, :>>, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
                     SUPPORTED_RANGE_OPERATORS = Set{:"..", :"..."}
                     SUPPORTED_UNARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :!, :~}
 
@@ -40,6 +41,8 @@ module Dragonstone
                             true
                         when AST::Variable
                             true
+                        when AST::ArgvExpression
+                            true
                         when AST::Assignment
                             node_supported?(node.value)
                         when AST::AliasDefinition
@@ -51,6 +54,12 @@ module Dragonstone
                         when AST::UnaryOp
                             SUPPORTED_UNARY_OPERATORS.includes?(node.operator) &&
                                 node_supported?(node.operand)
+                        when AST::ConditionalExpression
+                            node_supported?(node.condition) &&
+                                node_supported?(node.then_branch) &&
+                                node_supported?(node.else_branch)
+                        when AST::SuperCall
+                            nodes_supported?(node.arguments)
                         when AST::MethodCall
                             receiver_supported = node.receiver.nil? || node_supported?(node.receiver.not_nil!)
                             receiver_supported && nodes_supported?(node.arguments)
@@ -199,7 +208,7 @@ module Dragonstone
             end
 
             def lower(program : AST::Program, analysis : Language::Sema::AnalysisResult) : Program
-                Program.new(program, analysis)
+                Program.new(Language::Transforms::DefaultArguments.apply(program), analysis)
             end
         end
     end

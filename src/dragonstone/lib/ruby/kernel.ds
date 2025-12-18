@@ -1,0 +1,15 @@
+module Dragonstone
+    module Lib
+        module Ruby
+            module Kernel
+                
+                # Wraps the Ruby puts function.
+                def puts(args)
+                    ffi.call_ruby("puts", [args])
+                end
+            end
+        end
+    end
+end
+
+Dragonstone::Lib::Ruby::Kernel.puts("Hello World!")

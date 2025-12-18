@@ -67,6 +67,28 @@ describe Dragonstone::VM do
         output.to_s.should eq("\n")
     end
 
+    it "exposes argv keyword" do
+        source = "echo argv\n"
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, argv: ["one", "two"], stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("[one, two]\n")
+    end
+
+    it "supports Array#empty? in the core backend" do
+        source = "echo argv.empty?\n"
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, argv: ["one"], stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("false\n")
+    end
+
     it "rejects instantiation when abstract methods are not implemented" do
         source = <<-'DS'
         abstract class Animal

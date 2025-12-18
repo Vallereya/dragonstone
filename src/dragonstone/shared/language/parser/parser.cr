@@ -75,8 +75,13 @@ module Dragonstone
             :MINUS,
             :MULTIPLY,
             :DIVIDE,
+            :FLOOR_DIVIDE,
             :MODULO,
             :POWER,
+            :WRAP_PLUS,
+            :WRAP_MINUS,
+            :WRAP_MULTIPLY,
+            :WRAP_POWER,
             :SHIFT_LEFT,
             :SHIFT_RIGHT,
             :BIT_AND,
@@ -233,7 +238,11 @@ module Dragonstone
             when :ANNOTATION_START
                 parse_annotated_statement
             when :IDENTIFIER
-                parse_expression_statement
+                if invoke_statement_start?
+                    parse_invoke_statement
+                else
+                    parse_expression_statement
+                end
             when :INSTANCE_VAR
                 next_token = peek_token
                 if next_token && next_token.type == :COLON
@@ -241,6 +250,8 @@ module Dragonstone
                 else
                     parse_expression_statement
                 end
+            when :ARGV
+                parse_expression_statement
             when :ECHO
                 parse_keyword_method_call
             when :DEBUG_PRINT
@@ -253,6 +264,8 @@ module Dragonstone
                 parse_while_statement
             when :WITH
                 parse_with_expression
+            when :SUPER
+                parse_expression_statement
             when :DEF
                 parse_function_def
             when :MODULE
@@ -522,6 +535,17 @@ module Dragonstone
             end
 
             parameters = parse_parameter_list
+            seen_default = false
+            parameters.each do |param|
+                if param.default_value
+                    seen_default = true
+                elsif seen_default
+                    error(
+                        "Default parameters must come after all required parameters",
+                        name_token
+                    )
+                end
+            end
             return_type = parse_optional_return_type
             body = parse_block([:END, :RESCUE])
             rescue_clauses = [] of AST::RescueClause
@@ -646,11 +670,24 @@ module Dragonstone
                 advance
                 param_annotation = parse_type_expression
             end
+
+            default_value = nil
+            if current_token.type == :ASSIGN
+                advance
+                default_value = parse_expression
+                unless default_value.is_a?(AST::Literal)
+                    error(
+                        "Default parameter values must be literals for now",
+                        name_token,
+                        hint: "Use a literal like \"text\", 123, 3.14, true/false, or nil."
+                    )
+                end
+            end
             name = name_token.value.as(String)
             if instance_var
-                AST::TypedParameter.new(name, param_annotation, name)
+                AST::TypedParameter.new(name, param_annotation, name, default_value)
             else
-                AST::TypedParameter.new(name, param_annotation)
+                AST::TypedParameter.new(name, param_annotation, nil, default_value)
             end
         end
 
@@ -965,17 +1002,25 @@ module Dragonstone
                     end
                     left = AST::MethodCall.new(name, arguments, left, location: method_token.location)
                 when :DO
-                    unless left.is_a?(AST::MethodCall)
+                    unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         error("Unexpected 'do' without preceding method call", current_token)
                     end
                     block_literal = parse_do_block_literal
-                    left.as(AST::MethodCall).arguments << block_literal
+                    if left.is_a?(AST::MethodCall)
+                        left.as(AST::MethodCall).arguments << block_literal
+                    else
+                        left.as(AST::SuperCall).arguments << block_literal
+                    end
                 when :LBRACE
-                    unless left.is_a?(AST::MethodCall)
+                    unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         break
                     end
                     block_literal = parse_brace_block_literal
-                    left.as(AST::MethodCall).arguments << block_literal
+                    if left.is_a?(AST::MethodCall)
+                        left.as(AST::MethodCall).arguments << block_literal
+                    else
+                        left.as(AST::SuperCall).arguments << block_literal
+                    end
                 else
                     break
                 end
@@ -1013,8 +1058,13 @@ module Dragonstone
             when :SYMBOL
                 advance
                 AST::Literal.new(token.value.as(SymbolValue), location: token.location)
+            when :ARGV
+                advance
+                AST::ArgvExpression.new(location: token.location)
             when :YIELD
                 parse_yield_expression
+            when :SUPER
+                parse_super_call
             when :IDENTIFIER
                 parse_identifier_expression
             when :INSTANCE_VAR
@@ -1333,6 +1383,26 @@ module Dragonstone
                 end
             end
             AST::YieldExpression.new(arguments, location: yield_token.location)
+        end
+
+        private def parse_super_call : AST::Node
+            super_token = expect(:SUPER)
+            explicit_arguments = false
+
+            arguments = [] of AST::Node
+            if current_token.type == :LPAREN
+                explicit_arguments = true
+                arguments = parse_argument_list
+            elsif !argument_terminator?(current_token)
+                explicit_arguments = true
+                arguments << parse_expression
+                while current_token.type == :COMMA
+                    advance
+                    arguments << parse_expression
+                end
+            end
+
+            AST::SuperCall.new(arguments, explicit_arguments: explicit_arguments, location: super_token.location)
         end
 
         private def parse_para_literal : AST::Node
@@ -1718,6 +1788,122 @@ module Dragonstone
             end
             expect(:RPAREN)
             arguments
+        end
+
+        # Parse "Invoke" statements for native interop.
+        private def invoke_statement_start? : Bool
+            # Check for "Invoke" identifier
+            return false unless current_token.type == :IDENTIFIER && current_token.value == "Invoke"
+            
+            # Peek next token: <Language> (must be Identifier)
+            lang_token = peek_token(1)
+            return false unless lang_token && lang_token.type == :IDENTIFIER
+            
+            # Peek second token: with (must be :WITH keyword)
+            with_token = peek_token(2)
+            return false unless with_token && with_token.type == :WITH
+            
+            true
+        end
+
+        # Parse "Invoke" statement and return corresponding AST node.
+        private def parse_invoke_statement : AST::Node
+
+            # Consumes "Invoke"
+            invoke_token = expect(:IDENTIFIER)
+            
+            # Parse Language (Ruby, Crystal, C, etc.)
+            language_token = expect(:IDENTIFIER)
+            language_name = language_token.value.as(String)
+            
+            # Parse 'with' <Method>
+            expect(:WITH)
+            
+            # Method name can be an Identifier or a keyword like 'puts' (:ECHO).
+            method_name = if current_token.type == :IDENTIFIER
+                expect(:IDENTIFIER).value.as(String)
+            elsif current_token.type == :ECHO
+                # Handle a keyword like 'puts' which maps to :ECHO but value is "puts".
+                token = current_token
+                advance
+                token.value.to_s
+            else
+                # Allow string literals "method_name"
+                if current_token.type == :STRING
+                    expect(:STRING).value.as(String)
+                else
+                    error("Expected method name identifier or string after 'with'", current_token)
+                end
+            end
+            
+            # Parse 'as' { <Args> }
+            args = [] of AST::Node
+
+            if current_token.type == :AS
+                expect(:AS)
+                expect(:LBRACE)
+                
+                unless current_token.type == :RBRACE
+                    args << parse_expression
+                    while current_token.type == :COMMA
+                        advance
+                        args << parse_expression
+                    end
+                end
+                
+                expect(:RBRACE)
+            end
+            
+            expect(:END)
+            
+            # Option 1: Simplified AST construction
+            # Prepare Arguments 
+            #! WRAPPER NODES NEEDED HERE
+            # 'method_name' (String) and 'args' (Array of Nodes), 
+            # wrap them so they can be arguments in the generated method call.
+            method_arg = AST::Literal.new(method_name, location: invoke_token.location)
+            args_array = AST::ArrayLiteral.new(args, location: invoke_token.location)
+
+            # The 'ffi' variable (The builtin native object).
+            ffi_receiver = AST::Variable.new(
+                name: "ffi", 
+                location: invoke_token.location
+            )
+
+            # Construct method name (e.g. "Ruby" -> "call_ruby").
+            native_method_name = "call_#{language_name.downcase}"
+
+            # Create the MethodCall node.
+            AST::MethodCall.new(
+                name: native_method_name,
+                arguments: [method_arg, args_array] of AST::Node, 
+                receiver: ffi_receiver,
+                location: invoke_token.location
+            )
+
+            # Option 2: More explicit AST construction
+            # Equivalent to: FFI::Invoke.<Language>.call("Method", [Args])
+            # ffi_base = AST::ConstantPath.new(
+            #     names: ["FFI", "Invoke"], 
+            #     location: invoke_token.location
+            # )
+            
+            # lang_factory_call = AST::MethodCall.new(
+            #     name: language_name,
+            #     arguments: [] of AST::Node,
+            #     receiver: ffi_base,
+            #     location: language_token.location
+            # )
+            
+            # method_arg = AST::Literal.new(method_name, location: language_token.location)
+            # args_array = AST::ArrayLiteral.new(args, location: language_token.location)
+            
+            # AST::MethodCall.new(
+            #     name: "call",
+            #     arguments: [method_arg, args_array] of AST::Node,
+            #     receiver: lang_factory_call,
+            #     location: invoke_token.location
+            # )
         end
     end
 end

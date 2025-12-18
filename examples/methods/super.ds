@@ -1,0 +1,38 @@
+#[
+    Super Class Example
+]#
+
+# Example One
+class Person
+    def greet(msg)
+        echo "Hello, #{msg}"
+    end
+end
+
+class Employee < Person
+    def greet(msg)
+        super(msg)
+        super("another message")
+    end
+end
+
+example = Employee.new
+example.greet("everyone")
+example.greet(1)
+
+# Example Two
+abstract class Animal
+    def make_sound(sound)
+        echo "#{sound}"
+    end
+end
+
+class Dog < Animal
+    def make_sound(sound)
+        super(sound)
+        super("The sound a dog makes!")
+    end
+end
+
+dog = Dog.new
+echo dog.make_sound("Woof!")

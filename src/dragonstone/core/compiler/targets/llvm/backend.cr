@@ -70,7 +70,7 @@ module Dragonstone
           end
 
           class IRGenerator
-            alias ValueRef = NamedTuple(type: String, ref: String, constant: Bool, kind: Symbol?)
+            alias ValueRef = NamedTuple(type: String, ref: String, constant: Bool)
             alias FunctionSignature = NamedTuple(return_type: String, param_types: Array(String), param_typed: Array(Bool))
             alias CallArg = NamedTuple(type: String, ref: String)
             alias BlockCaptureInfo = NamedTuple(name: String, value_type: String, slot_ptr: String)
@@ -89,6 +89,7 @@ module Dragonstone
               block_literal: String,
               block_invoke: String,
               method_invoke: String,
+              super_invoke: String,
               block_env_alloc: String,
               tuple_literal: String,
               named_tuple_literal: String,
@@ -107,15 +108,27 @@ module Dragonstone
               unbox_struct: String,
               array_push: String,
               generic_add: String,
+              generic_sub: String,
+              generic_mul: String,
+              generic_div: String,
+              generic_mod: String,
               generic_negate: String,
+              generic_shl: String,
+              generic_shr: String,
+              generic_pow: String,
+              generic_floor_div: String,
+              generic_cmp: String,
               to_string: String,
               type_of: String,
               bag_constructor: String,
               ivar_get: String,
               ivar_set: String,
+              argv_get: String,
+              argv_set: String,
               root_self: String,
               singleton_define: String,
               define_class: String,
+              set_superclass: String,
               define_module: String,
               define_method: String,
               define_enum_member: String,
@@ -194,6 +207,7 @@ module Dragonstone
                 block_literal: "dragonstone_runtime_block_literal",
                 block_invoke: "dragonstone_runtime_block_invoke",
                 method_invoke: "dragonstone_runtime_method_invoke",
+                super_invoke: "dragonstone_runtime_super_invoke",
                 block_env_alloc: "dragonstone_runtime_block_env_allocate",
                 tuple_literal: "dragonstone_runtime_tuple_literal",
                 named_tuple_literal: "dragonstone_runtime_named_tuple_literal",
@@ -212,15 +226,27 @@ module Dragonstone
                 unbox_struct: "dragonstone_runtime_unbox_struct",
                 array_push: "dragonstone_runtime_array_push",
                 generic_add: "dragonstone_runtime_add",
+                generic_sub: "dragonstone_runtime_sub",
+                generic_mul: "dragonstone_runtime_mul",
+                generic_div: "dragonstone_runtime_div",
+                generic_mod: "dragonstone_runtime_mod",
                 generic_negate: "dragonstone_runtime_negate",
+                generic_shl: "dragonstone_runtime_shl",
+                generic_shr: "dragonstone_runtime_shr",
+                generic_pow: "dragonstone_runtime_pow",
+                generic_floor_div: "dragonstone_runtime_floor_div",
+                generic_cmp: "dragonstone_runtime_cmp",
                 to_string: "dragonstone_runtime_to_string",
                 bag_constructor: "dragonstone_runtime_bag_constructor",
                 type_of: "dragonstone_runtime_typeof",
                 ivar_get: "dragonstone_runtime_ivar_get",
                 ivar_set: "dragonstone_runtime_ivar_set",
+                argv_get: "dragonstone_runtime_argv",
+                argv_set: "dragonstone_runtime_set_argv",
                 root_self: "dragonstone_runtime_root_self",
                 singleton_define: "dragonstone_runtime_define_singleton_method",
                 define_class: "dragonstone_runtime_define_class",
+                set_superclass: "dragonstone_runtime_set_superclass",
                 define_module: "dragonstone_runtime_define_module",
                 define_method: "dragonstone_runtime_define_method",
                 define_enum_member: "dragonstone_runtime_define_enum_member",
@@ -278,6 +304,8 @@ module Dragonstone
               getter alloca_buffer : String::Builder
 
               property block_slot : NamedTuple(ptr: String, type: String)?
+              property callable_name : String?
+              property parameter_names : Array(String)
 
               def initialize(@io : IO, @return_type : String)
                 @next_reg = 0
@@ -290,6 +318,8 @@ module Dragonstone
                 @retry_stack = [] of String
                 @alloca_buffer = String::Builder.new
                 @block_slot = nil
+                @callable_name = nil
+                @parameter_names = [] of String
               end
 
               def fresh(prefix = "t") : String
@@ -449,7 +479,7 @@ module Dragonstone
                 end
               when AST::DebugPrint
                 intern_string("%s")
-                intern_string("#{node.expression.to_source} # => ")
+                intern_string("#{node.expression.to_source} # -> ")
                 collect_strings_from_node(node.expression)
               when AST::Variable
                 intern_string(node.name) if constant_symbol?(node.name)
@@ -834,6 +864,8 @@ module Dragonstone
               io << "declare i64 @#{@runtime[:unbox_i64]}(i8*)\n"
               io << "declare i32 @#{@runtime[:unbox_bool]}(i8*)\n"
               io << "declare double @#{@runtime[:unbox_float]}(i8*)\n"
+              io << "declare void @#{@runtime[:argv_set]}(i64, i8**)\n"
+              io << "declare i8* @#{@runtime[:argv_get]}()\n"
               io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
               io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -841,6 +873,7 @@ module Dragonstone
               io << "declare i8* @#{@runtime[:block_literal]}(i8* (i8*, i64, i8**)*, i8*)\n"
               io << "declare i8* @#{@runtime[:block_invoke]}(i8*, i64, i8**)\n"
               io << "declare i8* @#{@runtime[:method_invoke]}(i8*, i8*, i64, i8**, i8*)\n"
+              io << "declare i8* @#{@runtime[:super_invoke]}(i8*, i8*, i8*, i64, i8**, i8*)\n"
               io << "declare i8** @#{@runtime[:block_env_alloc]}(i64)\n"
               io << "declare i8* @#{@runtime[:constant_lookup]}(i64, i8**)\n"
               io << "declare void @#{@runtime[:rescue_placeholder]}()\n\n"
@@ -864,11 +897,21 @@ module Dragonstone
               io << "declare i8* @#{@runtime[:unbox_struct]}(i8*)\n"
               io << "declare i8* @#{@runtime[:array_push]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:generic_add]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_sub]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_mul]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_div]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_mod]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:generic_negate]}(i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_shl]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_shr]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_pow]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_floor_div]}(i8*, i8*)\n"
+              io << "declare i8* @#{@runtime[:generic_cmp]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:bag_constructor]}(i8*)\n"
               io << "declare i8* @#{@runtime[:define_class]}(i8*)\n"
+              io << "declare void @#{@runtime[:set_superclass]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:define_module]}(i8*)\n"
-              io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*)\n"
+              io << "declare void @#{@runtime[:define_method]}(i8*, i8*, i8*, i32)\n"
               io << "declare void @#{@runtime[:define_enum_member]}(i8*, i8*, i64)\n"
               io << "declare void @#{@runtime[:push_handler]}(i8*)\n"
               io << "declare void @#{@runtime[:pop_handler]}()\n"
@@ -902,6 +945,8 @@ module Dragonstone
 
               body_io = String::Builder.new
               ctx = FunctionContext.new(body_io, return_type)
+              ctx.callable_name = func.name
+              ctx.parameter_names = func.typed_parameters.map(&.name)
 
               @namespace_stack = @function_namespaces[func].dup
               llvm_name = @function_names[func]
@@ -993,13 +1038,17 @@ module Dragonstone
                 stmt.is_a?(AST::FunctionDef) && stmt.receiver.nil?
               }
 
+              argc_reg = ctx.fresh("argc64")
+              ctx.io << "  %#{argc_reg} = zext i32 %argc to i64\n"
+              ctx.io << "  call void @#{@runtime[:argv_set]}(i64 %#{argc_reg}, i8** %argv)\n"
+
               terminated = generate_block(ctx, top_level)
 
               ctx.io << "  ret i32 0\n" unless terminated
 
               emit_postamble(ctx)
 
-              io << "define i32 @main() {\n"
+              io << "define i32 @main(i32 %argc, i8** %argv) {\n"
               io << "entry:\n"
               io << ctx.alloca_buffer.to_s
               io << body_io.to_s
@@ -1017,12 +1066,14 @@ module Dragonstone
 
             private def expression_statement?(stmt : AST::Node) : Bool
               case stmt
-              when AST::Literal,
-                   AST::Variable,
-                   AST::BinaryOp,
-                   AST::UnaryOp,
-                   AST::MethodCall,
-                   AST::ArrayLiteral,
+	              when AST::Literal,
+	                   AST::Variable,
+	                   AST::ArgvExpression,
+	                   AST::BinaryOp,
+	                   AST::UnaryOp,
+	                   AST::MethodCall,
+	                   AST::SuperCall,
+	                   AST::ArrayLiteral,
                    AST::BagConstructor,
                    AST::MapLiteral,
                    AST::TupleLiteral,
@@ -1093,6 +1144,9 @@ module Dragonstone
               case stmt
               when AST::MethodCall
                 generate_method_call(ctx, stmt)
+                false
+              when AST::SuperCall
+                generate_expression(ctx, stmt)
                 false
               when AST::DebugPrint
                 generate_debug_print(ctx, stmt)
@@ -1194,10 +1248,11 @@ module Dragonstone
                     ctx.io << "  %#{cls_reg} = load i8*, i8** @\"#{global_name}\"\n"
                     method_name_ptr = materialize_string_pointer(ctx, stmt.name)
                     llvm_name = @function_names[stmt]
+                    requires_block = @function_requires_block[llvm_name]? || false
                     wrapper, wrapper_sig = generate_method_wrapper(llvm_name)
                     func_ptr = ctx.fresh("func")
                     ctx.io << "  %#{func_ptr} = bitcast #{wrapper_sig} @\"#{wrapper}\" to i8*\n"
-                    ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{method_name_ptr}, i8* %#{func_ptr})\n"
+                    ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{method_name_ptr}, i8* %#{func_ptr}, i32 #{requires_block ? 1 : 0})\n"
                   end
                 end
                 false
@@ -1448,8 +1503,9 @@ module Dragonstone
                 wrapper, wrapper_sig = generate_method_wrapper(llvm_func)
                 name_ptr = materialize_string_pointer(ctx, method_name)
                 func_ptr = ctx.fresh("func")
+                requires_block = @function_requires_block[llvm_func]? || false
                 ctx.io << "  %#{func_ptr} = bitcast #{wrapper_sig} @\"#{wrapper}\" to i8*\n"
-                ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{name_ptr}, i8* %#{func_ptr})\n"
+                ctx.io << "  call void @#{@runtime[:define_method]}(i8* %#{cls_reg}, i8* #{name_ptr}, i8* %#{func_ptr}, i32 #{requires_block ? 1 : 0})\n"
               end
             end
 
@@ -1479,6 +1535,8 @@ module Dragonstone
                 generate_literal(ctx, node)
               when AST::Variable
                 generate_variable_reference(ctx, node.name)
+              when AST::ArgvExpression
+                runtime_call(ctx, "i8*", @runtime[:argv_get], [] of CallArg)
               when AST::BinaryOp
                 case node.operator
                 when :"&&", :"and"
@@ -1496,6 +1554,8 @@ module Dragonstone
                 else
                   generate_method_call(ctx, node) || raise "Method #{node.name} does not return a value"
                 end
+              when AST::SuperCall
+                generate_super_call(ctx, node)
               when AST::UnaryOp
                 generate_unary_expression(ctx, node)
               when AST::ArrayLiteral
@@ -1581,7 +1641,7 @@ module Dragonstone
 
             private def generate_debug_print(ctx : FunctionContext, node : AST::DebugPrint) : ValueRef
               value = generate_expression(ctx, node.expression)
-              prefix_str = "#{node.expression.to_source} # => "
+              prefix_str = "#{node.expression.to_source} # -> "
               format_ptr = materialize_string_pointer(ctx, "%s")
               prefix_ptr = materialize_string_pointer(ctx, prefix_str)
               ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{prefix_ptr})\n"
@@ -2428,12 +2488,13 @@ module Dragonstone
 
             private def expression_node?(node : AST::Node) : Bool
               case node
-              when AST::Literal,
-                   AST::Variable,
-                   AST::BinaryOp,
-                   AST::MethodCall,
-                   AST::UnaryOp,
-                   AST::ArrayLiteral,
+	              when AST::Literal,
+	                   AST::Variable,
+	                   AST::ArgvExpression,
+	                   AST::BinaryOp,
+	                   AST::MethodCall,
+	                   AST::UnaryOp,
+	                   AST::ArrayLiteral,
                    AST::BagConstructor,
                    AST::MapLiteral,
                    AST::BlockLiteral,
@@ -2985,6 +3046,32 @@ module Dragonstone
                   return
                 end
 
+                # Allow primitive locals to accept boxed values by unboxing them.
+                # This is necessary when a local starts as an integer/float and later participates in
+                # an operation that routes through the boxed runtime helpers (e.g. array element math).
+                if value[:type] == "i8*"
+                  case slot[:type]
+                  when "i32"
+                    unboxed = runtime_call(ctx, "i32", @runtime[:unbox_i32], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store i32 #{unboxed[:ref]}, i32* #{slot[:ptr]}\n"
+                    return
+                  when "i64"
+                    unboxed = runtime_call(ctx, "i64", @runtime[:unbox_i64], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store i64 #{unboxed[:ref]}, i64* #{slot[:ptr]}\n"
+                    return
+                  when "double"
+                    unboxed = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
+                    ctx.io << "  store double #{unboxed[:ref]}, double* #{slot[:ptr]}\n"
+                    return
+                  when "i1"
+                    raw = runtime_call(ctx, "i32", @runtime[:unbox_bool], [{type: "i8*", ref: value[:ref]}])
+                    reg = ctx.fresh("bool_i1")
+                    ctx.io << "  %#{reg} = icmp ne i32 #{raw[:ref]}, 0\n"
+                    ctx.io << "  store i1 %#{reg}, i1* #{slot[:ptr]}\n"
+                    return
+                  end
+                end
+
                 raise "Type mismatch assigning to #{name}: expected #{slot[:type]}, got #{value[:type]}"
               end
 
@@ -3014,10 +3101,21 @@ module Dragonstone
                 return emit_range_op(ctx, operator, lhs, rhs)
               end
 
-              if operator == :+ && lhs[:type] == "i8*" && rhs[:type] == "i8*"
+              if operator == :"**" || operator == :"&**"
+                lhs_boxed = box_value(ctx, lhs)
+                rhs_boxed = box_value(ctx, rhs)
+                return runtime_call(ctx, "i8*", @runtime[:generic_pow], [
+                  {type: "i8*", ref: lhs_boxed[:ref]},
+                  {type: "i8*", ref: rhs_boxed[:ref]},
+                ])
+              end
+
+              if operator == :+ && (lhs[:type] == "i8*" || rhs[:type] == "i8*")
+                lhs_boxed = box_value(ctx, lhs)
+                rhs_boxed = box_value(ctx, rhs)
                 return runtime_call(ctx, "i8*", @runtime[:generic_add], [
-                  {type: "i8*", ref: lhs[:ref]},
-                  {type: "i8*", ref: rhs[:ref]},
+                  {type: "i8*", ref: lhs_boxed[:ref]},
+                  {type: "i8*", ref: rhs_boxed[:ref]},
                 ])
               end
 
@@ -3031,27 +3129,85 @@ module Dragonstone
               end
 
               if operator == :<<
-                if lhs[:type] == "i8*"
+                if lhs[:type] == "i8*" || rhs[:type] == "i8*"
+                  lhs_boxed = box_value(ctx, lhs)
                   rhs_boxed = box_value(ctx, rhs)
-                  runtime_call(ctx, "i8*", @runtime[:array_push], [
-                    {type: "i8*", ref: lhs[:ref]},
+                  return runtime_call(ctx, "i8*", @runtime[:generic_shl], [
+                    {type: "i8*", ref: lhs_boxed[:ref]},
                     {type: "i8*", ref: rhs_boxed[:ref]},
                   ])
-                  return lhs
-                else
-                  target_bits = integer_operation_width(lhs, rhs)
-                  lhs_val = coerce_integer(ctx, lhs, target_bits)
-                  rhs_val = coerce_integer(ctx, rhs, target_bits)
-
-                  reg = ctx.fresh("shl")
-                  type = "i#{target_bits}"
-                  ctx.io << "  %#{reg} = shl #{type} #{lhs_val[:ref]}, #{rhs_val[:ref]}\n"
-                  return value_ref(type, "%#{reg}")
                 end
+
+                target_bits = integer_operation_width(lhs, rhs)
+                lhs_val = coerce_integer(ctx, lhs, target_bits)
+                rhs_val = coerce_integer(ctx, rhs, target_bits)
+
+                reg = ctx.fresh("shl")
+                type = "i#{target_bits}"
+                ctx.io << "  %#{reg} = shl #{type} #{lhs_val[:ref]}, #{rhs_val[:ref]}\n"
+                return value_ref(type, "%#{reg}")
+              end
+
+              if operator == :>>
+                if lhs[:type] == "i8*" || rhs[:type] == "i8*"
+                  lhs_boxed = box_value(ctx, lhs)
+                  rhs_boxed = box_value(ctx, rhs)
+                  return runtime_call(ctx, "i8*", @runtime[:generic_shr], [
+                    {type: "i8*", ref: lhs_boxed[:ref]},
+                    {type: "i8*", ref: rhs_boxed[:ref]},
+                  ])
+                end
+
+                target_bits = integer_operation_width(lhs, rhs)
+                lhs_val = coerce_integer(ctx, lhs, target_bits)
+                rhs_val = coerce_integer(ctx, rhs, target_bits)
+
+                reg = ctx.fresh("shr")
+                type = "i#{target_bits}"
+                ctx.io << "  %#{reg} = ashr #{type} #{lhs_val[:ref]}, #{rhs_val[:ref]}\n"
+                return value_ref(type, "%#{reg}")
               end
 
               case operator
               when :+, :-, :*, :/, :"&+", :"//", :"&-", :"<=>", :&, :|, :^, :>>, :%
+                if lhs[:type] == "i8*" || rhs[:type] == "i8*"
+                  runtime_func = case operator
+                                 when :+, :"&+" then @runtime[:generic_add]
+                                 when :-, :"&-" then @runtime[:generic_sub]
+                                 when :*, :"&*" then @runtime[:generic_mul]
+                                 when :/        then @runtime[:generic_div]
+                                 when :%        then @runtime[:generic_mod]
+                                 else                nil
+                                 end
+
+                  if runtime_func
+                    lhs_boxed = box_value(ctx, lhs)
+                    rhs_boxed = box_value(ctx, rhs)
+                    return runtime_call(ctx, "i8*", runtime_func, [
+                      {type: "i8*", ref: lhs_boxed[:ref]},
+                      {type: "i8*", ref: rhs_boxed[:ref]},
+                    ])
+                  end
+                end
+
+                if operator == :"//" && (lhs[:type] == "i8*" || rhs[:type] == "i8*")
+                  lhs_boxed = box_value(ctx, lhs)
+                  rhs_boxed = box_value(ctx, rhs)
+                  return runtime_call(ctx, "i8*", @runtime[:generic_floor_div], [
+                    {type: "i8*", ref: lhs_boxed[:ref]},
+                    {type: "i8*", ref: rhs_boxed[:ref]},
+                  ])
+                end
+
+                if operator == :"<=>" && (lhs[:type] == "i8*" || rhs[:type] == "i8*")
+                  lhs_boxed = box_value(ctx, lhs)
+                  rhs_boxed = box_value(ctx, rhs)
+                  return runtime_call(ctx, "i8*", @runtime[:generic_cmp], [
+                    {type: "i8*", ref: lhs_boxed[:ref]},
+                    {type: "i8*", ref: rhs_boxed[:ref]},
+                  ])
+                end
+
                 target_bits = integer_operation_width(lhs, rhs)
                 lhs = coerce_integer(ctx, lhs, target_bits)
                 rhs = coerce_integer(ctx, rhs, target_bits)
@@ -3107,7 +3263,7 @@ module Dragonstone
                   value_ref(type, "%#{reg}")
                 end
               when :"==", :"!=", :"<", :"<=", :">", :">="
-                if lhs[:type] == "i8*" && rhs[:type] == "i8*"
+                if lhs[:type] == "i8*" || rhs[:type] == "i8*"
                   runtime_func = case operator
                                  when :"==" then @runtime[:eq]
                                  when :"!=" then @runtime[:ne]
@@ -3118,9 +3274,11 @@ module Dragonstone
                                  else            raise "Unknown comparison operator"
                                  end
 
+                  lhs_boxed = box_value(ctx, lhs)
+                  rhs_boxed = box_value(ctx, rhs)
                   result = runtime_call(ctx, "i8*", runtime_func, [
-                    {type: "i8*", ref: lhs[:ref]},
-                    {type: "i8*", ref: rhs[:ref]},
+                    {type: "i8*", ref: lhs_boxed[:ref]},
+                    {type: "i8*", ref: rhs_boxed[:ref]},
                   ])
 
                   unbox_bool_i1(ctx, result)
@@ -3283,6 +3441,63 @@ module Dragonstone
 
                 emit_function_call(ctx, call, call_args, block_value)
               end
+            end
+
+            private def generate_super_call(ctx : FunctionContext, node : AST::SuperCall) : ValueRef
+              method_name = ctx.callable_name
+              raise "'super' used outside of a method" unless method_name && method_name != "<block>"
+
+              raise "'super' requires a class context" if @namespace_stack.empty?
+              owner_name = @namespace_stack.join("::").sub(/_\d+$/, "")
+              owner_val = if @globals.includes?(owner_name)
+                            global_name = mangle_global_name(owner_name)
+                            owner_reg = ctx.fresh("super_owner")
+                            ctx.io << "  %#{owner_reg} = load i8*, i8** @\"#{global_name}\"\n"
+                            value_ref("i8*", "%#{owner_reg}")
+                          else
+                            emit_constant_lookup(ctx, [owner_name])
+                          end
+
+              receiver_val = if ctx.locals.has_key?("self")
+                               load_local(ctx, "self")
+                             else
+                               raise "'super' requires a receiver"
+                             end
+
+              arg_info = extract_call_arguments(node.arguments)
+              args = arg_info[:args]
+              block_node = arg_info[:block]
+
+              arg_values = [] of ValueRef
+              if node.explicit_arguments?
+                arg_values = args.map { |arg| generate_expression(ctx, arg) }
+              else
+                arg_values = ctx.parameter_names.map { |name| load_local(ctx, name) }
+              end
+
+              boxed_args = arg_values.map { |arg| box_value(ctx, arg) }
+              buffer = allocate_pointer_buffer(ctx, boxed_args) || "null"
+
+              block_val = if block_node
+                            generate_block_literal(ctx, block_node)
+                          elsif ctx.locals.has_key?("__block")
+                            load_local(ctx, "__block")
+                          else
+                            value_ref("i8*", "null", constant: true)
+                          end
+
+              receiver_ptr = ensure_pointer(ctx, receiver_val)
+              owner_ptr = ensure_pointer(ctx, owner_val)
+              name_ptr = materialize_string_pointer(ctx, method_name.not_nil!)
+
+              runtime_call(ctx, "i8*", @runtime[:super_invoke], [
+                {type: "i8*", ref: receiver_ptr[:ref]},
+                {type: "i8*", ref: owner_ptr[:ref]},
+                {type: "i8*", ref: name_ptr},
+                {type: "i64", ref: arg_values.size.to_s},
+                {type: "i8**", ref: buffer},
+                {type: "i8*", ref: block_val[:ref]},
+              ])
             end
 
             private def emit_function_call(ctx : FunctionContext, call : AST::MethodCall, args : Array(ValueRef), block_value : ValueRef? = nil) : ValueRef?
@@ -3837,8 +4052,8 @@ module Dragonstone
               raise "Unknown function #{name}"
             end
 
-            private def value_ref(type : String, ref : String, constant : Bool = false, kind : Symbol? = nil) : ValueRef
-              {type: type, ref: ref, constant: constant, kind: kind}
+            private def value_ref(type : String, ref : String, constant : Bool = false) : ValueRef
+              {type: type, ref: ref, constant: constant}
             end
 
             private def pointer_type_for(type : String) : String
@@ -4003,6 +4218,26 @@ module Dragonstone
               if @globals.includes?(full_name)
                 global_name = mangle_global_name(full_name)
                 ctx.io << "  store i8* %#{reg}, i8** @\"#{global_name}\"\n"
+              end
+
+              if superclass_name = node.superclass
+                super_full_name = if superclass_name.includes?("::")
+                                    superclass_name
+                                  else
+                                    qualify_name(superclass_name)
+                                  end
+
+                superclass_val = if @globals.includes?(super_full_name)
+                                   global_name = mangle_global_name(super_full_name)
+                                   load_reg = ctx.fresh("superclass")
+                                   ctx.io << "  %#{load_reg} = load i8*, i8** @\"#{global_name}\"\n"
+                                   value_ref("i8*", "%#{load_reg}")
+                                 else
+                                   emit_constant_lookup(ctx, [super_full_name])
+                                 end
+
+                superclass_ptr = ensure_pointer(ctx, superclass_val)
+                ctx.io << "  call void @#{@runtime[:set_superclass]}(i8* %#{reg}, i8* #{superclass_ptr[:ref]})\n"
               end
 
               with_namespace(unique_ns) do

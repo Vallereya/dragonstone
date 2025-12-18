@@ -1,0 +1,46 @@
+#[
+    Enum Example
+]#
+
+# TODO: Enums should start at 1?
+
+# Example One
+enum Color
+    Red     # Defaults to 0
+    Green   # Defaults to 1
+    Blue    # Defaults to 2
+end
+
+# You can access an enum member directly using EnumName::MemberName,
+# And the .value to get the underlying integer value of an enum member.
+# Something like the echo Color::Green will just output green.
+Color::Green
+Color::Green.value
+
+echo Color::Green
+echo Color::Green.value
+
+# Example Two
+enum Direction
+    North
+    East
+    South
+    West
+end
+
+# The .each iterates over all defined members of the enum.
+Direction.each do |direction|
+    echo "Direction: #{direction}"
+end
+
+# Example Three
+enum StatusCodes(code: int)
+    NotFound = 404
+    Success = 200
+    Accepted = 202
+    BadRequest = 400
+end
+
+code = StatusCodes.new(404)
+echo code
+echo code.value

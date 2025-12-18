@@ -37,7 +37,7 @@ describe Dragonstone::CLI do
         stderr = IO::Memory.new
         status = Dragonstone::CLI.run(["version"], stdout, stderr)
         status.should eq(0)
-        stdout.to_s.should contain("Dragonstone #{Dragonstone::VERSION}")
+        stdout.to_s.should contain("Dragonstone v#{Dragonstone::VERSION}")
     end
     
     it "lexes a program" do

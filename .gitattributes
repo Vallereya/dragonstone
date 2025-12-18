@@ -4,22 +4,27 @@
 ## .eds files = embedded dragonstone file
 ## .forge files = dragonstone package manager file
 
-## Sources.
-*.dragonstone   text eol=lf
-*.ds            text eol=lf
-*.eds           text eol=lf
-*.forge         text eol=lf
+## Line endings: normalize all text files to LF
+* text=auto eol=lf
+
+## For Windows batch files, keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+## For Linux batch files, LF for them.
+# *.sh text eol=lf
 
 ## Dragonstone language files.
-## Maps to Crystal for syntax highlighting for now, and 
-## prevents Dragonstone files from being counted as Crystal.
-*.dragonstone   linguist-language=Crystal   linguist-vendored
-*.ds            linguist-language=Crystal   linguist-vendored
-*.eds           linguist-language=Crystal   linguist-vendored
-*.forge         linguist-language=Crystal   linguist-vendored
+## Temporary: highlight as Crystal, but exclude from language stats.
+*.dragonstone   linguist-language=Crystal  linguist-detectable=false
+*.ds            linguist-language=Crystal  linguist-detectable=false
+*.eds           linguist-language=Crystal  linguist-detectable=false
 
-## Syntax highlighting.
-makefile        linguist-language=makefile
-makefile.win    linguist-language=makefile
-makefile.mac    linguist-language=makefile
-makefile.lin    linguist-language=makefile
+## Forge files are TOML-like; highlight as TOML, but excluded from stats.
+*.forge         linguist-language=TOML     linguist-detectable=false
+
+## Syntax highlighting for MakeFile's.
+# Makefile        linguist-language=Makefile
+# Makefile.win    linguist-language=Makefile
+# Makefile.mac    linguist-language=Makefile
+# Makefile.lin    linguist-language=Makefile

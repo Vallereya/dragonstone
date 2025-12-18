@@ -1,141 +1,14 @@
+use "../../../../lib/lib"
 #[
-    The FFI Standard Library for Dragonstone
-    
-    This module creates a DSL-like syntax layer
-    on top of the FFI without modifying the
-    core language.
+    #! FFI Expansion
+
 ]#
 
 #[
-    OPTION 1
-]#
-# module FFI
-#     def Test
-#         echo "FFI Test!"
-#     end
 
-#     class Invoke
-#         def self.C(method, args)
-#             ffi.call_c(method, args)
-#         end
-        
-#         def self.Crystal(method, args)
-#             ffi.call_crystal(method, args)
-#         end
-        
-#         def self.Ruby(method, args)
-#             ffi.call_ruby(method, args)
-#         end
-#     end
-# end
-
-# FFI::Invoke.C("printf", ["Hello from C!"])
-
-#[
-    OPTION 2
-]#
-# module FFI
-#     def Test
-#         echo "FFI Test!"
-#     end
-
-#     def InvokeC(method, args)
-#         ffi.call_c(method, args)
-#     end
-
-#     def InvokeCrystal(method, args)
-#         ffi.call_crystal(method, args)
-#     end
-
-#     def InvokeRuby(method, args)
-#         ffi.call_ruby(method, args)
-#     end
-# end
-
-# FFI.InvokeC("printf", ["Hello from C!"])
-
-#[
-    OPTION 3
-]#
-# module FFI
-#     class Invoke
-#         @target: nil
-#         @method: nil
-        
-#         def C
-#             new("c")
-#         end
-        
-#         def Crystal
-#             new("crystal")
-#         end
-        
-#         def Ruby
-#             new("ruby")
-#         end
-        
-#         def initialize(target)
-#             @target = target
-#         end
-        
-#         def call(method, args)
-#             case @target
-
-#             when "c"
-#                 ffi.call_c(method, args)
-
-#             when "crystal"
-#                 ffi.call_crystal(method, args)
-
-#             when "ruby"
-#                 ffi.call_ruby(method, args)
-                
-#             end
-#         end
-#     end
-# end
-
-# a = "puts"
-# b = ["Hello from Crystal!"]
-
-# c = "puts"
-# d = ["Hello from Ruby!"]
-
-# e = "printf"
-# f = ["Hello from C!"]
-
-# InvokeCrystal = FFI::Invoke.Crystal.call(a, b)
-# echo InvokeCrystal
-
-# InvokeRuby = FFI::Invoke.Ruby.call(c, d)
-# echo InvokeRuby
-
-# InvokeC = FFI::Invoke.C.call(e, f)
-# echo InvokeC
-
-#[
-    #! FFI Improvements
-
-    FOR TESTING AN IDEA:
-    A better FFI CALL SYNTAX,
-    allows easier use of foreign
-    functions from other languages.
-
-    # TODO: Expand FFI to allow more to be done with it, and a better way to call than using ffi.call_ruby, etc.
-
-    # Ruby's puts
     ffi.call_ruby("puts", ["Hello from Ruby!"])
-
-    # Crystal's puts
     ffi.call_crystal("puts", ["Hello from Crystal!"])
-
-    # C's printf
     ffi.call_c("printf", ["Hello from C!"])
-
-]#
-
-#[
-    IDEA FOR A NEW SYNTAX:
 
     Invoke <Language>
         with <Method>
@@ -150,6 +23,7 @@
         with puts
         as { "Hello from Ruby!" }
     end
+
 ]#
 
 module FFI
@@ -188,3 +62,4 @@ module FFI
 end
 
 FFI::Invoke.Ruby.call("puts", ["Hello from Ruby!"])
+Dragonstone::Lib.Test
