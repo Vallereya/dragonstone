@@ -73,19 +73,19 @@ class Number
 end
 
 num = Number.new(5)
-echo num + 3    # => 8
-echo num - 3    # => 2
-echo num * 4    # => 20
-echo num ** 2   # => 25
-echo num / 2    # => 2.5
-echo num // 2   # => 2
-echo num % 3    # => 2
-echo num == 5   # => true
-# echo num === 5  # => true
-echo num != 3   # => true
-echo num < 10   # => true
-echo num > 2    # => true
-echo num <= 5   # => true
-echo num >= 6   # => false
-echo num << 2   # => 20
-echo num >> 1   # => 2
+echo num + 3    # -> 8
+echo num - 3    # -> 2
+echo num * 4    # -> 20
+echo num ** 2   # -> 25
+echo num / 2    # -> 2.5
+echo num // 2   # -> 2
+echo num % 3    # -> 2
+echo num == 5   # -> true
+# echo num === 5  # -> true
+echo num != 3   # -> true
+echo num < 10   # -> true
+echo num > 2    # -> true
+echo num <= 5   # -> true
+echo num >= 6   # -> false
+echo num << 2   # -> 20
+echo num >> 1   # -> 2

@@ -67,7 +67,7 @@ module Dragonstone
         def visit_debug_print(node : AST::DebugPrint) : RuntimeValue?
             source = node.to_source
             value = node.expression.accept(self)
-            output_text = "#{source} # => #{format_value(value)}"
+            output_text = "#{source} # -> #{format_value(value)}"
             append_output(output_text)
             nil
         end

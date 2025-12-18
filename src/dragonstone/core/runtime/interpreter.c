@@ -509,7 +509,7 @@ static VALUE ds_visit_debug_print(ds_interp_t *st, VALUE node) {
     VALUE source = rb_funcall(node, id_to_source, 0);
     VALUE text = rb_str_dup(rb_String(source));
 
-    rb_str_cat2(text, " # => ");
+    rb_str_cat2(text, " # -> ");
     rb_str_cat(text, RSTRING_PTR(formatted_str), RSTRING_LEN(formatted_str));
     ds_append_output(st, text);
 

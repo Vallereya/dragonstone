@@ -178,7 +178,7 @@
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-+ Updated functions to allow default values directly.
++ Updated functions to allow default values directly, and updated `e!` and typeof to correctly use `->`.
 + Added support for command line arguments using `argv`.
 + Change FFI to use a new calling convention/syntax, maintains direct calls. 
 + Added support for `super` classes. 

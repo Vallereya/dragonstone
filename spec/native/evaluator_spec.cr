@@ -25,7 +25,7 @@ describe "Native evaluator" do
         statements = [] of AST::Node
         statements << debug
         interpreter = evaluate_statements(statements)
-        interpreter.output.should eq("2 + 3 * 4 # => 14\n")
+        interpreter.output.should eq("2 + 3 * 4 # -> 14\n")
     end
 
     it "updates variables and invokes builtins with manually built AST" do

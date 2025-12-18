@@ -1187,7 +1187,7 @@ module Dragonstone
                     source_idx = fetch_byte
                     source = current_code.consts[source_idx].to_s
                     value = pop
-                    emit_output("#{source} # => #{inspect_value(value)}")
+                    emit_output("#{source} # -> #{inspect_value(value)}")
                     push(value)
                 when OPC::CONCAT
                     b, a = pop, pop
@@ -2440,8 +2440,8 @@ module Dragonstone
         private def type_of(value : Bytecode::Value) : String
             case value
             when Nil then "Nil"
-            when Bool then "Bool"
-            when Int32, Int64 then "Int"
+            when Bool then "Boolean"
+            when Int32, Int64 then "Integer"
             when Float64 then "Float"
             when String then "String"
             when Array then "Array"

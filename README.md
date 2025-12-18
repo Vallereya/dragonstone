@@ -223,7 +223,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     name = "Jules"
     e! name         
     
-    # OUTPUT: name # => "Jules"
+    # OUTPUT: name # -> "Jules"
 ```
 
 ###### Example of a `def` Method and String Interpolation.

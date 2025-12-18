@@ -479,7 +479,7 @@ module Dragonstone
                 end
               when AST::DebugPrint
                 intern_string("%s")
-                intern_string("#{node.expression.to_source} # => ")
+                intern_string("#{node.expression.to_source} # -> ")
                 collect_strings_from_node(node.expression)
               when AST::Variable
                 intern_string(node.name) if constant_symbol?(node.name)
@@ -1641,7 +1641,7 @@ module Dragonstone
 
             private def generate_debug_print(ctx : FunctionContext, node : AST::DebugPrint) : ValueRef
               value = generate_expression(ctx, node.expression)
-              prefix_str = "#{node.expression.to_source} # => "
+              prefix_str = "#{node.expression.to_source} # -> "
               format_ptr = materialize_string_pointer(ctx, "%s")
               prefix_ptr = materialize_string_pointer(ctx, prefix_str)
               ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{prefix_ptr})\n"
