@@ -49,12 +49,15 @@ $scriptRoot   = Split-Path -Parent $scriptPath
 $projectRoot  = Split-Path -Parent $scriptRoot
 $buildDir     = Join-Path $scriptRoot 'build'
 
+$env:SHARDS_BIN_PATH = Join-Path $scriptRoot 'build'
+
 if (-not (Test-Path -Path $buildDir)) {
     New-Item -ItemType Directory -Path $buildDir | Out-Null
 }
 
 $exePath      = Join-Path $buildDir 'dragonstone.exe'
 $sourceEntry  = Join-Path $projectRoot 'bin/dragonstone'
+
 $resourceScript = $null
 $resourceOutputBase = $null
 

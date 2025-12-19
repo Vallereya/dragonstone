@@ -27,7 +27,7 @@ module Dragonstone
                         private def build_content(source : String, summary_lines : Array(String), metadata : String) : String
                             String.build do |io|
                                 io << "/* --------------------------------- */\n"
-                                io << "/* Dragonstone C target artifact     */\n"
+                                io << "/* Dragonstone C Target Artifact     */\n"
                                 io << "/* --------------------------------- */\n"
                                 io << "#include <stdio.h>\n"
                                 io << "\n"

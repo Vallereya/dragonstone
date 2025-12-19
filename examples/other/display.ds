@@ -1,7 +1,30 @@
 #[
     Display (.display) Example
+
+    This example demonstrates how to use 
+    the .display property to convert various 
+    data types to their string representations.
 ]#
 
+# Convert number to string
 age = 25
 
 echo "Your age is " + age.display
+e! "Your age is " + age.display
+echo typeof("Your age is " + age.display)
+e! typeof("Your age is " + age.display)
+
+# Convert array to string
+arr = [1, 2, 3]
+
+echo arr.display
+e! arr.display
+echo typeof(arr.display)
+e! typeof(arr.display)
+
+# Convert boolean to string
+is_active: bool = true
+echo is_active.display
+e! is_active.display
+echo typeof(is_active.display)
+e! typeof(is_active.display)

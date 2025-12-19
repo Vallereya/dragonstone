@@ -1,0 +1,75 @@
+class CaesarCipher
+    con ALPHABET = ('A'..'Z').to_a
+
+    def encrypt(text, shift)
+        # Create the target mapping (rotated alphabet).
+        rotated = rotate_array(ALPHABET, shift)
+        
+        result = ""
+        i = 0
+
+        # Iterate over the input string.
+        while i < text.length
+            char = text.slice(i, 1)
+            
+            # Find char in ALPHABET and replace with rotated equivalent.
+            index = find_index(ALPHABET, char)
+            
+            if index != -1
+                # Found in alphabet, swap it.
+                result = result + rotated[index]
+            else
+                # Not found and keep original.
+                result = result + char
+            end
+
+            i = i + 1
+        end
+
+        return result
+    end
+
+    # Rotate array by n steps (Add .rotate?)
+    # Positive n shifts left (A -> B), Negative n shifts right.
+    def rotate_array(arr, n)
+        len = arr.length
+        result = []
+        i = 0
+        
+        while i < len
+
+            # Calculate index using modulo to wrap around.
+            src_index = (i + n) % len
+
+            # Handle negative modulo results if necessary.
+            if src_index < 0
+                src_index = src_index + len
+            end
+
+            result.push(arr[src_index])
+            i = i + 1
+        end
+
+        result
+    end
+
+    # Helper: Find index of item in array (I need to add .index).
+    def find_index(arr, target)
+        i = 0
+        while i < arr.length
+            if arr[i] == target
+                return i
+            end
+            i = i + 1
+        end
+        return -1
+    end
+end
+
+# OUTPUT
+cipher = CaesarCipher.new
+encrypted = cipher.encrypt("THEQUICKBROWNFOXJUMPSOVERTHELAZYDOG", 5)
+echo encrypted
+
+decrypted = cipher.encrypt(encrypted, -5)
+echo decrypted
