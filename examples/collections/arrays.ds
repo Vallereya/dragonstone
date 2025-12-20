@@ -39,3 +39,8 @@ e! empty.empty
 # Mixed types.
 mixed = [1, "hello", 3.14, true]
 e! mixed
+
+# Example Seven
+# Typed empty array (`[] as T`).
+typed_numbers = [] as int
+e! typed_numbers.empty

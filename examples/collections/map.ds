@@ -23,10 +23,16 @@ end
 e! ages.keys
 e! ages.values
 
+# Example Three
+# Typed empty map (`{} as K -> V`).
+empty_ages = {} as str -> int
+e! empty_ages.keys
+e! empty_ages.values
+
 #! Both examples 3 and 4 do run if you uncomment them, but will error out
 #! with the LLVM backend which is why I commented it out for testing that.
 
-# Example Three
+# Example Four
 # greeting = {
 #     "greet" -> "Hi, my name is Jalyn.",
 #     "from" -> " I'm from the USA!"
@@ -34,7 +40,7 @@ e! ages.values
 
 # echo greeting["greet"] + greeting["from"]
 
-# Example Four
+# Example Five
 # This is adding the `Hash` to a `Map` and adds types.
 # person: Hash(str, int) = {
 #     "name" -> "Jalyn",

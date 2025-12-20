@@ -2,8 +2,9 @@ module Dragonstone
     module AST
         class ArrayLiteral < Node
             getter elements : NodeArray
+            getter element_type : TypeExpression?
 
-            def initialize(elements : NodeArray, location : Location? = nil)
+            def initialize(elements : NodeArray, @element_type : TypeExpression? = nil, location : Location? = nil)
                 super(location: location)
                 @elements = elements
             end
@@ -13,7 +14,12 @@ module Dragonstone
             end
 
             def to_source : String
-                "[#{elements.map(&.to_source).join(", ")}]"
+                rendered = "[#{elements.map(&.to_source).join(", ")}]"
+                if t = @element_type
+                    "#{rendered} as #{t.to_source}"
+                else
+                    rendered
+                end
             end
         end
     end

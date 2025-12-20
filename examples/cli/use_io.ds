@@ -1,0 +1,20 @@
+use "io"
+
+# Writing to stdout (FD 1).
+stdout.println("This is raw output to file descriptor 1.")
+
+# Writing to stderr (FD 2), useful for errors as it is unbuffered.
+stderr.println("This is an error message on file descriptor 2.")
+
+# Reading from stdin (FD 0)
+stdout.eecho("Enter your name: ")
+name = stdin.read
+stdout.println("Hello, " + name)
+
+# Using flush to ensure output is written immediately.
+stdout.eecho("Starting operation...")
+stdout.flush
+stdout.println(" done.")
+
+# Testing write of multiple lines to stdout.
+stdout.println("I/O operations completed successfully.")

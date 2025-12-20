@@ -1217,7 +1217,12 @@ module Dragonstone
                 end
             end
             expect(:RBRACKET)
-            AST::ArrayLiteral.new(elements, location: start_token.location)
+            element_type = nil
+            if current_token.type == :AS
+                expect(:AS)
+                element_type = parse_type_expression
+            end
+            AST::ArrayLiteral.new(elements, element_type, location: start_token.location)
         end
 
         private def parse_braced_literal : AST::Node
@@ -1225,6 +1230,14 @@ module Dragonstone
 
             if current_token.type == :RBRACE
                 advance
+                if current_token.type == :AS
+                    expect(:AS)
+                    key_type = parse_type_expression
+                    expect(:THIN_ARROW)
+                    value_type = parse_type_expression
+                    return AST::MapLiteral.new([] of Tuple(AST::Node, AST::Node), key_type, value_type, location: start_token.location)
+                end
+
                 return AST::TupleLiteral.new([] of AST::Node, location: start_token.location)
             end
 
@@ -1351,7 +1364,15 @@ module Dragonstone
             end
 
             expect(:RBRACE)
-            AST::MapLiteral.new(entries, location: start_token.location)
+            key_type = nil
+            value_type = nil
+            if current_token.type == :AS
+                expect(:AS)
+                key_type = parse_type_expression
+                expect(:THIN_ARROW)
+                value_type = parse_type_expression
+            end
+            AST::MapLiteral.new(entries, key_type, value_type, location: start_token.location)
         end
 
         private def parse_map_entry(existing_key : AST::Node? = nil) : Tuple(AST::Node, AST::Node)
@@ -1756,7 +1777,16 @@ module Dragonstone
             case token.type
             when :IDENTIFIER
                 identifier_token = expect(:IDENTIFIER)
-                name = identifier_token.value.as(String)
+                parts = [] of String
+                parts << identifier_token.value.as(String)
+
+                while current_token.type == :DOUBLE_COLON
+                    advance
+                    segment = expect(:IDENTIFIER)
+                    parts << segment.value.as(String)
+                end
+
+                name = parts.join("::")
                 if current_token.type == :LPAREN
                     args = parse_type_argument_list
                     AST::GenericTypeExpression.new(name, args, location: identifier_token.location)

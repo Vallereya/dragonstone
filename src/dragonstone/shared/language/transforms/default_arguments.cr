@@ -49,7 +49,11 @@ module Dragonstone
           when AST::UnaryOp
             AST::UnaryOp.new(node.operator, rewrite_node(node.operand, defaults), location: node.location)
           when AST::ArrayLiteral
-            AST::ArrayLiteral.new(node.elements.map { |e| rewrite_node(e, defaults) }, location: node.location)
+            AST::ArrayLiteral.new(
+              node.elements.map { |e| rewrite_node(e, defaults) },
+              node.element_type,
+              location: node.location
+            )
           when AST::TupleLiteral
             AST::TupleLiteral.new(node.elements.map { |e| rewrite_node(e, defaults) }, location: node.location)
           when AST::NamedTupleLiteral
@@ -62,7 +66,7 @@ module Dragonstone
             node.entries.each do |(k, v)|
               entries << {rewrite_node(k, defaults).as(AST::Node), rewrite_node(v, defaults).as(AST::Node)}
             end
-            AST::MapLiteral.new(entries, location: node.location)
+            AST::MapLiteral.new(entries, node.key_type, node.value_type, location: node.location)
           when AST::IndexAccess
             AST::IndexAccess.new(rewrite_node(node.object, defaults), rewrite_node(node.index, defaults), nil_safe: node.nil_safe, location: node.location)
           when AST::IndexAssignment
