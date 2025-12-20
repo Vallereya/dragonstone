@@ -427,6 +427,15 @@ module Dragonstone
             when "chr" 
                 code = expect_int(arguments, 0, function_name)
                 code.chr
+            
+            when "fsync"
+                fd = expect_int(arguments, 0, function_name)
+
+                {% if flag?(:windows) %}
+                    LibC._commit(fd)            # might require a binding -> fun _commit(fd : Int32) : Int32
+                {% else %}
+                    LibC.fsync(fd)
+                {% end %}
 
             else
                 raise "Unknown C function: #{function_name}"
