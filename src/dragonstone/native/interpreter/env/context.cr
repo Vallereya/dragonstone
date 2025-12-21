@@ -25,6 +25,9 @@ module Dragonstone
                     target_scope = binding_info[:scope]
                     scope_index = binding_info[:index]
                 end
+            elsif name.starts_with?("__ds_cvar_") || name.starts_with?("__ds_mvar_")
+                target_scope = @scopes.first
+                scope_index = 0
             end
 
             descriptor = nil

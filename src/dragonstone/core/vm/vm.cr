@@ -1647,6 +1647,11 @@ module Dragonstone
         end
 
         private def store_variable(name_idx : Int32, name : String, value : Bytecode::Value) : Nil
+            if name.starts_with?("__ds_cvar_") || name.starts_with?("__ds_mvar_")
+                assign_global(name, value)
+                return
+            end
+
             frame = current_frame
             locals = frame.locals
             defined = frame.locals_defined

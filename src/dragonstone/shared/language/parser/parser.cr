@@ -1290,6 +1290,12 @@ module Dragonstone
             when :INSTANCE_VAR
                 ivar_token = expect(:INSTANCE_VAR)
                 AST::InstanceVariable.new(ivar_token.value.as(String), location: ivar_token.location)
+            when :CLASS_VAR
+                cvar_token = expect(:CLASS_VAR)
+                AST::ClassVariable.new(cvar_token.value.as(String), location: cvar_token.location)
+            when :MODULE_VAR
+                mvar_token = expect(:MODULE_VAR)
+                AST::ModuleVariable.new(mvar_token.value.as(String), location: mvar_token.location)
             when :TYPEOF
                 parse_typeof_expression
             when :LBRACKET
@@ -1830,6 +1836,10 @@ module Dragonstone
                 end
             when AST::InstanceVariable
                 AST::InstanceVariableAssignment.new(left.name, value, operator: operator, location: location)
+            when AST::ClassVariable
+                AST::ClassVariableAssignment.new(left.name, value, operator: operator, location: location)
+            when AST::ModuleVariable
+                AST::ModuleVariableAssignment.new(left.name, value, operator: operator, location: location)
             when AST::IndexAccess
                 AST::IndexAssignment.new(left.object, left.index, value, operator: operator, nil_safe: left.nil_safe, location: location)
             when AST::MethodCall
@@ -1868,7 +1878,9 @@ module Dragonstone
         end
 
         private def return_value_terminator?(token : Token) : Bool
-            TERMINATOR_TOKENS.includes?(token.type) || ((token.type == :IDENTIFIER || token.type == :INSTANCE_VAR) && assignment_token?(peek_token))
+            TERMINATOR_TOKENS.includes?(token.type) ||
+                ((token.type == :IDENTIFIER || token.type == :INSTANCE_VAR || token.type == :CLASS_VAR || token.type == :MODULE_VAR) &&
+                assignment_token?(peek_token))
         end
 
         private def argument_terminator?(token : Token) : Bool
@@ -1876,7 +1888,8 @@ module Dragonstone
         end
 
         private def assignment_ahead? : Bool
-            (current_token.type == :IDENTIFIER || current_token.type == :INSTANCE_VAR) && assignment_token?(peek_token)
+            (current_token.type == :IDENTIFIER || current_token.type == :INSTANCE_VAR || current_token.type == :CLASS_VAR || current_token.type == :MODULE_VAR) &&
+                assignment_token?(peek_token)
         end
 
         private def assignment_token?(token : Token?) : Bool

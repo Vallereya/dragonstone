@@ -36,6 +36,60 @@ DS
         result.output.should eq "5\n"
     end
 
+    it "supports @@ class variables shared across instances" do
+        source = <<-DS
+class Counter
+    @@count = 0
+
+    def initialize
+        @@count += 1
+    end
+
+    def self.count
+        @@count
+    end
+end
+
+Counter.new
+Counter.new
+echo Counter.count
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n"
+    end
+
+    it "supports @@@ module variables shared across the module" do
+        source = <<-DS
+module Tracker
+    @@@count = 0
+
+    def self.inc
+        @@@count += 1
+    end
+
+    def self.count
+        @@@count
+    end
+end
+
+Tracker.inc
+Tracker.inc
+echo Tracker.count
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n"
+    end
+
+    it "rejects class/module variables outside containers" do
+        expect_raises(Dragonstone::ParserError) do
+            Dragonstone.run("@@count = 1\n")
+        end
+
+        expect_raises(Dragonstone::ParserError) do
+            Dragonstone.run("@@@count = 1\n")
+        end
+    end
+
     it "supports Array#empty? in the native backend" do
         result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
         result.output.should eq "false\n"

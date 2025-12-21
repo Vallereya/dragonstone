@@ -648,11 +648,24 @@ module Dragonstone
         private def scan_instance_variable
             start_line = @line
             start_col = @column
-            advance # consume '@'
+            advance # consume first '@'
 
-            if current_char == '@'
-                raise error_at_current("Class variables (@@) are not supported yet", 2)
+            at_count = 1
+            while current_char == '@'
+                at_count += 1
+                advance
             end
+
+            token_type = case at_count
+                when 1
+                    :INSTANCE_VAR
+                when 2
+                    :CLASS_VAR
+                when 3
+                    :MODULE_VAR
+                else
+                    raise error_at_current("Too many @ characters (max is @@@)", at_count)
+                end
 
             char = current_char
             unless char && identifier_start?(char)
@@ -667,7 +680,7 @@ module Dragonstone
 
             name = identifier.to_s
             length = @column - start_col
-            add_token(:INSTANCE_VAR, name, start_line, start_col, length)
+            add_token(token_type, name, start_line, start_col, length)
         end
 
         private def scan_number

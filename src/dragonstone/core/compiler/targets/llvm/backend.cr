@@ -359,6 +359,10 @@ module Dragonstone
               @namespace_stack.clear
             end
 
+            private def shared_container_variable_name?(name : String) : Bool
+              name.starts_with?("__ds_cvar_") || name.starts_with?("__ds_mvar_")
+            end
+
             private def collect_globals_from(node : AST::Node)
               case node
               when AST::ModuleDefinition, AST::ClassDefinition
@@ -381,6 +385,90 @@ module Dragonstone
               when AST::EnumDefinition
                 full_name = qualify_name(node.name)
                 @globals << full_name
+              when AST::FunctionDef
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::FunctionLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::ParaLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::BlockLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::WithExpression
+                collect_globals_from(node.receiver)
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::IfStatement
+                collect_globals_from(node.condition)
+                node.then_block.each { |stmt| collect_globals_from(stmt) }
+                node.elsif_blocks.each do |clause|
+                  collect_globals_from(clause.condition)
+                  clause.block.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::UnlessStatement
+                collect_globals_from(node.condition)
+                node.body.each { |stmt| collect_globals_from(stmt) }
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::WhileStatement
+                collect_globals_from(node.condition)
+                node.block.each { |stmt| collect_globals_from(stmt) }
+              when AST::CaseStatement
+                node.expression.try { |expr| collect_globals_from(expr) }
+                node.when_clauses.each do |clause|
+                  clause.conditions.each { |c| collect_globals_from(c) }
+                  clause.block.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::BeginExpression
+                node.body.each { |stmt| collect_globals_from(stmt) }
+                node.rescue_clauses.each do |clause|
+                  clause.body.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+                node.ensure_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::ReturnStatement
+                node.value.try { |expr| collect_globals_from(expr) }
+              when AST::DebugEcho
+                collect_globals_from(node.expression)
+              when AST::Assignment
+                if shared_container_variable_name?(node.name)
+                  @globals << qualify_name(node.name)
+                end
+                collect_globals_from(node.value)
+              when AST::Variable
+                if shared_container_variable_name?(node.name)
+                  @globals << qualify_name(node.name)
+                end
+              when AST::MethodCall
+                node.receiver.try { |recv| collect_globals_from(recv) }
+                node.arguments.each { |arg| collect_globals_from(arg) }
+              when AST::SuperCall
+                node.arguments.each { |arg| collect_globals_from(arg) }
+              when AST::BinaryOp
+                collect_globals_from(node.left)
+                collect_globals_from(node.right)
+              when AST::UnaryOp
+                collect_globals_from(node.operand)
+              when AST::ArrayLiteral
+                node.elements.each { |e| collect_globals_from(e) }
+              when AST::TupleLiteral
+                node.elements.each { |e| collect_globals_from(e) }
+              when AST::NamedTupleLiteral
+                node.entries.each { |e| collect_globals_from(e.value) }
+              when AST::MapLiteral
+                node.entries.each do |(k, v)|
+                  collect_globals_from(k)
+                  collect_globals_from(v)
+                end
+              when AST::IndexAccess
+                collect_globals_from(node.object)
+                collect_globals_from(node.index)
+              when AST::IndexAssignment
+                collect_globals_from(node.object)
+                collect_globals_from(node.index)
+                collect_globals_from(node.value)
+              when AST::AttributeAssignment
+                collect_globals_from(node.receiver)
+                collect_globals_from(node.value)
               else
                 # Recurse if container.
               end
