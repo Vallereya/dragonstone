@@ -1893,9 +1893,12 @@ void *dragonstone_runtime_ivar_get(void *obj, void *name) {
     DSInstance *inst = (DSInstance *)box->as.ptr;
     if (!inst->ivars) return NULL;
 
+    const char *name_str = ds_arg_string(name);
+    if (!name_str) return NULL;
+
     DSMapEntry *curr = inst->ivars->head;
     while (curr) {
-        if (strcmp((char *)curr->key, (char *)name) == 0) return curr->value;
+        if (strcmp((char *)curr->key, name_str) == 0) return curr->value;
         curr = curr->next;
     }
     return NULL;
@@ -1907,6 +1910,9 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
     if (box->kind != DS_VALUE_INSTANCE) return val;
     DSInstance *inst = (DSInstance *)box->as.ptr;
 
+    const char *name_str = ds_arg_string(name);
+    if (!name_str) return val;
+
     if (!inst->ivars) {
         inst->ivars = (DSMap *)ds_alloc(sizeof(DSMap));
         inst->ivars->head = NULL;
@@ -1915,7 +1921,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
 
     DSMapEntry *curr = inst->ivars->head;
     while (curr) {
-        if (strcmp((char *)curr->key, (char *)name) == 0) {
+        if (strcmp((char *)curr->key, name_str) == 0) {
             curr->value = val;
             return val;
         }
@@ -1923,7 +1929,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
     }
 
     DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-    entry->key = ds_strdup((char *)name);
+    entry->key = ds_strdup(name_str);
     entry->value = val;
     entry->next = inst->ivars->head;
     inst->ivars->head = entry;
@@ -2679,6 +2685,13 @@ void *dragonstone_runtime_lte(void *lhs, void *rhs) {
 }
 
 void *dragonstone_runtime_eq(void *lhs, void *rhs) {
+    if (lhs == NULL && rhs == NULL) {
+        return dragonstone_runtime_box_bool(true);
+    }
+    if (lhs == NULL || rhs == NULL) {
+        return dragonstone_runtime_box_bool(false);
+    }
+
     void *over = ds_try_invoke_operator(lhs, "==", rhs);
     if (over) return ds_is_boxed(over) && ((DSValue *)over)->kind == DS_VALUE_BOOL ? over : ds_box_truthy(over);
 
