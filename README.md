@@ -25,7 +25,7 @@
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
 Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
 
-> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.2` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
+> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.3` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
 
 <br>
 
@@ -208,7 +208,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 #### Some Examples:
-###### Example of a String.
+###### Examples of a String.
 ```crystal
     # Using echo
     name = "Ringo"
@@ -219,20 +219,67 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 ```crystal
-    # Using e!
+    # Using e!, for printing debug information.
     name = "Jules"
     e! name         
     
     # OUTPUT: name # -> "Jules"
 ```
 
-###### Example of a `def` Method and String Interpolation.
 ```crystal
-    def greet(name)
-        echo "Hello, #{name}!"
+    # Using eecho, without a newline.
+    greet = "Hello, "
+    name = "Ringo!"
+
+    eecho greet
+    eecho name
+
+    # OUTPUT: Hello, Ringo!
+```
+
+```crystal
+    # Using ee!, for printing debug information without a newline.
+    greet = "Hello, "
+    name = "Jules!"
+
+    ee! greet  
+    ee! name        
+    
+    # OUTPUT: greet + name # -> "Hello, " + "Jules!"
+```
+
+###### In dragonstone you can optionally be very explicit. Using `con` for constants, `var` for variables, `fix` for block-scoped constants, and `let` for block-scoped variables.
+```dragonstone
+    var first = 20
+    con mul = 2
+
+    def example
+        let second = 10
+        fix div = first // second
+
+        echo first
+        echo second
+        echo div
+        echo first * mul
     end
 
-    greet("Jules")
+    example
+```
+
+###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules and `.` for classes.
+```crystal
+    module Grades
+        con Score = 100
+
+        class Greeting
+            def greet
+                "Hello! I got a #{Grades::Score}%!"
+            end
+        end
+    end
+
+    echo Grades::Score
+    echo Grades::Greeting.greet
 ```
 
 ###### Example of a `Class`.
@@ -266,20 +313,47 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     🔥.道
 ```
 
-###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules and `.` for classes.
+###### Example of a `def` Method and String Interpolation, and supports both `def` and `define`.
 ```crystal
-    module Grades
-        con Score = 100
+    def greet(name)
+        echo "Hello, #{name}!"
+    end
 
-        class Greeting
-            def greet
-                "Hello! I got a #{Grades::Score}%!"
-            end
+    greet("Jules")
+```
+
+###### Example of `fun`, which is a first-class citizen and a function object that can be passed around. Dragonstone also supports both `fun` and `function` for preference.
+```crystal
+    # Store a function object in a variable.
+    add = fun(a, b)
+        return a + b
+    end
+    echo add.call(2, 3)
+
+    # Define a reusable function object.
+    fun shout(text)
+        return text + "!"
+    end
+
+    def print_one(word, fmt)
+        echo fmt.call(word)
+    end
+    print_one("Ringo", shout)
+
+    # And an advanced version, to pass an anonymous function inline.
+    def print_formatted(words, fmt)
+        words.each do |w|
+            echo fmt.call(w)
         end
     end
 
-    echo Grades::Score
-    echo Grades::Greeting.greet
+    names = ["Ringo", "Peet", "Jules"]
+
+    print_formatted(
+        names, fun(text) do
+            return ">> " + text + " <<"
+        end
+    )
 ```
 
 ###### Example of a `Abstract Class` and `Super`.
@@ -511,7 +585,7 @@ echo square.call(6)
 - <2% overhead at scale.
 - Near identical for loops vs single.
 
-You can run these yourself from the `./tests/benchmark` directory.
+You can run these yourself from the `./scripts/benchmark` directory.
 
 ### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
 ```
