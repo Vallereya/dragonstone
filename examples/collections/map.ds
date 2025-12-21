@@ -29,23 +29,20 @@ empty_ages = {} as str -> int
 e! empty_ages.keys
 e! empty_ages.values
 
-#! Both examples 3 and 4 do run if you uncomment them, but will error out
-#! with the LLVM backend which is why I commented it out for testing that.
-
 # Example Four
-# greeting = {
-#     "greet" -> "Hi, my name is Jalyn.",
-#     "from" -> " I'm from the USA!"
-# }
+greeting = {
+    "greet" -> "Hi, my name is Jalyn.",
+    "from" -> " I'm from the USA!"
+}
 
-# echo greeting["greet"] + greeting["from"]
+echo greeting["greet"] + greeting["from"]
 
 # Example Five
 # This is adding the `Hash` to a `Map` and adds types.
-# person: Hash(str, int) = {
-#     "name" -> "Jalyn",
-#     "age" -> 30
-# }
+person: Hash(str, int) = {
+    "name" -> "Jalyn",
+    "age" -> 30
+}
 
-# echo person["name"]                                             # -> Jalyn
-# echo person["age"]                                              # -> 30
+echo person["name"]                                             # -> Jalyn
+echo person["age"]                                              # -> 30

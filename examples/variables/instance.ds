@@ -10,6 +10,10 @@
     state. The `initialize` method can access the 
     private instance variable. And a public method can
     act as a controlled interface.
+
+    @               = instance variables; limited to the specific instance of the class they belong to.
+    @@              = class instance variables; shared across all instances of the class they belong to.
+    @@@             = module instance variables; shared across the module they belong to.
 ]#
 
 # Example One

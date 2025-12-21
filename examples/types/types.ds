@@ -10,32 +10,36 @@
 
     Or add `#! typed` 
     at the top of a file to force typed mode for 
-    that module, no flags then are required.
+    that module, no flags then are required. But,
+    if using the flag, the pragma is ignored, and
+    if not using the flag, the pragma forces typed
+    so all files with the pragma must be typed.
 
     Typed code lets you annotate variables, function 
     parameters, and return values 
     (`name: str`, `def greet(user: User?) -> str`, unions like `str | nil`, etc.)
+
+    You can also be explicit:
+        var             = variables for mutability;     sorta "function-level" scope.
+        con             = constants for immutability;   sorta "function-level" scope.
+        let             = variables for mutability;     "block-level" scope.
+        fix             = constants for immutability;   "block-level" scope.
+
+    Common Types:
+        nil     = null/nil
+        bool    = Boolean
+        int     = Integer
+        float   = float
+        char    = Character
+        str     = String
+        sym     = Symbol
+        arr     = Array (both arr and array work)
+        map     = Map (map aka a hash)
+        range   = Range
+        tuple   = Tuple
+        para    = Para (para aka a Proc)
+
 ]#
-
-#[
-    # TODO: Pragma might be broken? With or without the pragma the types work, 
-    # TODO: but throws error as unknown if using. Spec works and the --typed flag works, investigate.
-
-    nil     = null/nil
-    bool    = Boolean
-    int     = Integer                           # TODO: add support for different signed/unsigned, right now just catch all.
-    float   = float                             # TODO: same here as int but for float 32/64. (could just expand through ffi without me needing too? might not need to since its added via llvm for i32/i64/f32/f64?)
-    char    = Character
-    str     = String
-    sym     = Symbol
-    arr     = Array (both arr and array work)   # DONE: Named Array fixed.
-    map     = Map (map aka a hash)              # DONE: Named Map fixed.
-    range   = Range                             # TODO: Named Range might be broken, investigate.
-    tuple   = Tuple                             # TODO: Named Tuple might be broken, investigate.
-    para    = Para (my Proc)
-]#
-
-#! typed
 
 # Untyped variable, dynamic typing.
 name = "Ringo"
