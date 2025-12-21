@@ -47,6 +47,7 @@ module Dragonstone
     class Lexer
         KEYWORDS = %w[
             echo
+            eecho
             puts 
             argv
             if 
@@ -125,10 +126,13 @@ module Dragonstone
                 elsif char == '\''
                     scan_char
                 elsif char == 'e' && peek_char == '!'
-                    add_token(:DEBUG_PRINT, "e!", @line, @column, 2)
+                    add_token(:DEBUG_ECHO, "e!", @line, @column, 2)
                     advance(2)
+                elsif char == 'e' && peek_char == 'e' && peek_char(2) == '!'
+                    add_token(:DEBUG_ECHO, "ee!", @line, @column, 3)
+                    advance(3)
                 elsif char == 'p' && peek_char == '!'
-                    add_token(:DEBUG_PRINT, "p!", @line, @column, 2)
+                    add_token(:DEBUG_ECHO, "p!", @line, @column, 2)
                     advance(2)
                 elsif identifier_start?(char)
                     scan_identifier
@@ -570,6 +574,7 @@ module Dragonstone
                     when "nil" then :NIL
                     when "elseif" then :ELSIF
                     when "echo", "puts" then :ECHO
+                    when "eecho" then :EECHO
                     when "argv" then :ARGV
                     when "if" then :IF
                     when "else" then :ELSE

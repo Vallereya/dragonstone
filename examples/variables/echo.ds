@@ -1,0 +1,17 @@
+#[
+    Echo Example
+]#
+
+#[
+    Various ways to use echo statements.
+]#
+
+echo "Test One."
+
+e! "Test Two."
+
+eecho "Test Three..."
+eecho "done!\n"
+
+ee! "Test Four..."
+ee! "done!"

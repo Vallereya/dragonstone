@@ -1,20 +1,28 @@
+#[
+    I/O Example
+]#
+
+#[
+    This example demonstrates how to perform input and output operations.
+]#
+
 use "io"
 
 # Writing to stdout (FD 1).
-stdout.println("This is raw output to file descriptor 1.")
+stdout.echo "This is raw output to file descriptor 1."
 
 # Writing to stderr (FD 2), useful for errors as it is unbuffered.
-stderr.println("This is an error message on file descriptor 2.")
+stderr.echo "This is an error message on file descriptor 2."
 
 # Reading from stdin (FD 0)
-stdout.eecho("Enter your name: ")
+stdout.eecho "Enter your name: "
 name = stdin.read
-stdout.println("Hello, " + name)
+stdout.echo "Hello, #{name}"
 
 # Using flush to ensure output is written immediately.
-stdout.eecho("Starting operation...")
+stdout.eecho "Starting operation..."
 stdout.flush
-stdout.println(" done.")
+stdout.echo " done."
 
 # Testing write of multiple lines to stdout.
-stdout.println("I/O operations completed successfully.")
+stdout.echo "I/O operations completed successfully."

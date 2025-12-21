@@ -1,0 +1,17 @@
+#[
+    User Input Example
+]#
+
+#[
+    This example demonstrates how to get user input.
+]#
+
+use "io"
+
+eecho "Please enter your name: "
+name = stdin.read
+eecho "Hello, #{name}! Welcome to Dragonstone.\n"
+
+eecho "What's your favorite programming language? "
+fav_lang = stdin.read
+eecho "Nice! #{fav_lang} is a great choice.\n"

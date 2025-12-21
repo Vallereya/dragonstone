@@ -58,8 +58,8 @@ module Dragonstone
                 
                 node.arguments.each { |arg| print_ast(arg, indent + 1, io) }
 
-            when Dragonstone::AST::DebugPrint
-                io.puts "#{prefix}DebugPrint:"
+            when Dragonstone::AST::DebugEcho
+                io.puts "#{prefix}DebugEcho:"
                 print_ast(node.expression, indent + 1, io)
 
             when Dragonstone::AST::Assignment

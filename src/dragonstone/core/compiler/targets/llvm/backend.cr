@@ -477,7 +477,7 @@ module Dragonstone
                   intern_string(entry.name)
                   collect_strings_from_node(entry.value)
                 end
-              when AST::DebugPrint
+              when AST::DebugEcho
                 intern_string("%s")
                 intern_string("#{node.expression.to_source} # -> ")
                 collect_strings_from_node(node.expression)
@@ -1090,7 +1090,7 @@ module Dragonstone
                    AST::AttributeAssignment,
                    AST::IndexAssignment,
                    AST::YieldExpression,
-                   AST::DebugPrint
+                   AST::DebugEcho
                 true
               else
                 false
@@ -1148,8 +1148,8 @@ module Dragonstone
               when AST::SuperCall
                 generate_expression(ctx, stmt)
                 false
-              when AST::DebugPrint
-                generate_debug_print(ctx, stmt)
+              when AST::DebugEcho
+                generate_debug_echo(ctx, stmt)
                 false
                 # value = generate_expression(ctx, stmt.expression)
                 # prefix_str = "#{stmt.expression.to_source} # => "
@@ -1602,8 +1602,8 @@ module Dragonstone
                 generate_conditional_expression(ctx, node)
               when AST::Assignment
                 generate_local_assignment(ctx, node)
-              when AST::DebugPrint
-                generate_debug_print(ctx, node)
+              when AST::DebugEcho
+                generate_debug_echo(ctx, node)
               else
                 raise "Unsupported expression #{node.class}"
               end
@@ -1639,7 +1639,7 @@ module Dragonstone
               value_ref("i8*", "%#{phi}")
             end
 
-            private def generate_debug_print(ctx : FunctionContext, node : AST::DebugPrint) : ValueRef
+            private def generate_debug_echo(ctx : FunctionContext, node : AST::DebugEcho) : ValueRef
               value = generate_expression(ctx, node.expression)
               prefix_str = "#{node.expression.to_source} # -> "
               format_ptr = materialize_string_pointer(ctx, "%s")
@@ -2514,7 +2514,7 @@ module Dragonstone
                    AST::AttributeAssignment,
                    AST::IndexAssignment,
                    AST::YieldExpression,
-                   AST::DebugPrint
+                   AST::DebugEcho
                 true
               else
                 false

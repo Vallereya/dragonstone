@@ -1183,7 +1183,7 @@ module Dragonstone
                 when OPC::TYPEOF
                     value = pop
                     push(type_of(value))
-                when OPC::DEBUG_PRINT
+                when OPC::DEBUG_ECHO
                     source_idx = fetch_byte
                     source = current_code.consts[source_idx].to_s
                     value = pop

@@ -73,7 +73,7 @@ module Dragonstone
                             cond_ok && then_ok && elsif_ok && else_ok
                         when AST::WhileStatement
                             node_supported?(node.condition) && nodes_supported?(node.block)
-                        when AST::DebugPrint
+                        when AST::DebugEcho
                             node_supported?(node.expression)
                         when AST::ArrayLiteral
                             nodes_supported?(node.elements)

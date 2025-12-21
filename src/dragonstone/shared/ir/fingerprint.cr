@@ -82,7 +82,7 @@ module Dragonstone
                     io << ","
                     describe_sequence(node.block, io)
                     io << ")"
-                when AST::DebugPrint
+                when AST::DebugEcho
                     io << "Debug("
                     describe_node(node.expression, io)
                     io << ")"

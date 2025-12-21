@@ -1,7 +1,34 @@
 use "../strings/strings_build/module"
-use "./proc/io"
 
 module IO
+    # File Descriptor Constants
+    con STDIN  = 0
+    con STDOUT = 1
+    con STDERR = 2
+
+    # Wrapper for unistd::fsync
+    def sync(fd: int)
+        ffi.call_c("fsync", [fd])
+    end
+
+    # Wrapper for unistd::write
+    # writes 'length' bytes from 'buffer' to 'fd'
+    def write(fd: int, buffer: str, length: int)
+        ffi.call_c("write", [fd, buffer, length])
+    end
+
+    # Wrapper for stdio::getchar
+    # reads a single character code from stdin
+    def get_char
+        ffi.call_c("getchar", [])
+    end
+
+    # Wrapper for stdio::chr
+    # Helper to convert int to char via FFI.
+    def to_char(code: int)
+        ffi.call_c("chr", [code])
+    end
+
     class Stream
         property fd: int
 
@@ -10,12 +37,23 @@ module IO
         end
 
         # Write string directly to the file descriptor
-        def eecho(content: str)
+        def eecholn(content: str)
             IO.write(@fd, content, content.length)
         end
 
-        def println(content: str)
-            eecho(content + "\n")
+        # Newline-terminated output.
+        def echoln(content: str)
+            eecholn(content + "\n")
+        end
+
+        # Debug helpers for stream output.
+        # These do not include expression source (unlike `e!`), but are useful for inline progress/errors.
+        def debug(value)
+            eecholn("#{value}\n")
+        end
+
+        def debug_inline(value)
+            eecholn("#{value}")
         end
 
         def flush

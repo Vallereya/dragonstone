@@ -40,7 +40,9 @@ module Dragonstone
             :WHILE, 
             :PUTS, 
             :ECHO,
-            :DEBUG_PRINT
+            :EECHO,
+            :DEBUG_ECHO,
+            :DEBUG_EECHO
         ]
 
         ASSIGNMENT_TOKENS = [
@@ -254,8 +256,12 @@ module Dragonstone
                 parse_expression_statement
             when :ECHO
                 parse_keyword_method_call
-            when :DEBUG_PRINT
-                parse_debug_print
+            when :EECHO
+                parse_keyword_method_call
+            when :DEBUG_ECHO
+                parse_debug_echo
+            when :DEBUG_EECHO
+                parse_debug_eecho
             when :IF
                 parse_if_statement
             when :UNLESS
@@ -429,10 +435,16 @@ module Dragonstone
             AST::InstanceVariableDeclaration.new(token.value.as(String), type_annotation, location: token.location)
         end
 
-        private def parse_debug_print : AST::Node
-            token = expect(:DEBUG_PRINT)
+        private def parse_debug_echo : AST::Node
+            token = expect(:DEBUG_ECHO)
             expression = parse_expression
-            AST::DebugPrint.new(expression, location: token.location)
+            AST::DebugEcho.new(expression, location: token.location)
+        end
+
+        private def parse_debug_eecho : AST::Node
+            token = expect(:DEBUG_EECHO)
+            expression = parse_expression
+            AST::DebugEcho.new(expression, location: token.location)
         end
 
         private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
@@ -994,6 +1006,12 @@ module Dragonstone
                     left = AST::IndexAccess.new(left, index, nil_safe: nil_safe, location: bracket_token.location)
                 when :DOT
                     advance
+                    name, arguments, location = parse_dot_io_call(left)
+                    if name
+                        left = AST::MethodCall.new(name, arguments, left, location: location)
+                        next
+                    end
+
                     method_token = expect_method_name
                     name = method_token.value.as(String)
                     arguments = [] of AST::Node
@@ -1026,6 +1044,74 @@ module Dragonstone
                 end
             end
             left
+        end
+
+        private def parse_dot_io_call(receiver : AST::Node) : Tuple(String?, Array(AST::Node), Location?)
+            token = current_token
+            return {nil, [] of AST::Node, nil} unless io_dot_method_token?(token)
+
+            name = io_dot_method_name(token)
+            location = token.location
+            advance
+
+            arguments = if current_token.type == :LPAREN
+                parse_argument_list
+            else
+                parse_implicit_argument_list
+            end
+
+            {name, arguments, location}
+        end
+
+        private def io_dot_method_token?(token : Token) : Bool
+            case token.type
+            when :ECHO
+                token.value == "echo"
+            when :EECHO
+                token.value == "eecho"
+            when :DEBUG_ECHO
+                token.value == "e!"
+            when :DEBUG_EECHO
+                token.value == "ee!"
+            else
+                false
+            end
+        end
+
+        private def io_dot_method_name(token : Token) : String
+            case token.type
+            when :ECHO
+                # `stdout.echo "..."` becomes `stdout.echoln("...")` under the hood.
+                "echoln"
+            when :EECHO
+                # `stdout.eecho "..."` becomes `stdout.eecholn("...")` under the hood.
+                "eecholn"
+            when :DEBUG_ECHO
+                token.value == "e!" ? "debug_inline" : "debug"
+            when :DEBUG_EECHO
+                token.value == "ee!" ? "debug_inline" : "debug"
+            else
+                token.value.as(String)
+            end
+        end
+
+        private def parse_implicit_argument_list : Array(AST::Node)
+            arguments = [] of AST::Node
+
+            while !argument_terminator?(current_token)
+                break if assignment_ahead?
+                break if current_token.type == :DO || current_token.type == :LBRACE
+
+                arguments << parse_expression
+
+                if current_token.type == :COMMA
+                    advance
+                else
+                    break
+                end
+            end
+
+            arguments
         end
 
         private def parse_primary : AST::Node

@@ -21,7 +21,7 @@ describe "Native evaluator" do
             :+,
             AST::BinaryOp.new(AST::Literal.new(3_i64), :*, AST::Literal.new(4_i64))
         )
-        debug = AST::DebugPrint.new(expression)
+        debug = AST::DebugEcho.new(expression)
         statements = [] of AST::Node
         statements << debug
         interpreter = evaluate_statements(statements)

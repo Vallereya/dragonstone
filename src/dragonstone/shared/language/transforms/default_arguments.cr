@@ -135,8 +135,8 @@ module Dragonstone
             AST::BeginExpression.new(body, rescue_clauses, else_block: else_block, ensure_block: ensure_block, location: node.location)
           when AST::RaiseExpression
             AST::RaiseExpression.new(node.expression.try { |v| rewrite_node(v, defaults) }, location: node.location)
-          when AST::DebugPrint
-            AST::DebugPrint.new(rewrite_node(node.expression, defaults), location: node.location)
+          when AST::DebugEcho
+            AST::DebugEcho.new(rewrite_node(node.expression, defaults), location: node.location)
           when AST::FunctionDef
             body = node.body.map { |n| rewrite_node(n, defaults) }
             rescues = node.rescue_clauses.map do |clause|

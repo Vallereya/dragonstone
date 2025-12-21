@@ -33,7 +33,7 @@ module Dragonstone
         SHL             = 32
         SHR             = 33
         FLOOR_DIV       = 34
-        CMP             = 37    # [CMP]                                                    -> pop rhs, pop lhs, push -1/0/1
+        CMP             = 37    # [CMP]                                                     -> pop rhs, pop lhs, push -1/0/1
 
         # Control Flow
         JMP             = 35    # [JMP,  target_index]
@@ -41,7 +41,7 @@ module Dragonstone
 
         # IO / Misc
         ECHO            = 40    # [ECHO, argc]                                              -> consume argc items, emit line, push nil
-        DEBUG_PRINT     = 52    # [DEBUG_PRINT, const_index]                                -> format top of stack with const string
+        DEBUG_ECHO      = 52    # [DEBUG_ECHO, const_index]                                 -> format top of stack with const string
         TYPEOF          = 53    # TYPEOF                                                    -> replace top of stack with its type name string
 
         # Composite / Objects
@@ -53,7 +53,7 @@ module Dragonstone
         MAKE_TUPLE      = 71    # [MAKE_TUPLE, count]                                       -> pop count items -> push tuple
         MAKE_NAMED_TUPLE = 72   # [MAKE_NAMED_TUPLE, count]                                 -> pop count * 2 items -> push named tuple
         STORE_INDEX     = 73    # STORE_INDEX                                               -> pop value, pop index, pop object -> assign
-        LOAD_CONST_PATH = 74    # [LOAD_CONST_PATH, const_index]                             -> resolve constant path segments stored in consts[const_index]
+        LOAD_CONST_PATH = 74    # [LOAD_CONST_PATH, const_index]                            -> resolve constant path segments stored in consts[const_index]
         LOAD_IVAR       = 75    # [LOAD_IVAR, name_index]                                   -> load @ivar from current self
         STORE_IVAR      = 76    # [STORE_IVAR, name_index]                                  -> store @ivar on current self
         PUSH_HANDLER    = 77    # [PUSH_HANDLER, rescue_ip, ensure_ip]                      -> push exception handler
@@ -95,10 +95,10 @@ module Dragonstone
         DEFINE_TYPE_ALIAS = 68  # [DEFINE_TYPE_ALIAS, name_index, type_const]
         CHECK_TYPE      = 69    # [CHECK_TYPE, type_const]                                  -> ensure top-of-stack matches type
         RETRY           = 95    # RETRY                                                     -> restart current begin/rescue block
-        DEFINE_SINGLETON_METHOD = 96 # DEFINE_SINGLETON_METHOD                               -> pop function and receiver, attach method to receiver
-        LOAD_ARGV        = 97   # LOAD_ARGV                                                 -> push argv array
-        INVOKE_SUPER     = 98   # [INVOKE_SUPER, argc]                                      -> invoke superclass method of current callable
+        DEFINE_SINGLETON_METHOD = 96 # DEFINE_SINGLETON_METHOD                              -> pop function and receiver, attach method to receiver
+        LOAD_ARGV       = 97    # LOAD_ARGV                                                 -> push argv array
+        INVOKE_SUPER    = 98    # [INVOKE_SUPER, argc]                                      -> invoke superclass method of current callable
         INVOKE_SUPER_BLOCK = 99 # [INVOKE_SUPER_BLOCK, argc]                                -> invoke superclass method with explicit block
-        POW             = 100  # POW                                                       -> pop rhs, pop lhs, push lhs ** rhs
+        POW             = 100   # POW                                                       -> pop rhs, pop lhs, push lhs ** rhs
     end
 end

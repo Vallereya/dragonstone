@@ -501,7 +501,7 @@ static VALUE ds_visit_interpolated_string(ds_interp_t *st, VALUE node) {
     return out;
 }
 
-static VALUE ds_visit_debug_print(ds_interp_t *st, VALUE node) {
+static VALUE ds_visit_debug_echo(ds_interp_t *st, VALUE node) {
     VALUE expr_node = rb_funcall(node, SYM2ID(sym_expression), 0);
     VALUE value = ds_visit(st, expr_node);
     VALUE formatted = ds_format_value(st, value);
@@ -810,7 +810,7 @@ static VALUE ds_visit_node(ds_interp_t *st, VALUE node) {
     if (strstr(klass, "AST::Assignment"))          return ds_visit_assignment(st, node);
     if (strstr(klass, "AST::BinaryOp"))            return ds_visit_binary(st, node);
     if (strstr(klass, "AST::MethodCall"))          return ds_visit_method_call(st, node);
-    if (strstr(klass, "AST::DebugPrint"))          return ds_visit_debug_print(st, node);
+    if (strstr(klass, "AST::DebugEcho"))          return ds_visit_debug_echo(st, node);
     if (strstr(klass, "AST::ArrayLiteral"))        return ds_visit_array_literal(st, node);
     if (strstr(klass, "AST::IndexAccess"))         return ds_visit_index_access(st, node);
     if (strstr(klass, "AST::InterpolatedString"))  return ds_visit_interpolated_string(st, node);
