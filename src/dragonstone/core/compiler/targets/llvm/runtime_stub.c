@@ -1786,6 +1786,43 @@ void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
 void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, true); }
 void *dragonstone_runtime_to_string(void *value) { return ds_value_to_string(value); }
 
+static char *ds_debug_inline_source = NULL;
+static char *ds_debug_inline_value = NULL;
+
+static void ds_debug_append(char **buffer, const char *part) {
+    if (!part) part = "";
+
+    if (!*buffer) {
+        *buffer = ds_strdup(part);
+        return;
+    }
+
+    size_t lhs_len = strlen(*buffer);
+    size_t rhs_len = strlen(part);
+    size_t new_len = lhs_len + 3 + rhs_len + 1; /* " + " */
+    char *next = (char *)ds_alloc(new_len);
+    memcpy(next, *buffer, lhs_len);
+    memcpy(next + lhs_len, " + ", 3);
+    memcpy(next + lhs_len + 3, part, rhs_len);
+    next[new_len - 1] = '\0';
+    *buffer = next;
+}
+
+void dragonstone_runtime_debug_accum(void *source, void *value) {
+    const char *source_str = source ? (const char *)source : "";
+    char *value_str = (char *)dragonstone_runtime_value_display(value);
+    ds_debug_append(&ds_debug_inline_source, source_str);
+    ds_debug_append(&ds_debug_inline_value, value_str ? value_str : "");
+}
+
+void dragonstone_runtime_debug_flush(void) {
+    if (!ds_debug_inline_source || !ds_debug_inline_value) return;
+
+    printf("%s # -> %s\n", ds_debug_inline_source, ds_debug_inline_value);
+    ds_debug_inline_source = NULL;
+    ds_debug_inline_value = NULL;
+}
+
 void *dragonstone_runtime_typeof(void *value) {
     if (!value) return ds_strdup("Nil");
     if (!ds_is_boxed(value)) return ds_strdup("String");

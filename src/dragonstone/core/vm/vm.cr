@@ -67,6 +67,9 @@ module Dragonstone
         record Handler, rescue_ip : Int32?, ensure_ip : Int32?, body_ip : Int32?, stack_depth : Int32, frame_depth : Int32
         record LoopContext, condition_ip : Int32, body_ip : Int32, exit_ip : Int32, stack_depth : Int32
 
+        @debug_inline_sources = [] of String
+        @debug_inline_values = [] of String
+
         private def truthy?(value : Bytecode::Value) : Bool
             !(value.nil? || value == false)
         end
@@ -1023,6 +1026,7 @@ module Dragonstone
                 begin
                     case opcode
                 when OPC::HALT
+                    flush_debug_inline
                     return @stack.empty? ? nil : pop
                 when OPC::NOP
                     # nil
@@ -1178,7 +1182,15 @@ module Dragonstone
                     argc = fetch_byte
                     args = pop_values(argc)
                     line = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
                     emit_output(line)
+                    push(nil)
+                when OPC::EECHO
+                    argc = fetch_byte
+                    args = pop_values(argc)
+                    text = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
+                    emit_output_inline(text)
                     push(nil)
                 when OPC::TYPEOF
                     value = pop
@@ -1187,7 +1199,15 @@ module Dragonstone
                     source_idx = fetch_byte
                     source = current_code.consts[source_idx].to_s
                     value = pop
+                    flush_debug_inline
                     emit_output("#{source} # -> #{inspect_value(value)}")
+                    push(value)
+                when OPC::DEBUG_EECHO
+                    source_idx = fetch_byte
+                    source = current_code.consts[source_idx].to_s
+                    value = pop
+                    @debug_inline_sources << source
+                    @debug_inline_values << inspect_value(value)
                     push(value)
                 when OPC::CONCAT
                     b, a = pop, pop
@@ -1958,6 +1978,21 @@ module Dragonstone
             @stdout_io << text
             @stdout_io << "\n"
             puts text if @log_to_stdout
+        end
+
+        private def emit_output_inline(text : String) : Nil
+            @stdout_io << text
+            print text if @log_to_stdout
+        end
+
+        private def flush_debug_inline : Nil
+            return if @debug_inline_sources.empty?
+
+            source = @debug_inline_sources.join(" + ")
+            value = @debug_inline_values.join(" + ")
+            @debug_inline_sources.clear
+            @debug_inline_values.clear
+            emit_output("#{source} # -> #{value}")
         end
 
         private def add(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value

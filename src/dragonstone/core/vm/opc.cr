@@ -41,7 +41,9 @@ module Dragonstone
 
         # IO / Misc
         ECHO            = 40    # [ECHO, argc]                                              -> consume argc items, emit line, push nil
+        EECHO           = 101   # [EECHO, argc]                                             -> consume argc items, emit (no newline), push nil
         DEBUG_ECHO      = 52    # [DEBUG_ECHO, const_index]                                 -> format top of stack with const string
+        DEBUG_EECHO     = 102   # [DEBUG_EECHO, const_index]                                -> accumulate debug output (no newline)
         TYPEOF          = 53    # TYPEOF                                                    -> replace top of stack with its type name string
 
         # Composite / Objects

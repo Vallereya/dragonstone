@@ -65,10 +65,14 @@ module Dragonstone
         end
 
         def visit_debug_echo(node : AST::DebugEcho) : RuntimeValue?
-            source = node.to_source
             value = node.expression.accept(self)
-            output_text = "#{source} # -> #{format_value(value)}"
-            append_output(output_text)
+
+            if node.inline
+                append_debug_inline(node.to_source, format_value(value))
+                return nil
+            end
+
+            append_output("#{node.to_source} # -> #{format_value(value)}")
             nil
         end
 

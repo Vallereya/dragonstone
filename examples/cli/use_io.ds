@@ -15,9 +15,9 @@ stdout.echo "This is raw output to file descriptor 1."
 stderr.echo "This is an error message on file descriptor 2."
 
 # Reading from stdin (FD 0)
-stdout.eecho "Enter your name: "
+stdout.eecho "\nEnter your name: "
 name = stdin.read
-stdout.echo "Hello, #{name}"
+stdout.echo "Hello, #{name}! Welcome to Dragonstone.\n"
 
 # Using flush to ensure output is written immediately.
 stdout.eecho "Starting operation..."

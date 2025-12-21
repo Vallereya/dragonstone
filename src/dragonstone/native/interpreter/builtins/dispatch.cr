@@ -563,6 +563,14 @@ module Dragonstone
                 append_output(values.map { |v| display_value(v) }.join(" "))
                 nil
 
+            when "eecho"
+                if block_value
+                    runtime_error(InterpreterError, "eecho does not accept a block", node)
+                end
+                values = arg_nodes.map { |arg| arg.accept(self) }
+                append_output_inline(values.map { |v| display_value(v) }.join(" "))
+                nil
+
             when "typeof"
                 if block_value
                     runtime_error(InterpreterError, "typeof does not accept a block", node)

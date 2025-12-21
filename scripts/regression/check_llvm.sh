@@ -26,6 +26,7 @@ run ./examples/variables/strings.ds
 run ./examples/variables/typeof.ds
 run ./examples/variables/instance.ds
 run ./examples/variables/debug.ds
+run ./examples/variables/echo.ds
 
 run ./examples/math/addition.ds
 run ./examples/math/subtraction.ds

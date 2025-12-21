@@ -136,7 +136,7 @@ module Dragonstone
           when AST::RaiseExpression
             AST::RaiseExpression.new(node.expression.try { |v| rewrite_node(v, defaults) }, location: node.location)
           when AST::DebugEcho
-            AST::DebugEcho.new(rewrite_node(node.expression, defaults), location: node.location)
+            AST::DebugEcho.new(rewrite_node(node.expression, defaults), node.inline, location: node.location)
           when AST::FunctionDef
             body = node.body.map { |n| rewrite_node(n, defaults) }
             rescues = node.rescue_clauses.map do |clause|

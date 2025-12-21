@@ -129,7 +129,7 @@ module Dragonstone
                     add_token(:DEBUG_ECHO, "e!", @line, @column, 2)
                     advance(2)
                 elsif char == 'e' && peek_char == 'e' && peek_char(2) == '!'
-                    add_token(:DEBUG_ECHO, "ee!", @line, @column, 3)
+                    add_token(:DEBUG_EECHO, "ee!", @line, @column, 3)
                     advance(3)
                 elsif char == 'p' && peek_char == '!'
                     add_token(:DEBUG_ECHO, "p!", @line, @column, 2)

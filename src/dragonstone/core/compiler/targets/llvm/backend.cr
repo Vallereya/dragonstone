@@ -143,6 +143,8 @@ module Dragonstone
               eq: String,
               ne: String,
               is_truthy: String,
+              debug_accum: String,
+              debug_flush: String,
             )
 
             @string_counter = 0
@@ -261,6 +263,8 @@ module Dragonstone
                 eq: "dragonstone_runtime_eq",
                 ne: "dragonstone_runtime_ne",
                 is_truthy: "dragonstone_runtime_is_truthy",
+                debug_accum: "dragonstone_runtime_debug_accum",
+                debug_flush: "dragonstone_runtime_debug_flush",
               )
             end
 
@@ -884,6 +888,8 @@ module Dragonstone
               io << "declare void @#{@runtime[:yield_missing_block]}()\n"
               io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
               io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
+              io << "declare void @#{@runtime[:debug_accum]}(i8*, i8*)\n"
+              io << "declare void @#{@runtime[:debug_flush]}()\n"
               io << "declare i8* @#{@runtime[:type_of]}(i8*)\n"
               io << "declare i8* @#{@runtime[:ivar_get]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:ivar_set]}(i8*, i8*, i8*)\n"
@@ -1044,7 +1050,10 @@ module Dragonstone
 
               terminated = generate_block(ctx, top_level)
 
-              ctx.io << "  ret i32 0\n" unless terminated
+              unless terminated
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+                ctx.io << "  ret i32 0\n"
+              end
 
               emit_postamble(ctx)
 
@@ -1521,9 +1530,11 @@ module Dragonstone
 
                 value = ensure_value_type(ctx, value, ctx.return_type)
                 emit_ensure_chain(ctx)
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 ctx.io << "  ret #{value[:type]} #{value[:ref]}\n"
               else
                 emit_ensure_chain(ctx)
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 emit_default_return(ctx)
               end
               true
@@ -1641,6 +1652,15 @@ module Dragonstone
 
             private def generate_debug_echo(ctx : FunctionContext, node : AST::DebugEcho) : ValueRef
               value = generate_expression(ctx, node.expression)
+
+              if node.inline
+                source_ptr = materialize_string_pointer(ctx, node.expression.to_source)
+                boxed = box_value(ctx, value)
+                ctx.io << "  call void @#{@runtime[:debug_accum]}(i8* #{source_ptr}, i8* #{boxed[:ref]})\n"
+                return value
+              end
+
+              ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
               prefix_str = "#{node.expression.to_source} # -> "
               format_ptr = materialize_string_pointer(ctx, "%s")
               prefix_ptr = materialize_string_pointer(ctx, prefix_str)
@@ -3322,8 +3342,16 @@ module Dragonstone
               if call.name == "echo"
                 raise "echo expects exactly one argument" unless args.size == 1
                 raise "echo does not accept a block" if block_node
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 arg_val = generate_expression(ctx, args.first)
                 emit_echo(ctx, arg_val, inspect: false)
+                return value_ref("i8*", "null", constant: true)
+              elsif call.name == "eecho"
+                raise "eecho expects exactly one argument" unless args.size == 1
+                raise "eecho does not accept a block" if block_node
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+                arg_val = generate_expression(ctx, args.first)
+                emit_eecho(ctx, arg_val, inspect: false)
                 return value_ref("i8*", "null", constant: true)
               elsif call.name == "typeof"
                 raise "typeof expects exactly one argument" unless args.size == 1
@@ -3655,6 +3683,32 @@ module Dragonstone
                 ctx.io << "  call i32 @puts(i8* %#{reg})\n"
               else
                 raise "echo currently supports strings, integers, booleans, or doubles"
+              end
+            end
+
+            private def emit_eecho(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
+              case value[:type]
+              when "i8*"
+                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
+                format_ptr = materialize_string_pointer(ctx, "%s")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{display[:ref]})\n"
+              when "i32", "i64"
+                coerced = value[:type] == "i64" ? value : extend_to_i64(ctx, value)
+                format_ptr = materialize_string_pointer(ctx, "%lld")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i64 #{coerced[:ref]})\n"
+              when "double"
+                format_ptr = materialize_string_pointer(ctx, "%g")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "i1"
+                true_ptr = materialize_string_pointer(ctx, "true")
+                false_ptr = materialize_string_pointer(ctx, "false")
+                reg = ctx.fresh("boolstr")
+                ctx.io << "  %#{reg} = select i1 #{value[:ref]}, i8* #{true_ptr}, i8* #{false_ptr}\n"
+                format_ptr = materialize_string_pointer(ctx, "%s")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* %#{reg})\n"
+              else
+                raise "eecho currently supports strings, integers, booleans, or doubles"
               end
             end
 

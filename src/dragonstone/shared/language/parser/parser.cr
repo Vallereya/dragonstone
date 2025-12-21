@@ -438,13 +438,13 @@ module Dragonstone
         private def parse_debug_echo : AST::Node
             token = expect(:DEBUG_ECHO)
             expression = parse_expression
-            AST::DebugEcho.new(expression, location: token.location)
+            AST::DebugEcho.new(expression, false, location: token.location)
         end
 
         private def parse_debug_eecho : AST::Node
             token = expect(:DEBUG_EECHO)
             expression = parse_expression
-            AST::DebugEcho.new(expression, location: token.location)
+            AST::DebugEcho.new(expression, true, location: token.location)
         end
 
         private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
@@ -1087,9 +1087,9 @@ module Dragonstone
                 # `stdout.eecho "..."` becomes `stdout.eecholn("...")` under the hood.
                 "eecholn"
             when :DEBUG_ECHO
-                token.value == "e!" ? "debug_inline" : "debug"
+                "debug"
             when :DEBUG_EECHO
-                token.value == "ee!" ? "debug_inline" : "debug"
+                "debug_inline"
             else
                 token.value.as(String)
             end

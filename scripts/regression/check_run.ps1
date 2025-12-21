@@ -32,6 +32,7 @@ $files = @(
     ".\examples\variables\typeof.ds",
     ".\examples\variables\instance.ds",
     ".\examples\variables\debug.ds",
+    ".\examples\variables\echo.ds",
 
     ".\examples\math\addition.ds",
     ".\examples\math\subtraction.ds",

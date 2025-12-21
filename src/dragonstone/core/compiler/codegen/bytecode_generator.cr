@@ -472,6 +472,11 @@ module Dragonstone
                 args.each { |arg| compile_expression(arg) }
                 emit(OPC::ECHO, args.size)
 
+            when "eecho"
+                raise ArgumentError.new("eecho does not accept a block") if block_node
+                args.each { |arg| compile_expression(arg) }
+                emit(OPC::EECHO, args.size)
+
             when "typeof"
                 raise ArgumentError.new("typeof does not accept a block") if block_node
                 args.each { |arg| compile_expression(arg) }
@@ -507,7 +512,7 @@ module Dragonstone
         private def compile_debug_echo(node : AST::DebugEcho)
             source_idx = const_index(node.to_source)
             compile_expression(node.expression)
-            emit(OPC::DEBUG_ECHO, source_idx)
+            emit(node.inline ? OPC::DEBUG_EECHO : OPC::DEBUG_ECHO, source_idx)
         end
 
         private def compile_unless(node : AST::UnlessStatement)
