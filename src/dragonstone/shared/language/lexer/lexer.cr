@@ -574,13 +574,12 @@ module Dragonstone
                     when "true" then :TRUE
                     when "false" then :FALSE
                     when "nil" then :NIL
-                    when "elseif" then :ELSIF
                     when "echo", "puts" then :ECHO
                     when "eecho" then :EECHO
                     when "argv" then :ARGV
                     when "if" then :IF
                     when "else" then :ELSE
-                    when "elsif" then :ELSIF
+                    when "elsif", "elseif" then :ELSIF
                     when "end" then :END
                     when "while" then :WHILE
                     when "do" then :DO

@@ -1579,6 +1579,8 @@ module Dragonstone
                 generate_block_literal(ctx, node)
               when AST::ParaLiteral
                 generate_para_literal(ctx, node)
+              when AST::FunctionLiteral
+                generate_function_literal(ctx, node)
               when AST::BeginExpression
                 generate_begin_expression(ctx, node)
               when AST::ConstantPath
@@ -2072,6 +2074,14 @@ module Dragonstone
 
             private def generate_para_literal(ctx : FunctionContext, node : AST::ParaLiteral) : ValueRef
               generate_block_literal_impl(ctx, node.typed_parameters, node.body)
+            end
+
+            private def generate_function_literal(ctx : FunctionContext, node : AST::FunctionLiteral) : ValueRef
+              body = node.body
+              unless node.rescue_clauses.empty?
+                body = [AST::BeginExpression.new(node.body, node.rescue_clauses, location: node.location)] of AST::Node
+              end
+              generate_block_literal_impl(ctx, node.typed_parameters, body)
             end
 
             private def generate_attribute_assignment(ctx : FunctionContext, node : AST::AttributeAssignment) : ValueRef

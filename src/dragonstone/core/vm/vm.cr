@@ -1475,6 +1475,7 @@ module Dragonstone
 
         private def resolve_variable(name_idx : Int32, name : String) : Bytecode::Value
             @pending_self = nil
+            return current_self if name == "self"
             frame = current_frame
             if locals = frame.locals
                 if defined = frame.locals_defined
@@ -1621,14 +1622,16 @@ module Dragonstone
                     if defined = frame.locals_defined
                         if idx < defined.size && defined[idx]
                             slot = locals[idx]?
-                            return slot.nil? ? nil : slot
+                            return slot unless slot.nil?
+                            return nil unless current_container
                         end
                     end
                 end
                 ensure_global_capacity(idx)
                 if @global_defined[idx]
                     slot = @global_slots[idx]?
-                    return slot.nil? ? nil : slot
+                    return slot unless slot.nil?
+                    return nil unless current_container
                 end
             end
 

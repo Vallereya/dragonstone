@@ -8,15 +8,16 @@
 
 ]#
 
+# Example One:
 class Person
     con happy = true # Constant at class level, optional immutability.
 
-    sad = false
+    con sad = false
 
     def greet
         if happy
             echo "Hello!"
-        else sad
+        elsif sad
             echo "Oh..."
         end
     end
@@ -24,3 +25,17 @@ end
 
 person = Person.new
 person.greet
+
+# Example Two:
+class Celsius
+    def initialize(fahrenheit)
+        @fahrenheit = fahrenheit
+    end
+
+    def to_celsius
+        return (@fahrenheit - 32) * 5 // 9
+    end
+end
+
+temp = Celsius.new(100)
+echo "Temperature in Celsius: #{temp.to_celsius()}°C"
