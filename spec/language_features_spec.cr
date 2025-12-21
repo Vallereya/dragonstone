@@ -461,6 +461,19 @@ DS
         end
     end
 
+    it "strips leading and trailing whitespace" do
+        source = <<-DS
+s1 = "  Dragonstone  "
+echo s1.strip
+s2 = "\\tHello\\n"
+echo s2.strip
+s3 = "   "
+echo "empty:\#{s3.strip}"
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "Dragonstone\nHello\nempty:\n"
+    end
+
     it "supports abstract classes across native and core backends" do
         source = <<-DS
 abstract class Animal

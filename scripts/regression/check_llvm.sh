@@ -84,6 +84,7 @@ run ./examples/other/display.ds
 run ./examples/other/inspect.ds
 run ./examples/other/shifts.ds
 run ./examples/other/slice.ds
+run ./examples/other/strip.ds
 run ./examples/other/singleton.ds
 run ./examples/other/advanced.ds
 run ./examples/other/inject.ds

@@ -2621,6 +2621,9 @@ module Dragonstone
                 when "downcase"
                     raise ArgumentError.new("String##{method} does not accept a block") if block_value
                     receiver.downcase
+                when "strip"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.strip
                 when "length", "size"
                     raise ArgumentError.new("String##{method} does not accept a block") if block_value
                     receiver.size.to_i64

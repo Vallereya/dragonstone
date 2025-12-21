@@ -84,6 +84,7 @@ $files = @(
     ".\examples\other\inspect.ds",
     ".\examples\other\shifts.ds",
     ".\examples\other\slice.ds",
+    ".\examples\other\strip.ds",
     ".\examples\other\singleton.ds",
     ".\examples\other\advanced.ds",
     ".\examples\other\inject.ds",

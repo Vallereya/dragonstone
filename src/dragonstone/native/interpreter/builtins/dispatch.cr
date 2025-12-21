@@ -1731,6 +1731,10 @@ module Dragonstone
                 reject_block(block_value, "String##{name}", node)
                 string.downcase
 
+            when "strip"
+                reject_block(block_value, "String##{name}", node)
+                string.strip
+
             when "reverse"
                 reject_block(block_value, "String##{name}", node)
                 string.reverse

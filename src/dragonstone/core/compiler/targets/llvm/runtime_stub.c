@@ -301,6 +301,20 @@ static char *ds_slice_string(const char *src, int64_t start, int64_t length) {
     return buf;
 }
 
+static char *ds_strip_string(const char *src) {
+    size_t len = strlen(src);
+    size_t start = 0;
+    while (start < len && isspace((unsigned char)src[start])) start++;
+    if (start == len) return ds_strdup("");
+    size_t end = len;
+    while (end > start && isspace((unsigned char)src[end - 1])) end--;
+    size_t out_len = end - start;
+    char *buf = (char *)ds_alloc(out_len + 1);
+    memcpy(buf, src + start, out_len);
+    buf[out_len] = '\0';
+    return buf;
+}
+
 static void ds_constant_set(DSConstant **head, const char *name, void *value) {
     DSConstant *curr = *head;
     while (curr) {
@@ -901,6 +915,10 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
             char *copy = ds_strdup(str);
             for (int i = 0; copy[i]; i++) copy[i] = tolower(copy[i]);
             return copy;
+        }
+
+        if (strcmp(method, "strip") == 0) {
+            return ds_strip_string(str);
         }
 
         if (strcmp(method, "slice") == 0) {
