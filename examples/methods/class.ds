@@ -1,0 +1,26 @@
+#[
+    Class Example
+]#
+
+#[
+
+    A Class to create and define objects.
+
+]#
+
+class Person
+    con happy = true # Constant at class level, optional immutability.
+
+    sad = false
+
+    def greet
+        if happy
+            echo "Hello!"
+        else sad
+            echo "Oh..."
+        end
+    end
+end
+
+person = Person.new
+person.greet

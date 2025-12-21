@@ -58,7 +58,9 @@ module Dragonstone
             while 
             do 
             def 
+            define
             fun 
+            function
             abstract
             module 
             class 
@@ -582,8 +584,8 @@ module Dragonstone
                     when "end" then :END
                     when "while" then :WHILE
                     when "do" then :DO
-                    when "def" then :DEF
-                    when "fun" then :FUN
+                    when "def", "define" then :DEF
+                    when "fun", "function" then :FUN
                     when "abstract" then :ABSTRACT
                     when "module" then :MODULE
                     when "class" then :CLASS

@@ -1,0 +1,70 @@
+#[
+    The `fun`/`function` as first-class citizens example.
+
+    The fun/function keyword defines a function object that
+    can be passed around. It is similar to lambdas or function
+    pointers in other languages.
+]#
+
+# First, a simple example of defining and calling a function object.
+add_something = fun(a, b)
+    return a + b
+end
+
+echo add_something.call(2, 3)
+
+# Dragonstone supports both `fun` and `function` keywords,
+# depending on user preference. They are interchangeable
+# and function identically.
+sub_something = function(a: int, b: int)
+    return a - b
+end
+
+echo sub_something.call(2, 3)
+echo "\n"
+
+# Next, some more advanced examples using function objects as definitions.
+# So , first thing define a reusable formatter using the 'fun' keyword.
+# This one is for shouting.
+fun shout(text)
+    return text + "!!!"
+end
+
+# Define another one, this one is for whispering.
+fun whisper(text)
+    return "(" + text + ")"
+end
+
+# A method that accepts a list of strings and a "formatter" function.
+def print_formatted(words, formatter)
+    words.each do |word|
+
+        # Call the passed function object
+        formatted = formatter.call(word)
+
+        echo formatted
+    end
+end
+
+names = ["Ringo", "Peet", "Jules"]
+
+# Pass the 'shout' function object.
+echo "Shouting Example:"
+echo "-------------------------"
+print_formatted(names, shout)
+echo "\n"
+
+# Pass the 'whisper' function object.
+echo "Whispering Example:"
+echo "-------------------------"
+print_formatted(names, whisper)
+echo "\n"
+
+# Define a 'fun' inline as an argument (very powerful pattern).
+echo "Custom/Anonymous Example:"
+echo "-------------------------"
+print_formatted(
+    names, fun(text) do
+        return ">> " + text + " <<"
+    end
+)

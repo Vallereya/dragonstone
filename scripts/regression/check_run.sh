@@ -57,7 +57,6 @@ FILES=(
     ./examples/collections/collections.ds
     ./examples/collections/para.ds
 
-    ./examples/methods/functions.ds
     ./examples/methods/loops.ds
     ./examples/methods/select.ds
     ./examples/methods/alias.ds
@@ -65,13 +64,15 @@ FILES=(
     ./examples/methods/with.ds
     ./examples/methods/extend.ds
     ./examples/methods/accessors.ds
-    ./examples/methods/classes.ds
     ./examples/methods/classes_abstract.ds
     ./examples/methods/constants.ds
     ./examples/methods/self.ds
     ./examples/methods/visibility.ds
     ./examples/methods/super.ds
     ./examples/methods/overloading.ds
+    ./examples/methods/fun.ds
+    ./examples/methods/class.ds
+    ./examples/methods/def.ds
 
     ./examples/handling/break.ds
     ./examples/handling/next.ds

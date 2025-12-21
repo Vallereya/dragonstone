@@ -1,9 +1,23 @@
 #[
-    Resolution Example
+    Scope Resolution Example
 ]#
 
 #[
-    Also has an example of con = constant.
+
+    Other definitions in dragonstone:
+        module          = module definition; For grouping methods/constants, namespaces, etc.
+        class           = class definition; For defining classes.
+        def/define      = method definition; For defining methods.
+        fun/function    = function definition; For defining functions.
+
+        con             = constants for immutability; "function-level" scope.
+        var             = variables for mutability; "function-level" scope.
+        fix             = constants for mutability; "block-level" scope.
+        let             = variables for immutability; "block-level" scope.
+        
+        @               = instance variables; limited to the specific instance of the class they belong to.
+        @@              = class instance variables; shared across all instances of the class they belong to.
+
 ]#
 
 module MyModule

@@ -1,0 +1,86 @@
+#[
+    The `def`/`define` Example
+]#
+
+#[
+    The `def`/`define` keyword defines a method within a class or module.
+    Methods are used to encapsulate behavior and can be called on instances
+    of classes or directly on modules (for module methods).
+]#
+
+# Example One, using `define` within a class:
+# Dragonstone supports both `def` and `define` keywords,
+# depending on user preference. They are interchangeable
+# and function identically.
+class Greeter
+    define initialize(name)
+        @name = name.upcase
+    end
+
+    define salute
+        echo "Hello #{@name}!"
+    end
+end
+
+g = Greeter.new("world")
+g.salute
+
+# Example Two, using simple `def`:
+def greet(name)
+    echo "Hello, #{name}!"
+end
+
+greet("Jules")
+greet("Ringo")
+
+# Example Three, def function with return value:
+def add(a, b)
+    return a + b
+end
+
+result = add(5, 3)
+e! result
+
+sum = add(10, 20)
+echo sum
+
+# Example Four, def function with multiple statements:
+def calculate(x, y)
+    sum = x + y
+    product = x * y
+    e! sum
+    e! product
+    return product
+end
+
+final = calculate(4, 7)
+e! final
+
+# Example Five, def function with nested function calls:
+# With some combined functions.
+def double(n)
+    return n * 2
+end
+
+def triple(n)
+    return n * 3
+end
+
+x = 5
+
+doubled = double(x)
+tripled = triple(x)
+
+e! doubled
+e! tripled
+
+combined = add(double(3), triple(2))
+e! combined
+
+# Example Six, def function without explicit return.
+def print_twice(msg)
+    echo msg
+    echo msg
+end
+
+print_twice("Hello!")

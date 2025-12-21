@@ -48,7 +48,7 @@ run ./examples/collections/bag.ds
 run ./examples/collections/collections.ds
 run ./examples/collections/para.ds
 
-run ./examples/methods/functions.ds
+run ./examples/methods/fun.ds
 run ./examples/methods/loops.ds
 run ./examples/methods/select.ds
 run ./examples/methods/alias.ds
@@ -56,13 +56,14 @@ run ./examples/methods/do.ds
 run ./examples/methods/with.ds
 run ./examples/methods/extend.ds
 run ./examples/methods/accessors.ds
-run ./examples/methods/classes.ds
+run ./examples/methods/class.ds
 run ./examples/methods/classes_abstract.ds
 run ./examples/methods/constants.ds
 run ./examples/methods/self.ds
 run ./examples/methods/visibility.ds
 run ./examples/methods/super.ds
 run ./examples/methods/overloading.ds
+run ./examples/methods/def.ds
 
 run ./examples/handling/break.ds
 run ./examples/handling/next.ds
