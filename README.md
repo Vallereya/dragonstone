@@ -322,14 +322,6 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     greet("Jules")
 ```
 
-```crystal
-    define greet(name)
-        echo "Hello, #{name}!"
-    end
-
-    greet("Jules")
-```
-
 ###### Example of `fun`, which is a first-class citizen and a function object that can be passed around. Dragonstone also supports both `fun` and `function` for preference.
 ```crystal
     # Store a function object in a variable.
