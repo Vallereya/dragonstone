@@ -29,6 +29,9 @@ module Dragonstone
             :RETRY,
             :RAISE,
             :CON, 
+            :VAR,
+            :LET,
+            :FIX,
             :ABSTRACT,
             :DEF, 
             :CLASS, 
@@ -289,6 +292,12 @@ module Dragonstone
                 parse_abstract_prefixed_statement
             when :CON
                 parse_constant_declaration
+            when :VAR
+                parse_variable_declaration
+            when :LET
+                parse_let_declaration
+            when :FIX
+                parse_fix_declaration
             when :ENUM
                 parse_enum_declaration
             when :STRUCT
@@ -350,6 +359,77 @@ module Dragonstone
             value = parse_expression
             location = name_token.location || keyword.location
             AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
+        end
+
+        private def parse_variable_declaration : AST::Node
+            keyword = expect(:VAR)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with var", name_token)
+            end
+
+            if constant_name?(name)
+                error("var declarations must start with a lowercase letter (use 'con' or a lowercase name)", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::Assignment.new(name, value, operator: nil, type_annotation: type_annotation, location: location)
+        end
+
+        private def parse_let_declaration : AST::Node
+            keyword = expect(:LET)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with let", name_token)
+            end
+
+            if constant_name?(name)
+                error("let declarations must start with a lowercase letter (use 'fix' or 'con' for constants)", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::LetDeclaration.new(name, value, type_annotation, location: location)
+        end
+
+        private def parse_fix_declaration : AST::Node
+            keyword = expect(:FIX)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with fix", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::FixDeclaration.new(name, value, type_annotation, location: location)
         end
 
         private def parse_extend_statement : AST::Node

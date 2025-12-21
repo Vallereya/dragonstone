@@ -70,6 +70,9 @@ module Dragonstone
             nil 
             typeof 
             con 
+            var
+            let
+            fix
             unless 
             case 
             when 
@@ -591,6 +594,9 @@ module Dragonstone
                     when "return" then :RETURN
                     when "typeof" then :TYPEOF
                     when "con" then :CON
+                    when "var" then :VAR
+                    when "let" then :LET
+                    when "fix" then :FIX
                     when "unless" then :UNLESS
                     when "case" then :CASE
                     when "when" then :WHEN

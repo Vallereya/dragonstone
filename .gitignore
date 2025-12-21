@@ -24,6 +24,10 @@ cache
 cache/
 .cache
 .cache/
+tmp
+tmp/
+.tmp
+.tmp/
 
 # Ignore any IDE folders.
 .vscode

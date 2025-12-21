@@ -2,6 +2,40 @@ require "spec"
 require "../src/dragonstone"
 
 describe "language features" do
+    it "scopes let declarations to blocks" do
+        source = <<-DS
+x = 1
+if true
+    let x = 2
+    echo x
+end
+echo x
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n1\n"
+    end
+
+    it "prevents reassignment of let and fix bindings" do
+        result = Dragonstone.run("if true\n  let x = 1\n  x = 2\n  echo x\nend\n")
+        result.output.should eq "2\n"
+
+        expect_raises(Dragonstone::ConstantError) do
+            Dragonstone.run("if true\n  fix x = 1\n  x = 2\nend\n")
+        end
+    end
+
+    it "does not rewrite shadowed parameters for let bindings" do
+        source = <<-DS
+let x = 1
+def show(x)
+    echo x
+end
+show(5)
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "5\n"
+    end
+
     it "supports Array#empty? in the native backend" do
         result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
         result.output.should eq "false\n"
@@ -472,6 +506,17 @@ echo "empty:\#{s3.strip}"
 DS
         result = Dragonstone.run(source)
         result.output.should eq "Dragonstone\nHello\nempty:\n"
+    end
+
+    it "accepts var as explicit assignment" do
+        source = <<-DS
+x = 1
+var y = 2
+echo x
+echo y
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "1\n2\n"
     end
 
     it "supports abstract classes across native and core backends" do
