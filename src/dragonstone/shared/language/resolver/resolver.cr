@@ -102,20 +102,22 @@ module Dragonstone
     end
 
     # Expand a UseItem into concrete file paths.
-    def expand_use_item(item : AST::UseItem, base_dir : String) : Array(String)
+    def expand_use_item(item : AST::UseItem, base_dir : String, exclude_path : String? = nil) : Array(String)
       case item.kind
       when AST::UseItemKind::Paths
-        item.specs.flat_map { |spec| expand_pattern(spec, base_dir) }.uniq
+        paths = item.specs.flat_map { |spec| expand_pattern(spec, base_dir, exclude_path) }.uniq
+        exclude_path ? paths.reject { |p| p == exclude_path } : paths
       when AST::UseItemKind::From
-        [expand_single(item.from.not_nil!, base_dir)]
+        path = expand_single(item.from.not_nil!, base_dir, exclude_path)
+        exclude_path && path == exclude_path ? [] of String : [path]
       else
         raise "Unknown use item kind: #{item.kind}"
       end
     end
 
     private def visit(path : String, parents : Array(String))
-      return if graph[path]
       raise "Cyclic import: #{(parents + [path]).join(" -> ")}" if parents.includes?(path)
+      return if graph[path]
 
       normalized = read_source(path)
       processed_source, typed = Language::Directives.process_typed_directive(normalized.data)
@@ -129,8 +131,8 @@ module Dragonstone
       base_dir = base_directory(path)
 
       depend_paths = ast.use_decls.flat_map do |use_decl|
-        use_decl.items.flat_map { |item| expand_use_item(item, base_dir) }
-      end.uniq
+        use_decl.items.flat_map { |item| expand_use_item(item, base_dir, exclude_path: path) }
+      end.reject { |dep| dep == path }.uniq
 
       depend_paths.each do |dep|
         graph[path].not_nil!.deps << dep
@@ -143,8 +145,8 @@ module Dragonstone
     end
 
     private def visit_remote(url : String, parents : Array(String))
-      return if graph[url]
       raise "Cyclic import: #{(parents + [url]).join(" -> ")}" if parents.includes?(url)
+      return if graph[url]
 
       source_path = local_fallback_for_remote(url) || url
       normalized = read_source(source_path)
@@ -157,8 +159,8 @@ module Dragonstone
       base_dir = base_directory(source_path)
 
       depend_paths = ast.use_decls.flat_map do |use_decl|
-        use_decl.items.flat_map { |item| expand_use_item(item, base_dir) }
-      end.uniq
+        use_decl.items.flat_map { |item| expand_use_item(item, base_dir, exclude_path: url) }
+      end.reject { |dep| dep == url }.uniq
 
       depend_paths.each do |dep|
         graph[url].not_nil!.deps << dep
@@ -171,8 +173,8 @@ module Dragonstone
     end
 
     # Makes sure it has .ds extension
-    private def expand_single(spec : String, base_dir : String) : String
-      p = resolve_spec(spec, base_dir)
+    private def expand_single(spec : String, base_dir : String, exclude_path : String? = nil) : String
+      p = resolve_spec(spec, base_dir, exclude_path)
       if remote_path?(p)
         return p
       end
@@ -182,25 +184,27 @@ module Dragonstone
       p
     end
 
-    private def expand_pattern(spec : String, base_dir : String) : Array(String)
+    private def expand_pattern(spec : String, base_dir : String, exclude_path : String? = nil) : Array(String)
       if remote_path?(spec) || remote_path?(base_dir)
         if spec.includes?("*")
           raise "Globbing is not supported for remote imports: #{spec}"
         end
-        return [expand_single(spec, base_dir)]
+        path = expand_single(spec, base_dir, exclude_path)
+        return exclude_path && path == exclude_path ? [] of String : [path]
       end
-      p = resolve_spec(spec, base_dir)
+      p = resolve_spec(spec, base_dir, exclude_path)
       if p.includes?("*")
         Dir.glob(p)
           .select { |f| File.file?(f) && File.extname(f) == config.file_ext }
           .map { |f| canonicalize(f, base: base_dir) }
       else
-        [expand_single(spec, base_dir)]
+        path = expand_single(spec, base_dir, exclude_path)
+        exclude_path && path == exclude_path ? [] of String : [path]
       end
     end
 
     # "./**" -> "<base_dir>/**/*.ds", "../folder/*" -> "<resolved>/*"
-    private def resolve_spec(spec : String, base_dir : String) : String
+    private def resolve_spec(spec : String, base_dir : String, exclude_path : String? = nil) : String
       return append_remote_ext_if_missing(spec) if remote_path?(spec)
 
       if remote_path?(base_dir)
@@ -215,6 +219,13 @@ module Dragonstone
       else
         found = config.roots.compact_map do |root|
           candidate = append_ext_if_missing(File.expand_path(spec, root))
+          if exclude_path && !candidate.includes?("*") && File.file?(candidate)
+            begin
+              next if File.realpath(candidate) == exclude_path
+            rescue
+              # ignore; treat as non-excluded
+            end
+          end
           if candidate.includes?("*") || File.file?(candidate)
             candidate
           end

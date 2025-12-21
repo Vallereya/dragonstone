@@ -38,6 +38,8 @@ module Dragonstone
             @typing_context = nil
             @output = String.new
             @log_to_stdout = log_to_stdout
+            @debug_inline_sources = [] of String
+            @debug_inline_values = [] of String
             @argv = argv.dup
             @argv_value = @argv.map { |arg| arg.as(RuntimeValue) }
             @container_stack = [] of DragonModule
@@ -72,6 +74,7 @@ module Dragonstone
             previous_graph = @module_graph
             @module_graph = graph
             ast.accept(self)
+            flush_debug_inline
             @output
         ensure
             @module_graph = previous_graph

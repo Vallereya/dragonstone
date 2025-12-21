@@ -4,12 +4,13 @@
 
 #[
     The file that's actually 
-    with the logic, taking from
-    the ./test_use.ds example.
+    with the logic, is taken
+    from ./test_use.ds example.
 
-    As well as ./classes.ds and
-    2 examples directly from the
-    same examples on GitHub.
+    As well as ./raise.ds for 
+    divide and two examples 
+    directly from GitHub via
+    jsdelivr.
 ]#
 
 use "test_use"

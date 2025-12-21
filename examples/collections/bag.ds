@@ -50,10 +50,3 @@ echo numbers.size
 numbers.each do |num|
     echo num
 end
-
-# TODO: Add the ability to use a NamedBag
-# Example Four (Named Bag)
-# fruits = bag("apple", "banana", "cherry").new
-
-# echo fruits.includes?("banana")
-# echo fruits.includes?("grape")

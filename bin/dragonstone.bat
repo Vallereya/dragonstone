@@ -2,6 +2,7 @@
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
+set "SHARDS_BIN_PATH=bin\build"
 for %%I in ("%SCRIPT_DIR%.") do set "ABS_DIR=%%~fI"
 if not "%ABS_DIR:~-1%"=="\" set "ABS_DIR=%ABS_DIR%\"
 

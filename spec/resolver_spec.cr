@@ -41,6 +41,32 @@ describe Dragonstone::ModuleResolver do
         ])
     end
 
+    it "skips resolving imports to the current file when excluded" do
+        with_tmpdir do |dir|
+            first_root = File.join(dir, "a")
+            second_root = File.join(dir, "b")
+            Dir.mkdir_p(first_root)
+            Dir.mkdir_p(second_root)
+
+            base_file = File.join(first_root, "io.ds")
+            File.write(base_file, "echo 1\n")
+
+            other_file = File.join(second_root, "io.ds")
+            File.write(other_file, "echo 2\n")
+
+            config = Dragonstone::ModuleConfig.new([first_root, second_root])
+            resolver = Dragonstone::ModuleResolver.new(config)
+            item = Dragonstone::AST::UseItem.new(
+                kind: Dragonstone::AST::UseItemKind::Paths,
+                specs: ["io"]
+            )
+
+            resolver.expand_use_item(item, first_root, exclude_path: File.realpath(base_file)).should eq([
+                File.realpath(other_file)
+            ])
+        end
+    end
+
     it "attaches stdlib metadata onto module nodes" do
         with_tmpdir do |dir|
             dep_dir = File.join(dir, "dep")

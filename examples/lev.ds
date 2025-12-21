@@ -1,0 +1,64 @@
+#[
+    Test Suite for Levenshtein Module
+]#
+
+use "levenshtein"
+
+# Defining a simple assertion helper.
+def assert_eq(actual, expected, test_name)
+    if actual == expected
+        echo "[PASS] #{test_name}: Got #{actual}"
+    else
+        echo "[FAIL] #{test_name}: Expected #{expected}, but got #{actual}"
+    end
+end
+
+echo "---------------------------------------------------"
+echo "Running Levenshtein Tests..."
+echo "---------------------------------------------------"
+
+# Basic Distance
+d1 = Levenshtein.distance("kitten", "sitting")
+assert_eq(d1, 3, "kitten vs sitting")
+
+d2 = Levenshtein.distance("rosettacode", "raisethysword")
+assert_eq(d2, 8, "rosettacode vs raisethysword")
+
+d3 = Levenshtein.distance("hello", "hello")
+assert_eq(d3, 0, "Identical strings")
+
+d4 = Levenshtein.distance("", "abc")
+assert_eq(d4, 3, "Empty string vs abc")
+
+# Finder (Single Item).
+# We look for "bannana" (typo) and expect "banana"
+# Tolerance is auto-calculated usually, but we can trust the default.
+
+echo "\nTesting Finder..."
+
+Levenshtein.find("bannana") do |finder|
+    
+    # Test specific candidates
+    finder.test("apple")
+    finder.test("banana")
+    finder.test("cherry")
+    
+    match = finder.best_match()
+    assert_eq(match, "banana", "Find 'bannana' typo fix")
+end
+
+# Finder (List Helper).
+echo "\nTesting Find in List..."
+
+candidates = ["apple", "pear", "banana", "peach"]
+
+# Typo: "peech" -> should match "peach" (distance 1)
+result = Levenshtein.find_in_list("peech", candidates)
+assert_eq(result, "peach", "List search for 'peech'")
+
+# Typo: "appl" -> should match "apple" (distance 1)
+result_2 = Levenshtein.find_in_list("appl", candidates)
+assert_eq(result_2, "apple", "List search for 'appl'")
+
+echo "---------------------------------------------------"
+echo "Tests Completed!"

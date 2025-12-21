@@ -1,9 +1,5 @@
 #[
-    Resolution Example
-]#
-
-#[
-    Also has an example of con = constant.
+    Scope Resolution Example
 ]#
 
 module MyModule

@@ -1,0 +1,22 @@
+#[
+    Echo Example
+]#
+
+#[
+    Various ways to use echo statements.
+]#
+
+echo "Test One."
+
+e! "Test Two."
+
+eecho "Test Three..."
+eecho "done!\n"
+
+ee! "Test Four..."
+ee! "done!"
+
+# Basic usage.
+eecho "Hello, "
+eecho "world!\n" # Explicitly add a newline character
+eecho "Welcome to Dragonstone programming."

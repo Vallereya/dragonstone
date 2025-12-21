@@ -1,0 +1,90 @@
+use "../strings/strings_build/module"
+
+module IO
+    # File Descriptor Constants
+    con STDIN  = 0
+    con STDOUT = 1
+    con STDERR = 2
+
+    # Wrapper for unistd::fsync
+    def sync(fd: int)
+        ffi.call_c("fsync", [fd])
+    end
+
+    # Wrapper for unistd::write
+    # writes 'length' bytes from 'buffer' to 'fd'
+    def write(fd: int, buffer: str, length: int)
+        ffi.call_c("write", [fd, buffer, length])
+    end
+
+    # Wrapper for stdio::getchar
+    # reads a single character code from stdin
+    def get_char
+        ffi.call_c("getchar", [])
+    end
+
+    # Wrapper for stdio::chr
+    # Helper to convert int to char via FFI.
+    def to_char(code: int)
+        ffi.call_c("chr", [code])
+    end
+
+    class Stream
+        property fd: int
+
+        def initialize(fd: int)
+            @fd = fd
+        end
+
+        # Write string directly to the file descriptor
+        def eecholn(content: str)
+            IO.write(@fd, content, content.length)
+        end
+
+        # Newline-terminated output.
+        def echoln(content: str)
+            eecholn(content + "\n")
+        end
+
+        # Debug helpers for stream output.
+        # These do not include expression source (unlike `e!`), but are useful for inline progress/errors.
+        def debug(value)
+            eecholn("#{value}\n")
+        end
+
+        def debug_inline(value)
+            eecholn("#{value}")
+        end
+
+        def flush
+            IO.sync(@fd)
+        end
+    end
+
+    class StandardInput
+        # Reads a full line from STDIN by calling IO.get_char() repeatedly
+        def read -> str
+            line = strings.build do |sb|
+                while true
+                    char_code = IO.get_char()
+                    
+                    # Check for EOF (-1) or Newline (10)
+                    if char_code == -1 || char_code == 10
+                        break
+                    end
+
+                    # Use the FFI helper instead of .chr
+                    char_val = IO.to_char(char_code)
+                    sb.append_char(char_val)
+                end
+            end
+            
+            return line
+        end
+    end
+
+    # Initialize Module Streams for Export.
+    con Stdout = Stream.new(IO::STDOUT)
+    con Stderr = Stream.new(IO::STDERR)
+    con Stdin  = StandardInput.new
+end

@@ -24,6 +24,7 @@ mkdir -p "$BUILD_DIR"
 
 export DRAGONSTONE_HOME="${DRAGONSTONE_HOME:-$PROJECT_ROOT}"
 export DRAGONSTONE_BIN="${DRAGONSTONE_BIN:-$SCRIPT_ROOT}"
+export SHARDS_BIN_PATH="${SHARDS_BIN_PATH:-$SCRIPT_ROOT/build}"
 
 show_env() {
   local keys=("$@")

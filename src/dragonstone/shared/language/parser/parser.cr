@@ -29,6 +29,9 @@ module Dragonstone
             :RETRY,
             :RAISE,
             :CON, 
+            :VAR,
+            :LET,
+            :FIX,
             :ABSTRACT,
             :DEF, 
             :CLASS, 
@@ -40,7 +43,9 @@ module Dragonstone
             :WHILE, 
             :PUTS, 
             :ECHO,
-            :DEBUG_PRINT
+            :EECHO,
+            :DEBUG_ECHO,
+            :DEBUG_EECHO
         ]
 
         ASSIGNMENT_TOKENS = [
@@ -254,8 +259,12 @@ module Dragonstone
                 parse_expression_statement
             when :ECHO
                 parse_keyword_method_call
-            when :DEBUG_PRINT
-                parse_debug_print
+            when :EECHO
+                parse_keyword_method_call
+            when :DEBUG_ECHO
+                parse_debug_echo
+            when :DEBUG_EECHO
+                parse_debug_eecho
             when :IF
                 parse_if_statement
             when :UNLESS
@@ -266,6 +275,13 @@ module Dragonstone
                 parse_with_expression
             when :SUPER
                 parse_expression_statement
+            when :FUN
+                next_token = peek_token
+                if next_token && next_token.type == :IDENTIFIER
+                    parse_fun_declaration
+                else
+                    parse_expression_statement
+                end
             when :DEF
                 parse_function_def
             when :MODULE
@@ -276,6 +292,12 @@ module Dragonstone
                 parse_abstract_prefixed_statement
             when :CON
                 parse_constant_declaration
+            when :VAR
+                parse_variable_declaration
+            when :LET
+                parse_let_declaration
+            when :FIX
+                parse_fix_declaration
             when :ENUM
                 parse_enum_declaration
             when :STRUCT
@@ -337,6 +359,77 @@ module Dragonstone
             value = parse_expression
             location = name_token.location || keyword.location
             AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
+        end
+
+        private def parse_variable_declaration : AST::Node
+            keyword = expect(:VAR)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with var", name_token)
+            end
+
+            if constant_name?(name)
+                error("var declarations must start with a lowercase letter (use 'con' or a lowercase name)", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::Assignment.new(name, value, operator: nil, type_annotation: type_annotation, location: location)
+        end
+
+        private def parse_let_declaration : AST::Node
+            keyword = expect(:LET)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with let", name_token)
+            end
+
+            if constant_name?(name)
+                error("let declarations must start with a lowercase letter (use 'fix' or 'con' for constants)", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::LetDeclaration.new(name, value, type_annotation, location: location)
+        end
+
+        private def parse_fix_declaration : AST::Node
+            keyword = expect(:FIX)
+            name_token = expect(:IDENTIFIER)
+            name = name_token.value.as(String)
+
+            if name == "self"
+                error("Cannot declare 'self' with fix", name_token)
+            end
+
+            type_annotation = nil
+            if current_token.type == :COLON
+                advance
+                type_annotation = parse_type_expression
+            end
+
+            expect(:ASSIGN)
+            value = parse_expression
+            location = name_token.location || keyword.location
+            AST::FixDeclaration.new(name, value, type_annotation, location: location)
         end
 
         private def parse_extend_statement : AST::Node
@@ -429,10 +522,16 @@ module Dragonstone
             AST::InstanceVariableDeclaration.new(token.value.as(String), type_annotation, location: token.location)
         end
 
-        private def parse_debug_print : AST::Node
-            token = expect(:DEBUG_PRINT)
+        private def parse_debug_echo : AST::Node
+            token = expect(:DEBUG_ECHO)
             expression = parse_expression
-            AST::DebugPrint.new(expression, location: token.location)
+            AST::DebugEcho.new(expression, false, location: token.location)
+        end
+
+        private def parse_debug_eecho : AST::Node
+            token = expect(:DEBUG_EECHO)
+            expression = parse_expression
+            AST::DebugEcho.new(expression, true, location: token.location)
         end
 
         private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
@@ -975,47 +1074,99 @@ module Dragonstone
         private def parse_postfix(left : AST::Node) : AST::Node
             loop do
                 case current_token.type
+
                 when :LPAREN
                     break unless left.is_a?(AST::Variable)
                     variable = left.as(AST::Variable)
                     arguments = parse_argument_list
                     left = AST::MethodCall.new(variable.name, arguments, nil, location: variable.location)
+
                 when :LBRACKET
                     bracket_token = current_token
                     advance
                     index = parse_expression
                     nil_safe = false
+
                     if current_token.type == :RBRACKET_QUESTION
                         nil_safe = true
                         advance
                     else
                         expect(:RBRACKET)
                     end
+
                     left = AST::IndexAccess.new(left, index, nil_safe: nil_safe, location: bracket_token.location)
+
                 when :DOT
                     advance
+                    name, arguments, location = parse_dot_io_call(left)
+
+                    if name
+                        left = AST::MethodCall.new(name, arguments, left, location: location)
+                        next
+                    end
+
                     method_token = expect_method_name
                     name = method_token.value.as(String)
                     arguments = [] of AST::Node
+
                     if current_token.type == :LPAREN
                         arguments = parse_argument_list
                     end
+
                     left = AST::MethodCall.new(name, arguments, left, location: method_token.location)
+
                 when :DO
+                    # unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
+                    #     error("Unexpected 'do' without preceding method call", current_token)
+                    # end
+
+                    # block_literal = parse_do_block_literal
+
+                    # if left.is_a?(AST::MethodCall)
+                    #     left.as(AST::MethodCall).arguments << block_literal
+                    # else
+                    #     left.as(AST::SuperCall).arguments << block_literal
+                    # end
+
+                    if left.is_a?(AST::Variable)
+                        left = AST::MethodCall.new(left.name, [] of AST::Node, nil, location: left.location)
+                    end
+
                     unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         error("Unexpected 'do' without preceding method call", current_token)
                     end
+
                     block_literal = parse_do_block_literal
+
                     if left.is_a?(AST::MethodCall)
                         left.as(AST::MethodCall).arguments << block_literal
                     else
                         left.as(AST::SuperCall).arguments << block_literal
                     end
+
                 when :LBRACE
+                    # unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
+                    #     break
+                    # end
+
+                    # block_literal = parse_brace_block_literal
+
+                    # if left.is_a?(AST::MethodCall)
+                    #     left.as(AST::MethodCall).arguments << block_literal
+                    # else
+                    #     left.as(AST::SuperCall).arguments << block_literal
+                    # end
+
+                    if left.is_a?(AST::Variable)
+                        left = AST::MethodCall.new(left.name, [] of AST::Node, nil, location: left.location)
+                    end
+
                     unless left.is_a?(AST::MethodCall) || left.is_a?(AST::SuperCall)
                         break
                     end
+
                     block_literal = parse_brace_block_literal
+
                     if left.is_a?(AST::MethodCall)
                         left.as(AST::MethodCall).arguments << block_literal
                     else
@@ -1025,7 +1176,76 @@ module Dragonstone
                     break
                 end
             end
+
             left
+        end
+
+        private def parse_dot_io_call(receiver : AST::Node) : Tuple(String?, Array(AST::Node), Location?)
+            token = current_token
+            return {nil, [] of AST::Node, nil} unless io_dot_method_token?(token)
+
+            name = io_dot_method_name(token)
+            location = token.location
+            advance
+
+            arguments = if current_token.type == :LPAREN
+                parse_argument_list
+            else
+                parse_implicit_argument_list
+            end
+
+            {name, arguments, location}
+        end
+
+        private def io_dot_method_token?(token : Token) : Bool
+            case token.type
+            when :ECHO
+                token.value == "echo"
+            when :EECHO
+                token.value == "eecho"
+            when :DEBUG_ECHO
+                token.value == "e!"
+            when :DEBUG_EECHO
+                token.value == "ee!"
+            else
+                false
+            end
+        end
+
+        private def io_dot_method_name(token : Token) : String
+            case token.type
+            when :ECHO
+                # `stdout.echo "..."` becomes `stdout.echoln("...")` under the hood.
+                "echoln"
+            when :EECHO
+                # `stdout.eecho "..."` becomes `stdout.eecholn("...")` under the hood.
+                "eecholn"
+            when :DEBUG_ECHO
+                "debug"
+            when :DEBUG_EECHO
+                "debug_inline"
+            else
+                token.value.as(String)
+            end
+        end
+
+        private def parse_implicit_argument_list : Array(AST::Node)
+            arguments = [] of AST::Node
+
+            while !argument_terminator?(current_token)
+                break if assignment_ahead?
+                break if current_token.type == :DO || current_token.type == :LBRACE
+
+                arguments << parse_expression
+
+                if current_token.type == :COMMA
+                    advance
+                else
+                    break
+                end
+            end
+
+            arguments
         end
 
         private def parse_primary : AST::Node
@@ -1070,6 +1290,12 @@ module Dragonstone
             when :INSTANCE_VAR
                 ivar_token = expect(:INSTANCE_VAR)
                 AST::InstanceVariable.new(ivar_token.value.as(String), location: ivar_token.location)
+            when :CLASS_VAR
+                cvar_token = expect(:CLASS_VAR)
+                AST::ClassVariable.new(cvar_token.value.as(String), location: cvar_token.location)
+            when :MODULE_VAR
+                mvar_token = expect(:MODULE_VAR)
+                AST::ModuleVariable.new(mvar_token.value.as(String), location: mvar_token.location)
             when :TYPEOF
                 parse_typeof_expression
             when :LBRACKET
@@ -1217,7 +1443,12 @@ module Dragonstone
                 end
             end
             expect(:RBRACKET)
-            AST::ArrayLiteral.new(elements, location: start_token.location)
+            element_type = nil
+            if current_token.type == :AS
+                expect(:AS)
+                element_type = parse_type_expression
+            end
+            AST::ArrayLiteral.new(elements, element_type, location: start_token.location)
         end
 
         private def parse_braced_literal : AST::Node
@@ -1225,6 +1456,14 @@ module Dragonstone
 
             if current_token.type == :RBRACE
                 advance
+                if current_token.type == :AS
+                    expect(:AS)
+                    key_type = parse_type_expression
+                    expect(:THIN_ARROW)
+                    value_type = parse_type_expression
+                    return AST::MapLiteral.new([] of Tuple(AST::Node, AST::Node), key_type, value_type, location: start_token.location)
+                end
+
                 return AST::TupleLiteral.new([] of AST::Node, location: start_token.location)
             end
 
@@ -1351,7 +1590,15 @@ module Dragonstone
             end
 
             expect(:RBRACE)
-            AST::MapLiteral.new(entries, location: start_token.location)
+            key_type = nil
+            value_type = nil
+            if current_token.type == :AS
+                expect(:AS)
+                key_type = parse_type_expression
+                expect(:THIN_ARROW)
+                value_type = parse_type_expression
+            end
+            AST::MapLiteral.new(entries, key_type, value_type, location: start_token.location)
         end
 
         private def parse_map_entry(existing_key : AST::Node? = nil) : Tuple(AST::Node, AST::Node)
@@ -1484,18 +1731,55 @@ module Dragonstone
             AST::TypedParameter.new(name_token.value.as(String), type_annotation)
         end
 
+        #! Deprecated: Old method to handle: ... = fun(args) ... end
+        # private def parse_function_literal : AST::Node
+        #     fun_token = expect(:FUN)
+        #     parameters = parse_parameter_list(required: true)
+        #     return_type = parse_optional_return_type
+        #     advance if current_token.type == :DO
+        #     body = parse_block([:END, :RESCUE])
+        #     rescue_clauses = [] of AST::RescueClause
+        #     while current_token.type == :RESCUE
+        #         rescue_clauses << parse_rescue_clause
+        #     end
+        #     expect(:END)
+        #     AST::FunctionLiteral.new(parameters, body, rescue_clauses, return_type, location: fun_token.location)
+        # end
+
+        # New method to handle: fun name(args) ... end
+        private def parse_fun_declaration : AST::Node
+            token = expect(:FUN)
+            name_token = expect(:IDENTIFIER)
+            func_node = parse_function_literal_body(token.location)
+            name = name_token.value.as(String)
+
+            # Check if it's a constant (Uppercase) or variable (lowercase) assignment
+            if constant_name?(name)
+                AST::ConstantDeclaration.new(name, func_node, nil, location: token.location)
+            else
+                AST::Assignment.new(name, func_node, location: token.location)
+            end
+        end
+
         private def parse_function_literal : AST::Node
-            fun_token = expect(:FUN)
+            token = expect(:FUN)
+            parse_function_literal_body(token.location)
+        end
+
+        # Fun Logic; Parses (args) ... end
+        private def parse_function_literal_body(location : Location) : AST::FunctionLiteral
             parameters = parse_parameter_list(required: true)
             return_type = parse_optional_return_type
             advance if current_token.type == :DO
             body = parse_block([:END, :RESCUE])
             rescue_clauses = [] of AST::RescueClause
+
             while current_token.type == :RESCUE
                 rescue_clauses << parse_rescue_clause
             end
             expect(:END)
-            AST::FunctionLiteral.new(parameters, body, rescue_clauses, return_type, location: fun_token.location)
+            
+            AST::FunctionLiteral.new(parameters, body, rescue_clauses, return_type, location: location)
         end
 
         private def parse_argument_list : Array(AST::Node)
@@ -1552,6 +1836,10 @@ module Dragonstone
                 end
             when AST::InstanceVariable
                 AST::InstanceVariableAssignment.new(left.name, value, operator: operator, location: location)
+            when AST::ClassVariable
+                AST::ClassVariableAssignment.new(left.name, value, operator: operator, location: location)
+            when AST::ModuleVariable
+                AST::ModuleVariableAssignment.new(left.name, value, operator: operator, location: location)
             when AST::IndexAccess
                 AST::IndexAssignment.new(left.object, left.index, value, operator: operator, nil_safe: left.nil_safe, location: location)
             when AST::MethodCall
@@ -1590,7 +1878,9 @@ module Dragonstone
         end
 
         private def return_value_terminator?(token : Token) : Bool
-            TERMINATOR_TOKENS.includes?(token.type) || ((token.type == :IDENTIFIER || token.type == :INSTANCE_VAR) && assignment_token?(peek_token))
+            TERMINATOR_TOKENS.includes?(token.type) ||
+                ((token.type == :IDENTIFIER || token.type == :INSTANCE_VAR || token.type == :CLASS_VAR || token.type == :MODULE_VAR) &&
+                assignment_token?(peek_token))
         end
 
         private def argument_terminator?(token : Token) : Bool
@@ -1598,7 +1888,8 @@ module Dragonstone
         end
 
         private def assignment_ahead? : Bool
-            (current_token.type == :IDENTIFIER || current_token.type == :INSTANCE_VAR) && assignment_token?(peek_token)
+            (current_token.type == :IDENTIFIER || current_token.type == :INSTANCE_VAR || current_token.type == :CLASS_VAR || current_token.type == :MODULE_VAR) &&
+                assignment_token?(peek_token)
         end
 
         private def assignment_token?(token : Token?) : Bool
@@ -1756,7 +2047,16 @@ module Dragonstone
             case token.type
             when :IDENTIFIER
                 identifier_token = expect(:IDENTIFIER)
-                name = identifier_token.value.as(String)
+                parts = [] of String
+                parts << identifier_token.value.as(String)
+
+                while current_token.type == :DOUBLE_COLON
+                    advance
+                    segment = expect(:IDENTIFIER)
+                    parts << segment.value.as(String)
+                end
+
+                name = parts.join("::")
                 if current_token.type == :LPAREN
                     args = parse_type_argument_list
                     AST::GenericTypeExpression.new(name, args, location: identifier_token.location)

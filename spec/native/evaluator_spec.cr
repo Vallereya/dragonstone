@@ -21,7 +21,7 @@ describe "Native evaluator" do
             :+,
             AST::BinaryOp.new(AST::Literal.new(3_i64), :*, AST::Literal.new(4_i64))
         )
-        debug = AST::DebugPrint.new(expression)
+        debug = AST::DebugEcho.new(expression)
         statements = [] of AST::Node
         statements << debug
         interpreter = evaluate_statements(statements)
@@ -43,5 +43,25 @@ describe "Native evaluator" do
         statements << echo_call
         interpreter = evaluate_statements(statements)
         interpreter.output.should eq("5\n")
+    end
+
+    it "supports eecho for printing without a newline" do
+        args = [] of AST::Node
+        args << AST::Literal.new("Hello")
+        call = AST::MethodCall.new("eecho", args)
+        statements = [] of AST::Node
+        statements << call
+        interpreter = evaluate_statements(statements)
+        interpreter.output.should eq("Hello")
+    end
+
+    it "supports ee! for inline debug accumulation" do
+        first = AST::DebugEcho.new(AST::Literal.new("Test Four..."), true)
+        second = AST::DebugEcho.new(AST::Literal.new("done!"), true)
+        statements = [] of AST::Node
+        statements << first
+        statements << second
+        interpreter = evaluate_statements(statements)
+        interpreter.output.should eq("\"Test Four...\" + \"done!\" # -> \"Test Four...\" + \"done!\"\n")
     end
 end

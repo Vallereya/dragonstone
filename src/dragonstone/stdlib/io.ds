@@ -1,0 +1,6 @@
+use "modules/shared/io/module"
+
+# Initialize stdlib Module Streams for Easy Access.
+con stdout = IO::Stdout
+con stderr = IO::Stderr
+con stdin  = IO::Stdin

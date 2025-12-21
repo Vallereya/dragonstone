@@ -49,7 +49,11 @@ module Dragonstone
           when AST::UnaryOp
             AST::UnaryOp.new(node.operator, rewrite_node(node.operand, defaults), location: node.location)
           when AST::ArrayLiteral
-            AST::ArrayLiteral.new(node.elements.map { |e| rewrite_node(e, defaults) }, location: node.location)
+            AST::ArrayLiteral.new(
+              node.elements.map { |e| rewrite_node(e, defaults) },
+              node.element_type,
+              location: node.location
+            )
           when AST::TupleLiteral
             AST::TupleLiteral.new(node.elements.map { |e| rewrite_node(e, defaults) }, location: node.location)
           when AST::NamedTupleLiteral
@@ -62,7 +66,7 @@ module Dragonstone
             node.entries.each do |(k, v)|
               entries << {rewrite_node(k, defaults).as(AST::Node), rewrite_node(v, defaults).as(AST::Node)}
             end
-            AST::MapLiteral.new(entries, location: node.location)
+            AST::MapLiteral.new(entries, node.key_type, node.value_type, location: node.location)
           when AST::IndexAccess
             AST::IndexAccess.new(rewrite_node(node.object, defaults), rewrite_node(node.index, defaults), nil_safe: node.nil_safe, location: node.location)
           when AST::IndexAssignment
@@ -131,8 +135,8 @@ module Dragonstone
             AST::BeginExpression.new(body, rescue_clauses, else_block: else_block, ensure_block: ensure_block, location: node.location)
           when AST::RaiseExpression
             AST::RaiseExpression.new(node.expression.try { |v| rewrite_node(v, defaults) }, location: node.location)
-          when AST::DebugPrint
-            AST::DebugPrint.new(rewrite_node(node.expression, defaults), location: node.location)
+          when AST::DebugEcho
+            AST::DebugEcho.new(rewrite_node(node.expression, defaults), node.inline, location: node.location)
           when AST::FunctionDef
             body = node.body.map { |n| rewrite_node(n, defaults) }
             rescues = node.rescue_clauses.map do |clause|

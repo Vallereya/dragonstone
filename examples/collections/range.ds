@@ -20,7 +20,6 @@ echo exclusive.includes?(4)
     echo "Letter: #{letter}"
 end
 
-# TODO: Modernize the .to_a into something more meaningful.
 range = 1..5
 echo range.to_a
 

@@ -2,8 +2,10 @@ module Dragonstone
     module AST
         class MapLiteral < Node
             getter entries : Array(Tuple(Node, Node))
+            getter key_type : TypeExpression?
+            getter value_type : TypeExpression?
 
-            def initialize(entries : Array(Tuple(Node, Node)), location : Location? = nil)
+            def initialize(entries : Array(Tuple(Node, Node)), @key_type : TypeExpression? = nil, @value_type : TypeExpression? = nil, location : Location? = nil)
                 super(location: location)
                 @entries = entries
             end
@@ -26,6 +28,13 @@ module Dragonstone
                     value.to_source(io)
                 end
                 io << "}"
+
+                if @key_type && @value_type
+                    io << " as "
+                    @key_type.not_nil!.to_source(io)
+                    io << " -> "
+                    @value_type.not_nil!.to_source(io)
+                end
             end
         end
     end

@@ -29,6 +29,14 @@ require "http"
     end
 {% end %}
 
+lib LibC
+    fun getchar : Int32
+
+    {% if flag?(:windows) %}
+        fun _write(fd : Int32, buf : UInt8*, count : UInt32) : Int32
+    {% end %}
+end
+
 module Dragonstone
     module FFI
         alias InteropValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(InteropValue)
@@ -37,7 +45,7 @@ module Dragonstone
         @@net_listeners = {} of Int64 => TCPServer
         @@net_clients = {} of Int64 => TCPSocket
 
-        RUBY_BRIDGE_ENABLED = {{ env("DRAGONSTONE_RUBY_LIB") ? true : false }}
+        RUBY_BRIDGE_ENABLED = {{ env("DRAGONSTONE_RUBY_LIB")    ? true : false }}
 
         {% if env("DRAGONSTONE_RUBY_LIB") %}
             @@ruby_initialized = false
@@ -368,6 +376,11 @@ module Dragonstone
                 key = expect_string(arguments, 0, function_name)
                 ENV[key]?
 
+            # when "chr"
+            #     code = expect_int(arguments, 0, function_name)
+            #     raise "#{function_name} codepoint out of range" unless code >= 0 && code <= 0x10FFFF
+            #     code.chr
+
             else
                 raise "Unknown Crystal function: #{function_name}"
             end
@@ -379,6 +392,51 @@ module Dragonstone
             when "printf"
                 format_value = expect_string(arguments, 0, function_name)
                 LibC.printf(format_value)
+            
+            when "getchar"
+                # Calls the C standard library getchar()
+                # Returns the character as an integer (ASCII) or -1 for EOF
+                LibC.getchar
+
+            when "write"
+                # Usage: ffi.call_c("write", [fd, content, length])
+                # (If length is omitted, uses content.bytesize.)
+                fd = expect_int(arguments, 0, function_name)
+                content = expect_string(arguments, 1, function_name)
+                count = if arguments.size >= 3
+                    expect_int(arguments, 2, function_name)
+                else
+                    content.bytesize
+                end
+                
+                # Calls C write(int fd, const void *buf, size_t count)
+                # content.to_unsafe passes the raw C pointer (char*)
+                buf = content.to_unsafe
+
+                {% if flag?(:windows) %}
+                    LibC._write(fd, buf, count.to_u32).to_i64
+                {% else %}
+                    capped = Math.min(count, content.bytesize)
+                    {% if flag?(:bits32) %}
+                        LibC.write(fd.to_i, buf.as(Void*), capped.to_u32).to_i64
+                    {% else %}
+                        LibC.write(fd.to_i, buf.as(Void*), capped.to_u64).to_i64
+                    {% end %}
+                {% end %}
+            
+            when "chr" 
+                code = expect_int(arguments, 0, function_name)
+                code.chr
+            
+            when "fsync"
+                fd = expect_int(arguments, 0, function_name)
+
+                {% if flag?(:windows) %}
+                    LibC._commit(fd)            # might require a binding -> fun _commit(fd : Int32) : Int32
+                {% else %}
+                    LibC.fsync(fd)
+                {% end %}
+
             else
                 raise "Unknown C function: #{function_name}"
             end

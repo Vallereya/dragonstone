@@ -301,6 +301,20 @@ static char *ds_slice_string(const char *src, int64_t start, int64_t length) {
     return buf;
 }
 
+static char *ds_strip_string(const char *src) {
+    size_t len = strlen(src);
+    size_t start = 0;
+    while (start < len && isspace((unsigned char)src[start])) start++;
+    if (start == len) return ds_strdup("");
+    size_t end = len;
+    while (end > start && isspace((unsigned char)src[end - 1])) end--;
+    size_t out_len = end - start;
+    char *buf = (char *)ds_alloc(out_len + 1);
+    memcpy(buf, src + start, out_len);
+    buf[out_len] = '\0';
+    return buf;
+}
+
 static void ds_constant_set(DSConstant **head, const char *name, void *value) {
     DSConstant *curr = *head;
     while (curr) {
@@ -901,6 +915,10 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
             char *copy = ds_strdup(str);
             for (int i = 0; copy[i]; i++) copy[i] = tolower(copy[i]);
             return copy;
+        }
+
+        if (strcmp(method, "strip") == 0) {
+            return ds_strip_string(str);
         }
 
         if (strcmp(method, "slice") == 0) {
@@ -1786,6 +1804,43 @@ void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
 void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, true); }
 void *dragonstone_runtime_to_string(void *value) { return ds_value_to_string(value); }
 
+static char *ds_debug_inline_source = NULL;
+static char *ds_debug_inline_value = NULL;
+
+static void ds_debug_append(char **buffer, const char *part) {
+    if (!part) part = "";
+
+    if (!*buffer) {
+        *buffer = ds_strdup(part);
+        return;
+    }
+
+    size_t lhs_len = strlen(*buffer);
+    size_t rhs_len = strlen(part);
+    size_t new_len = lhs_len + 3 + rhs_len + 1; /* " + " */
+    char *next = (char *)ds_alloc(new_len);
+    memcpy(next, *buffer, lhs_len);
+    memcpy(next + lhs_len, " + ", 3);
+    memcpy(next + lhs_len + 3, part, rhs_len);
+    next[new_len - 1] = '\0';
+    *buffer = next;
+}
+
+void dragonstone_runtime_debug_accum(void *source, void *value) {
+    const char *source_str = source ? (const char *)source : "";
+    char *value_str = (char *)dragonstone_runtime_value_display(value);
+    ds_debug_append(&ds_debug_inline_source, source_str);
+    ds_debug_append(&ds_debug_inline_value, value_str ? value_str : "");
+}
+
+void dragonstone_runtime_debug_flush(void) {
+    if (!ds_debug_inline_source || !ds_debug_inline_value) return;
+
+    printf("%s # -> %s\n", ds_debug_inline_source, ds_debug_inline_value);
+    ds_debug_inline_source = NULL;
+    ds_debug_inline_value = NULL;
+}
+
 void *dragonstone_runtime_typeof(void *value) {
     if (!value) return ds_strdup("Nil");
     if (!ds_is_boxed(value)) return ds_strdup("String");
@@ -1838,9 +1893,12 @@ void *dragonstone_runtime_ivar_get(void *obj, void *name) {
     DSInstance *inst = (DSInstance *)box->as.ptr;
     if (!inst->ivars) return NULL;
 
+    const char *name_str = ds_arg_string(name);
+    if (!name_str) return NULL;
+
     DSMapEntry *curr = inst->ivars->head;
     while (curr) {
-        if (strcmp((char *)curr->key, (char *)name) == 0) return curr->value;
+        if (strcmp((char *)curr->key, name_str) == 0) return curr->value;
         curr = curr->next;
     }
     return NULL;
@@ -1852,6 +1910,9 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
     if (box->kind != DS_VALUE_INSTANCE) return val;
     DSInstance *inst = (DSInstance *)box->as.ptr;
 
+    const char *name_str = ds_arg_string(name);
+    if (!name_str) return val;
+
     if (!inst->ivars) {
         inst->ivars = (DSMap *)ds_alloc(sizeof(DSMap));
         inst->ivars->head = NULL;
@@ -1860,7 +1921,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
 
     DSMapEntry *curr = inst->ivars->head;
     while (curr) {
-        if (strcmp((char *)curr->key, (char *)name) == 0) {
+        if (strcmp((char *)curr->key, name_str) == 0) {
             curr->value = val;
             return val;
         }
@@ -1868,7 +1929,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
     }
 
     DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-    entry->key = ds_strdup((char *)name);
+    entry->key = ds_strdup(name_str);
     entry->value = val;
     entry->next = inst->ivars->head;
     inst->ivars->head = entry;
@@ -2624,6 +2685,13 @@ void *dragonstone_runtime_lte(void *lhs, void *rhs) {
 }
 
 void *dragonstone_runtime_eq(void *lhs, void *rhs) {
+    if (lhs == NULL && rhs == NULL) {
+        return dragonstone_runtime_box_bool(true);
+    }
+    if (lhs == NULL || rhs == NULL) {
+        return dragonstone_runtime_box_bool(false);
+    }
+
     void *over = ds_try_invoke_operator(lhs, "==", rhs);
     if (over) return ds_is_boxed(over) && ((DSValue *)over)->kind == DS_VALUE_BOOL ? over : ds_box_truthy(over);
 

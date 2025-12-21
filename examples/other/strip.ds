@@ -1,0 +1,26 @@
+#[
+    String Strip Example
+]#
+
+
+# Basic Usage
+text = "   Dragonstone   "
+echo "Original: '#{text}'"
+echo "Stripped: '#{text.strip}'"
+
+# Tabs and Newlines
+complex = "\t\tIndented Line\n"
+echo "Raw:      '#{complex}'"
+echo "Stripped: '#{complex.strip}'"
+
+# Edge Cases
+only_space = "     "
+echo "Spaces:   '#{only_space}' -> '#{only_space.strip}'"
+
+# Already clean string
+clean = "Clean"
+echo "Clean:    '#{clean}' -> '#{clean.strip}'"
+
+# Empty string
+empty = ""
+echo "Empty:    '#{empty}' -> '#{empty.strip}'"

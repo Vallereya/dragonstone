@@ -47,6 +47,7 @@ module Dragonstone
     class Lexer
         KEYWORDS = %w[
             echo
+            eecho
             puts 
             argv
             if 
@@ -57,7 +58,9 @@ module Dragonstone
             while 
             do 
             def 
+            define
             fun 
+            function
             abstract
             module 
             class 
@@ -67,6 +70,9 @@ module Dragonstone
             nil 
             typeof 
             con 
+            var
+            let
+            fix
             unless 
             case 
             when 
@@ -125,10 +131,13 @@ module Dragonstone
                 elsif char == '\''
                     scan_char
                 elsif char == 'e' && peek_char == '!'
-                    add_token(:DEBUG_PRINT, "e!", @line, @column, 2)
+                    add_token(:DEBUG_ECHO, "e!", @line, @column, 2)
                     advance(2)
+                elsif char == 'e' && peek_char == 'e' && peek_char(2) == '!'
+                    add_token(:DEBUG_EECHO, "ee!", @line, @column, 3)
+                    advance(3)
                 elsif char == 'p' && peek_char == '!'
-                    add_token(:DEBUG_PRINT, "p!", @line, @column, 2)
+                    add_token(:DEBUG_ECHO, "p!", @line, @column, 2)
                     advance(2)
                 elsif identifier_start?(char)
                     scan_identifier
@@ -568,23 +577,26 @@ module Dragonstone
                     when "true" then :TRUE
                     when "false" then :FALSE
                     when "nil" then :NIL
-                    when "elseif" then :ELSIF
                     when "echo", "puts" then :ECHO
+                    when "eecho" then :EECHO
                     when "argv" then :ARGV
                     when "if" then :IF
                     when "else" then :ELSE
-                    when "elsif" then :ELSIF
+                    when "elsif", "elseif" then :ELSIF
                     when "end" then :END
                     when "while" then :WHILE
                     when "do" then :DO
-                    when "def" then :DEF
-                    when "fun" then :FUN
+                    when "def", "define" then :DEF
+                    when "fun", "function" then :FUN
                     when "abstract" then :ABSTRACT
                     when "module" then :MODULE
                     when "class" then :CLASS
                     when "return" then :RETURN
                     when "typeof" then :TYPEOF
                     when "con" then :CON
+                    when "var" then :VAR
+                    when "let" then :LET
+                    when "fix" then :FIX
                     when "unless" then :UNLESS
                     when "case" then :CASE
                     when "when" then :WHEN
@@ -636,11 +648,24 @@ module Dragonstone
         private def scan_instance_variable
             start_line = @line
             start_col = @column
-            advance # consume '@'
+            advance # consume first '@'
 
-            if current_char == '@'
-                raise error_at_current("Class variables (@@) are not supported yet", 2)
+            at_count = 1
+            while current_char == '@'
+                at_count += 1
+                advance
             end
+
+            token_type = case at_count
+                when 1
+                    :INSTANCE_VAR
+                when 2
+                    :CLASS_VAR
+                when 3
+                    :MODULE_VAR
+                else
+                    raise error_at_current("Too many @ characters (max is @@@)", at_count)
+                end
 
             char = current_char
             unless char && identifier_start?(char)
@@ -655,7 +680,7 @@ module Dragonstone
 
             name = identifier.to_s
             length = @column - start_col
-            add_token(:INSTANCE_VAR, name, start_line, start_col, length)
+            add_token(token_type, name, start_line, start_col, length)
         end
 
         private def scan_number

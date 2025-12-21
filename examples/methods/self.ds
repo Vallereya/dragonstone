@@ -2,6 +2,7 @@
     Self Example
 ]#
 
+# Example One:
 class Person
     property name: str
 
@@ -18,3 +19,23 @@ end
 
 person = Person.new("Jules")
 person.greet
+
+# Example Two:
+module Test
+    def self.see
+        echo "Hello from Test module!"
+    end
+end
+
+Test.see
+
+# Example Three:
+module OtherTest
+    extend self
+
+    def see
+        echo "Hello from OtherTest module!"
+    end
+end
+
+OtherTest.see

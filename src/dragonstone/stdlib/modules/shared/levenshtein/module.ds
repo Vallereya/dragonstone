@@ -1,0 +1,178 @@
+#[
+    levenshtein distance of two strings.
+    
+    Reference: https://en.wikipedia.org/wiki/Levenshtein_distance
+
+    # Used underscore prefixes to avoid potential name clashes.
+
+]#
+
+module Levenshtein
+    # Helper for minimum value.
+    def min(_lev_a, _lev_b)
+        if _lev_a < _lev_b
+            return _lev_a
+        end
+        return _lev_b
+    end
+
+    def distance(_lev_first, _lev_second)
+        if _lev_first == _lev_second
+            return 0
+        end
+
+        # Access the strings directly.
+        _lev_s = _lev_first
+        _lev_t = _lev_second
+
+        _lev_s_size = _lev_s.length
+        _lev_t_size = _lev_t.length
+
+        if _lev_s_size == 0
+            return _lev_t_size
+        end
+
+        if _lev_t_size == 0
+            return _lev_s_size
+        end
+
+        # Ensure we iterate over the shorter string to save space.
+        if _lev_t_size > _lev_s_size
+
+            # Swap s and t.
+            _lev_tmp_str = _lev_s
+            _lev_s = _lev_t
+            _lev_t = _lev_tmp_str
+
+            _lev_tmp_size = _lev_s_size
+            _lev_s_size = _lev_t_size
+            _lev_t_size = _lev_tmp_size
+        end
+
+        # Initialize the vector 'v'.
+        _lev_v = [] as int
+        
+        # Populate initial row 0..t_size.
+        _lev_v_idx = 0
+
+        while _lev_v_idx <= _lev_t_size
+            _lev_v.push(_lev_v_idx)
+            _lev_v_idx = _lev_v_idx + 1
+        end
+
+        # Main Loop.
+        _lev_i = 0
+        while _lev_i < _lev_s_size
+            _lev_last_cost = _lev_i + 1
+
+            _lev_j = 0
+            while _lev_j < _lev_t_size
+
+                # Calculate cost (0 if match, 1 if different)
+                _lev_s_char = _lev_s.slice(_lev_i, 1)
+                _lev_t_char = _lev_t.slice(_lev_j, 1)
+                _lev_sub_cost = (_lev_s_char == _lev_t_char) ? 0 : 1
+                
+                # Math.min logic expanded, haven't added a Math stdlib yet.
+                # min(last_cost + 1, v[j + 1] + 1)
+                _lev_cost_a = Levenshtein.min(_lev_last_cost + 1, _lev_v[_lev_j + 1] + 1)
+                
+                # min(cost_a, v[j] + sub_cost)
+                _lev_cost = Levenshtein.min(_lev_cost_a, _lev_v[_lev_j] + _lev_sub_cost)
+
+                _lev_v[_lev_j] = _lev_last_cost
+                _lev_last_cost = _lev_cost
+                _lev_j = _lev_j + 1
+            end
+            
+            _lev_v[_lev_t_size] = _lev_last_cost
+            _lev_i = _lev_i + 1
+        end
+
+        return _lev_v[_lev_t_size]
+    end
+
+    # Helper to wrap Finder logic.
+    def find(_lev_name)
+        _lev_finder = LevenshteinFinder.new(_lev_name, nil)
+        
+        yield _lev_finder
+        
+        return _lev_finder.best_match()
+    end
+
+    def find_with_tolerance(_lev_name, _lev_tolerance)
+        _lev_finder = LevenshteinFinder.new(_lev_name, _lev_tolerance)
+        yield _lev_finder
+        return _lev_finder.best_match()
+    end
+
+    # Helper for searching a list directly.
+    def find_in_list(_lev_name, _lev_all_names)
+        _lev_finder = LevenshteinFinder.new(_lev_name, nil)
+        _lev_idx = 0
+        while _lev_idx < _lev_all_names.length
+            _lev_finder.test(_lev_all_names[_lev_idx])
+            _lev_idx = _lev_idx + 1
+        end
+        _lev_finder.best_match()
+    end
+
+    def find_in_list_with_tolerance(_lev_name, _lev_all_names, _lev_tolerance)
+        _lev_finder = LevenshteinFinder.new(_lev_name, _lev_tolerance)
+        _lev_idx = 0
+        while _lev_idx < _lev_all_names.length
+            _lev_finder.test(_lev_all_names[_lev_idx])
+            _lev_idx = _lev_idx + 1
+        end
+        _lev_finder.best_match()
+    end
+end
+
+class LevenshteinFinder
+    def initialize(_lev_target, _lev_tolerance)
+        @target = _lev_target
+
+        if _lev_tolerance
+            @tolerance = _lev_tolerance
+        else
+
+            # Calculate default tolerance (approximately 20% of length).
+            # target.size / 5.0 
+            _lev_len = @target.length
+            
+            # Manual ceil logic for integer division.
+            _lev_base = _lev_len // 5
+            _lev_remainder = _lev_len % 5
+            
+            if _lev_remainder > 0
+                @tolerance = _lev_base + 1
+            else
+                @tolerance = _lev_base
+            end
+        end
+
+        @bestvalue = nil
+        @bestdistance = nil
+    end
+
+    def test(_lev_name)
+        _lev_dist = Levenshtein.distance(@target, _lev_name)
+
+        if _lev_dist <= @tolerance
+            if @bestdistance == nil
+                @bestdistance = _lev_dist
+                @bestvalue = _lev_name
+            else
+                if _lev_dist < @bestdistance
+                    @bestdistance = _lev_dist
+                    @bestvalue = _lev_name
+                end
+            end
+        end
+    end
+
+    def best_match
+        @bestvalue
+    end
+end

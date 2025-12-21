@@ -2,6 +2,94 @@ require "spec"
 require "../src/dragonstone"
 
 describe "language features" do
+    it "scopes let declarations to blocks" do
+        source = <<-DS
+x = 1
+if true
+    let x = 2
+    echo x
+end
+echo x
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n1\n"
+    end
+
+    it "prevents reassignment of let and fix bindings" do
+        result = Dragonstone.run("if true\n  let x = 1\n  x = 2\n  echo x\nend\n")
+        result.output.should eq "2\n"
+
+        expect_raises(Dragonstone::ConstantError) do
+            Dragonstone.run("if true\n  fix x = 1\n  x = 2\nend\n")
+        end
+    end
+
+    it "does not rewrite shadowed parameters for let bindings" do
+        source = <<-DS
+let x = 1
+def show(x)
+    echo x
+end
+show(5)
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "5\n"
+    end
+
+    it "supports @@ class variables shared across instances" do
+        source = <<-DS
+class Counter
+    @@count = 0
+
+    def initialize
+        @@count += 1
+    end
+
+    def self.count
+        @@count
+    end
+end
+
+Counter.new
+Counter.new
+echo Counter.count
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n"
+    end
+
+    it "supports @@@ module variables shared across the module" do
+        source = <<-DS
+module Tracker
+    @@@count = 0
+
+    def self.inc
+        @@@count += 1
+    end
+
+    def self.count
+        @@@count
+    end
+end
+
+Tracker.inc
+Tracker.inc
+echo Tracker.count
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "2\n"
+    end
+
+    it "rejects class/module variables outside containers" do
+        expect_raises(Dragonstone::ParserError) do
+            Dragonstone.run("@@count = 1\n")
+        end
+
+        expect_raises(Dragonstone::ParserError) do
+            Dragonstone.run("@@@count = 1\n")
+        end
+    end
+
     it "supports Array#empty? in the native backend" do
         result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
         result.output.should eq "false\n"
@@ -459,6 +547,30 @@ DS
         expect_raises(Dragonstone::OutOfBounds) do
             Dragonstone.run(bad_source)
         end
+    end
+
+    it "strips leading and trailing whitespace" do
+        source = <<-DS
+s1 = "  Dragonstone  "
+echo s1.strip
+s2 = "\\tHello\\n"
+echo s2.strip
+s3 = "   "
+echo "empty:\#{s3.strip}"
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "Dragonstone\nHello\nempty:\n"
+    end
+
+    it "accepts var as explicit assignment" do
+        source = <<-DS
+x = 1
+var y = 2
+echo x
+echo y
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "1\n2\n"
     end
 
     it "supports abstract classes across native and core backends" do

@@ -143,6 +143,8 @@ module Dragonstone
               eq: String,
               ne: String,
               is_truthy: String,
+              debug_accum: String,
+              debug_flush: String,
             )
 
             @string_counter = 0
@@ -261,6 +263,8 @@ module Dragonstone
                 eq: "dragonstone_runtime_eq",
                 ne: "dragonstone_runtime_ne",
                 is_truthy: "dragonstone_runtime_is_truthy",
+                debug_accum: "dragonstone_runtime_debug_accum",
+                debug_flush: "dragonstone_runtime_debug_flush",
               )
             end
 
@@ -355,6 +359,10 @@ module Dragonstone
               @namespace_stack.clear
             end
 
+            private def shared_container_variable_name?(name : String) : Bool
+              name.starts_with?("__ds_cvar_") || name.starts_with?("__ds_mvar_")
+            end
+
             private def collect_globals_from(node : AST::Node)
               case node
               when AST::ModuleDefinition, AST::ClassDefinition
@@ -377,6 +385,90 @@ module Dragonstone
               when AST::EnumDefinition
                 full_name = qualify_name(node.name)
                 @globals << full_name
+              when AST::FunctionDef
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::FunctionLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::ParaLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::BlockLiteral
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::WithExpression
+                collect_globals_from(node.receiver)
+                node.body.each { |stmt| collect_globals_from(stmt) }
+              when AST::IfStatement
+                collect_globals_from(node.condition)
+                node.then_block.each { |stmt| collect_globals_from(stmt) }
+                node.elsif_blocks.each do |clause|
+                  collect_globals_from(clause.condition)
+                  clause.block.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::UnlessStatement
+                collect_globals_from(node.condition)
+                node.body.each { |stmt| collect_globals_from(stmt) }
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::WhileStatement
+                collect_globals_from(node.condition)
+                node.block.each { |stmt| collect_globals_from(stmt) }
+              when AST::CaseStatement
+                node.expression.try { |expr| collect_globals_from(expr) }
+                node.when_clauses.each do |clause|
+                  clause.conditions.each { |c| collect_globals_from(c) }
+                  clause.block.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::BeginExpression
+                node.body.each { |stmt| collect_globals_from(stmt) }
+                node.rescue_clauses.each do |clause|
+                  clause.body.each { |stmt| collect_globals_from(stmt) }
+                end
+                node.else_block.try(&.each { |stmt| collect_globals_from(stmt) })
+                node.ensure_block.try(&.each { |stmt| collect_globals_from(stmt) })
+              when AST::ReturnStatement
+                node.value.try { |expr| collect_globals_from(expr) }
+              when AST::DebugEcho
+                collect_globals_from(node.expression)
+              when AST::Assignment
+                if shared_container_variable_name?(node.name)
+                  @globals << qualify_name(node.name)
+                end
+                collect_globals_from(node.value)
+              when AST::Variable
+                if shared_container_variable_name?(node.name)
+                  @globals << qualify_name(node.name)
+                end
+              when AST::MethodCall
+                node.receiver.try { |recv| collect_globals_from(recv) }
+                node.arguments.each { |arg| collect_globals_from(arg) }
+              when AST::SuperCall
+                node.arguments.each { |arg| collect_globals_from(arg) }
+              when AST::BinaryOp
+                collect_globals_from(node.left)
+                collect_globals_from(node.right)
+              when AST::UnaryOp
+                collect_globals_from(node.operand)
+              when AST::ArrayLiteral
+                node.elements.each { |e| collect_globals_from(e) }
+              when AST::TupleLiteral
+                node.elements.each { |e| collect_globals_from(e) }
+              when AST::NamedTupleLiteral
+                node.entries.each { |e| collect_globals_from(e.value) }
+              when AST::MapLiteral
+                node.entries.each do |(k, v)|
+                  collect_globals_from(k)
+                  collect_globals_from(v)
+                end
+              when AST::IndexAccess
+                collect_globals_from(node.object)
+                collect_globals_from(node.index)
+              when AST::IndexAssignment
+                collect_globals_from(node.object)
+                collect_globals_from(node.index)
+                collect_globals_from(node.value)
+              when AST::AttributeAssignment
+                collect_globals_from(node.receiver)
+                collect_globals_from(node.value)
               else
                 # Recurse if container.
               end
@@ -477,7 +569,7 @@ module Dragonstone
                   intern_string(entry.name)
                   collect_strings_from_node(entry.value)
                 end
-              when AST::DebugPrint
+              when AST::DebugEcho
                 intern_string("%s")
                 intern_string("#{node.expression.to_source} # -> ")
                 collect_strings_from_node(node.expression)
@@ -884,6 +976,8 @@ module Dragonstone
               io << "declare void @#{@runtime[:yield_missing_block]}()\n"
               io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
               io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
+              io << "declare void @#{@runtime[:debug_accum]}(i8*, i8*)\n"
+              io << "declare void @#{@runtime[:debug_flush]}()\n"
               io << "declare i8* @#{@runtime[:type_of]}(i8*)\n"
               io << "declare i8* @#{@runtime[:ivar_get]}(i8*, i8*)\n"
               io << "declare i8* @#{@runtime[:ivar_set]}(i8*, i8*, i8*)\n"
@@ -1044,7 +1138,10 @@ module Dragonstone
 
               terminated = generate_block(ctx, top_level)
 
-              ctx.io << "  ret i32 0\n" unless terminated
+              unless terminated
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+                ctx.io << "  ret i32 0\n"
+              end
 
               emit_postamble(ctx)
 
@@ -1090,7 +1187,7 @@ module Dragonstone
                    AST::AttributeAssignment,
                    AST::IndexAssignment,
                    AST::YieldExpression,
-                   AST::DebugPrint
+                   AST::DebugEcho
                 true
               else
                 false
@@ -1148,8 +1245,8 @@ module Dragonstone
               when AST::SuperCall
                 generate_expression(ctx, stmt)
                 false
-              when AST::DebugPrint
-                generate_debug_print(ctx, stmt)
+              when AST::DebugEcho
+                generate_debug_echo(ctx, stmt)
                 false
                 # value = generate_expression(ctx, stmt.expression)
                 # prefix_str = "#{stmt.expression.to_source} # => "
@@ -1521,9 +1618,11 @@ module Dragonstone
 
                 value = ensure_value_type(ctx, value, ctx.return_type)
                 emit_ensure_chain(ctx)
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 ctx.io << "  ret #{value[:type]} #{value[:ref]}\n"
               else
                 emit_ensure_chain(ctx)
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 emit_default_return(ctx)
               end
               true
@@ -1568,6 +1667,8 @@ module Dragonstone
                 generate_block_literal(ctx, node)
               when AST::ParaLiteral
                 generate_para_literal(ctx, node)
+              when AST::FunctionLiteral
+                generate_function_literal(ctx, node)
               when AST::BeginExpression
                 generate_begin_expression(ctx, node)
               when AST::ConstantPath
@@ -1602,8 +1703,8 @@ module Dragonstone
                 generate_conditional_expression(ctx, node)
               when AST::Assignment
                 generate_local_assignment(ctx, node)
-              when AST::DebugPrint
-                generate_debug_print(ctx, node)
+              when AST::DebugEcho
+                generate_debug_echo(ctx, node)
               else
                 raise "Unsupported expression #{node.class}"
               end
@@ -1639,8 +1740,17 @@ module Dragonstone
               value_ref("i8*", "%#{phi}")
             end
 
-            private def generate_debug_print(ctx : FunctionContext, node : AST::DebugPrint) : ValueRef
+            private def generate_debug_echo(ctx : FunctionContext, node : AST::DebugEcho) : ValueRef
               value = generate_expression(ctx, node.expression)
+
+              if node.inline
+                source_ptr = materialize_string_pointer(ctx, node.expression.to_source)
+                boxed = box_value(ctx, value)
+                ctx.io << "  call void @#{@runtime[:debug_accum]}(i8* #{source_ptr}, i8* #{boxed[:ref]})\n"
+                return value
+              end
+
+              ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
               prefix_str = "#{node.expression.to_source} # -> "
               format_ptr = materialize_string_pointer(ctx, "%s")
               prefix_ptr = materialize_string_pointer(ctx, prefix_str)
@@ -2052,6 +2162,14 @@ module Dragonstone
 
             private def generate_para_literal(ctx : FunctionContext, node : AST::ParaLiteral) : ValueRef
               generate_block_literal_impl(ctx, node.typed_parameters, node.body)
+            end
+
+            private def generate_function_literal(ctx : FunctionContext, node : AST::FunctionLiteral) : ValueRef
+              body = node.body
+              unless node.rescue_clauses.empty?
+                body = [AST::BeginExpression.new(node.body, node.rescue_clauses, location: node.location)] of AST::Node
+              end
+              generate_block_literal_impl(ctx, node.typed_parameters, body)
             end
 
             private def generate_attribute_assignment(ctx : FunctionContext, node : AST::AttributeAssignment) : ValueRef
@@ -2514,7 +2632,7 @@ module Dragonstone
                    AST::AttributeAssignment,
                    AST::IndexAssignment,
                    AST::YieldExpression,
-                   AST::DebugPrint
+                   AST::DebugEcho
                 true
               else
                 false
@@ -3322,8 +3440,16 @@ module Dragonstone
               if call.name == "echo"
                 raise "echo expects exactly one argument" unless args.size == 1
                 raise "echo does not accept a block" if block_node
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 arg_val = generate_expression(ctx, args.first)
                 emit_echo(ctx, arg_val, inspect: false)
+                return value_ref("i8*", "null", constant: true)
+              elsif call.name == "eecho"
+                raise "eecho expects exactly one argument" unless args.size == 1
+                raise "eecho does not accept a block" if block_node
+                ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+                arg_val = generate_expression(ctx, args.first)
+                emit_eecho(ctx, arg_val, inspect: false)
                 return value_ref("i8*", "null", constant: true)
               elsif call.name == "typeof"
                 raise "typeof expects exactly one argument" unless args.size == 1
@@ -3655,6 +3781,32 @@ module Dragonstone
                 ctx.io << "  call i32 @puts(i8* %#{reg})\n"
               else
                 raise "echo currently supports strings, integers, booleans, or doubles"
+              end
+            end
+
+            private def emit_eecho(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
+              case value[:type]
+              when "i8*"
+                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
+                format_ptr = materialize_string_pointer(ctx, "%s")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{display[:ref]})\n"
+              when "i32", "i64"
+                coerced = value[:type] == "i64" ? value : extend_to_i64(ctx, value)
+                format_ptr = materialize_string_pointer(ctx, "%lld")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i64 #{coerced[:ref]})\n"
+              when "double"
+                format_ptr = materialize_string_pointer(ctx, "%g")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "i1"
+                true_ptr = materialize_string_pointer(ctx, "true")
+                false_ptr = materialize_string_pointer(ctx, "false")
+                reg = ctx.fresh("boolstr")
+                ctx.io << "  %#{reg} = select i1 #{value[:ref]}, i8* #{true_ptr}, i8* #{false_ptr}\n"
+                format_ptr = materialize_string_pointer(ctx, "%s")
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* %#{reg})\n"
+              else
+                raise "eecho currently supports strings, integers, booleans, or doubles"
               end
             end
 

@@ -1,15 +1,16 @@
 module Dragonstone
     module AST
-        class DebugPrint < Node
+        class DebugEcho < Node
             getter expression : Node
+            getter inline : Bool
 
-            def initialize(expression : Node, location : Location? = nil)
+            def initialize(expression : Node, @inline : Bool = false, location : Location? = nil)
                 super(location: location)
                 @expression = expression
             end
 
             def accept(visitor)
-                visitor.visit_debug_print(self)
+                visitor.visit_debug_echo(self)
             end
 
             def to_source : String

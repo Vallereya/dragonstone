@@ -157,8 +157,8 @@ module Dragonstone
                 compile_while(node)
                 emit(OPC::POP) if consume_result
 
-            when AST::DebugPrint
-                compile_debug_print(node)
+            when AST::DebugEcho
+                compile_debug_echo(node)
                 emit(OPC::POP) if consume_result
             when AST::CaseStatement
                 compile_case_statement(node)
@@ -214,8 +214,8 @@ module Dragonstone
             when AST::MethodCall
                 compile_method_call(node)
 
-            when AST::DebugPrint
-                compile_debug_print(node)
+            when AST::DebugEcho
+                compile_debug_echo(node)
 
             when AST::IfStatement
                 compile_if(node)
@@ -472,6 +472,11 @@ module Dragonstone
                 args.each { |arg| compile_expression(arg) }
                 emit(OPC::ECHO, args.size)
 
+            when "eecho"
+                raise ArgumentError.new("eecho does not accept a block") if block_node
+                args.each { |arg| compile_expression(arg) }
+                emit(OPC::EECHO, args.size)
+
             when "typeof"
                 raise ArgumentError.new("typeof does not accept a block") if block_node
                 args.each { |arg| compile_expression(arg) }
@@ -504,10 +509,10 @@ module Dragonstone
             {args: args, block: block_node}
         end
 
-        private def compile_debug_print(node : AST::DebugPrint)
+        private def compile_debug_echo(node : AST::DebugEcho)
             source_idx = const_index(node.to_source)
             compile_expression(node.expression)
-            emit(OPC::DEBUG_PRINT, source_idx)
+            emit(node.inline ? OPC::DEBUG_EECHO : OPC::DEBUG_ECHO, source_idx)
         end
 
         private def compile_unless(node : AST::UnlessStatement)
@@ -1181,7 +1186,7 @@ module Dragonstone
                 stack_pop
                 stack_push
 
-            when OPC::DEBUG_PRINT
+            when OPC::DEBUG_ECHO
                 stack_pop
                 stack_push
 
