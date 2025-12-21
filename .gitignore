@@ -13,11 +13,11 @@ NUL
 
 # Ignore Dev Build Files, Directories, and Notes.
 dev/
-!dev/README.md
+!dev/DEV_README.md
 
 # Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
 bootstrap/
-!bootstrap/README.md
+!bootstrap/BOOTSTRAP_README.md
 
 # Ignore any Output/Build Cache from testing.
 cache

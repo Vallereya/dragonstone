@@ -133,6 +133,10 @@
 
 ```diff
 + The `Great Refactor`: (Part Two)              Pre-Alpha Refactor.
++ REPL needs to be wired to the CLI.
++ Update folder structure so its properly splitup for bootstrapping and separate compiler.
++ Modularize files to better support separate interpreter and compiler.
++ Flesh out the compiler for later targets.
 ```
 
 ---
@@ -145,10 +149,10 @@
 #####   <h6 align="center">         `v0.1.0 -> v0.1.1`
 
 ```diff
-+ REPL needs to be wired to the CLI.
-+ Update folder structure so its properly splitup for bootstrapping and separate compiler.
-+ Modularize files to better support separate interpreter and compiler.
-+ Flesh out the compiler for later targets.
++ Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
++ Tagged version & binaries.
++ Setup installer/uninstaller.
++ Reproducible build notes.
 + Targets should be setup for artifacts for DVM (Bytecode), LLVM (IR), C, Crystal, and Ruby.
 ```
 
@@ -156,10 +160,10 @@
 #####   <h6 align="center">         `v0.1.1 -> v0.1.2`
 
 ```diff
-+ Pre-Alpha Update ->   Documentation, Examples, Tutorials, and ChangeLog.
-+ Tagged version & binaries.
-+ Setup installer/uninstaller.
-+ Reproducible build notes.
++ Implemented support for abstract classes and abstract def.
++ Extend the LLVM backend be able to compile all current examples, excluding stdlibs.
++ Support for annotations via `@[...]`, this will allow us to use it later but doesn't need anything added yet.
++ Reformat the stdlib and adjust the path/file utilities so we can just use File/Path.
 + Flesh out what the versioned grammar is.
 ```
 
@@ -167,10 +171,10 @@
 #####   <h6 align="center">         `v0.1.2 -> v0.1.3`
 
 ```diff
-+ Implemented support for abstract classes and abstract def.
-+ Extend the LLVM backend be able to compile all current examples, excluding stdlibs.
-+ Support for annotations via `@[...]`, this will allow us to use it later but doesn't need anything added yet.
-+ Reformat the stdlib and adjust the path/file utilities so we can just use File/Path.
++ Updated functions to allow default values directly, and updated `e!` and typeof to correctly use `->`.
++ Added support for command line arguments using `argv`.
++ Change FFI to use a new calling convention/syntax, maintains direct calls. 
++ Added support for `super` classes. 
 + Added a simple networking stdlib and simple toml stdlib.
 ```
 
@@ -178,10 +182,10 @@
 #####   <h6 align="center">         `v0.1.3 -> v0.1.4`
 
 ```diff
-+ Updated functions to allow default values directly, and updated `e!` and typeof to correctly use `->`.
-+ Added support for command line arguments using `argv`.
-+ Change FFI to use a new calling convention/syntax, maintains direct calls. 
-+ Added support for `super` classes. 
++ Added .strip
++ Added new echo options (eecho and ee!) for inline omission.
++ Added flush, getchar, and write to C's FFI. 
++ Extended `as` to allow `[] as T` and `{} as K -> V`.
 + Fixed Operator overloading issues, implemented ones now work correctly on all run options/llvm.
 ```
 
@@ -190,6 +194,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Three)            Alpha Refactor.
++ Added an I/O stdlib, might be temp and move directly to language.
++ Fixed build pipeline, so all `shards build`'s go to the same place. 
++ Added Levenshtein stdlib.
++ Updated def and fun to support optional define or function depending on preference. 
 ```
 
 ---
@@ -203,7 +211,7 @@
 
 ```diff
 - Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
-- 
++ Expanded `fun` so it works as intended. 
 - 
 - 
 - 
@@ -247,6 +255,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Four)             Beta Refactor.
+- 
+- 
+- 
+- 
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>
@@ -335,6 +347,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Five & Final)     Release Refactor.
+- 
+- 
+- 
+- 
 ```
 <h1 align="center">                    The Future of Dragonstone        </h1>
 <h1 align="center">                     & Transition to Release         </h1>
