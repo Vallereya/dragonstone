@@ -22,12 +22,12 @@ module Dragonstone
       use_decl.items.each do |item|
         case item.kind
         when AST::UseItemKind::Paths
-          @resolver.expand_use_item(item, base_dir).each do |path|
+          @resolver.expand_use_item(item, base_dir, exclude_path: base_file).each do |path|
             unit = load_unit(path, preferred_backend)
             current_unit.bind_namespace(unit.default_namespace)
           end
         when AST::UseItemKind::From
-          path = @resolver.expand_use_item(item, base_dir).first
+          path = @resolver.expand_use_item(item, base_dir, exclude_path: base_file).first
           unit = load_unit(path, preferred_backend)
           item.imports.each do |ni|
             value = unit.exported_lookup(ni.name) || raise "Symbol `#{ni.name}` not exported by #{path}"
