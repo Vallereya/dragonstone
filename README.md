@@ -250,12 +250,12 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 
 ###### In dragonstone you can optionally be very explicit. Using `con` for constants, `var` for variables, `fix` for block-scoped constants, and `let` for block-scoped variables.
 ```dragonstone
-    var first = 20
-    con mul = 2
+    con first = 20
+    var mul = 2
 
     def example
-        let second = 10
-        fix div = first // second
+        fix second = 10
+        let div = first // second
 
         echo first
         echo second
