@@ -75,7 +75,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
             Influenced by
         </td>
         <td align="center">
-            Ruby, Crystal, Python, Go, Nim  
+            Ruby, Crystal, Python, Go, Nim, Rust  
         </td>
     </tr>
     <tr align="center">
@@ -658,15 +658,37 @@ That requirement made some questions. What implementation path gives me long-ter
 ### v5: Crystal & C (April 2025 to Present)
 By that point, I had a lot of prior work and ideas tied up in Ruby, Crystal, and C. But, Ruby kept being the recurring issue. So for v5, I made a cut, I just dropped Ruby and shrank C. Most of the core ideas from v1-v4 were carried over (either directly ported or reimplemented), with Crystal being the largest part, but v5 is where the project finally feels like it’s going in the right direction.
 
-## 📝 Contact
-    Project:
-        www.github.com/vallereya
-
-## ⚖️ License
-*© 2025 Vallereya*
 <br>
 
-*Code and Contributions have **Apache-2.0 License**.
+---
+
 <br>
-See **LICENSE** for more information.*
+<p align="center">
+    <b>
+        <code> © 2025<i><a href="https://github.com/vallereya"> Vallereya </a></i></code>
+    </b>
+</p>
 <br>
+<p align="center">
+	<img
+        src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/footers/gray0_ctp_on_line.svg?sanitize=true"
+    />
+</p>
+<div align="center">
+    <p>
+        <i>
+            Code and Contributions have
+            <b><i>Apache-2.0 License</i></b>
+            <br>
+            See <b>LICENSE</b> for more information.
+        </i>
+    </p>
+    <br>
+    <a href="https://github.com/vallereya/dragonstone/blob/main/LICENSE">
+        <img
+            src="https://img.shields.io/github/license/vallereya/dragonstone?style=for-the-badge&logoColor=CDD6F4&labelColor=302D41&color=CBA6F7"
+            alt="LICENSE"
+        >
+        </img>
+    </a>
+</div>

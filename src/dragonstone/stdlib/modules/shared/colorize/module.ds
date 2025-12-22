@@ -1,0 +1,13 @@
+#[
+    `Colorize` Module is for colorizing text output in the terminal. It
+    adds ANSI escape codes to strings to change their color and style when 
+    printed to a terminal that supports ANSI codes.
+
+    This is inspired by similar libraries, `Colorize` and `Paint` gems in
+    Ruby, `rainbow` in Node.js, `Colorize` stdlib from Crystal, and 
+    `colorama` in Python, among others, and adapted for Dragonstone.
+]#
+
+module Colorize
+    
+end
