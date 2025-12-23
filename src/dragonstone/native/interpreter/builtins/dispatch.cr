@@ -674,6 +674,80 @@ module Dragonstone
                 end
                 call_gc_dispatch(receiver, node.name, args, block_value, node)
 
+            when BuiltinStream
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+
+                case node.name
+                when "echoln"
+                    append_output(args.map { |v| display_value(v) }.join(" "))
+                    nil
+                when "eecholn"
+                    append_output_inline(args.map { |v| display_value(v) }.join(" "))
+                    nil
+                when "debug"
+                    if args.size != 1
+                        runtime_error(InterpreterError, "debug expects 1 argument, got #{args.size}", node)
+                    end
+                    append_output(display_value(args[0]))
+                    args[0]
+                when "debug_inline"
+                    if args.size != 1
+                        runtime_error(InterpreterError, "debug_inline expects 1 argument, got #{args.size}", node)
+                    end
+                    append_output_inline(display_value(args[0]))
+                    args[0]
+                when "flush"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "flush expects 0 arguments, got #{args.size}", node)
+                    end
+                    nil
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for builtin stream", node)
+                end
+
+            when BuiltinStdin
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+                case node.name
+                when "read"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "read expects 0 arguments, got #{args.size}", node)
+                    end
+                    line = STDIN.gets
+                    (line || "").chomp
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for stdin", node)
+                end
+
+            when BuiltinArgf
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+                case node.name
+                when "read"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "read expects 0 arguments, got #{args.size}", node)
+                    end
+                    if argv.empty?
+                        STDIN.gets_to_end
+                    else
+                        String.build do |io|
+                            argv.each do |path|
+                                begin
+                                    io << File.read(path)
+                                rescue e
+                                    runtime_error(InterpreterError, "Failed to read '#{path}': #{e.message}", node)
+                                end
+                            end
+                        end
+                    end
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for argf", node)
+                end
+
             when DragonEnum
                 case node.name
                 when "new"

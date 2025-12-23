@@ -125,6 +125,11 @@ module Dragonstone
               ivar_set: String,
               argv_get: String,
               argv_set: String,
+              stdout_get: String,
+              stderr_get: String,
+              stdin_get: String,
+              argc_get: String,
+              argf_get: String,
               root_self: String,
               singleton_define: String,
               define_class: String,
@@ -245,6 +250,11 @@ module Dragonstone
                 ivar_set: "dragonstone_runtime_ivar_set",
                 argv_get: "dragonstone_runtime_argv",
                 argv_set: "dragonstone_runtime_set_argv",
+                stdout_get: "dragonstone_runtime_stdout",
+                stderr_get: "dragonstone_runtime_stderr",
+                stdin_get: "dragonstone_runtime_stdin",
+                argc_get: "dragonstone_runtime_argc",
+                argf_get: "dragonstone_runtime_argf",
                 root_self: "dragonstone_runtime_root_self",
                 singleton_define: "dragonstone_runtime_define_singleton_method",
                 define_class: "dragonstone_runtime_define_class",
@@ -958,6 +968,11 @@ module Dragonstone
               io << "declare double @#{@runtime[:unbox_float]}(i8*)\n"
               io << "declare void @#{@runtime[:argv_set]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:argv_get]}()\n"
+              io << "declare i8* @#{@runtime[:stdout_get]}()\n"
+              io << "declare i8* @#{@runtime[:stderr_get]}()\n"
+              io << "declare i8* @#{@runtime[:stdin_get]}()\n"
+              io << "declare i8* @#{@runtime[:argc_get]}()\n"
+              io << "declare i8* @#{@runtime[:argf_get]}()\n"
               io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
               io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -1166,6 +1181,11 @@ module Dragonstone
 	              when AST::Literal,
 	                   AST::Variable,
 	                   AST::ArgvExpression,
+	                   AST::ArgcExpression,
+	                   AST::ArgfExpression,
+	                   AST::StdoutExpression,
+	                   AST::StderrExpression,
+	                   AST::StdinExpression,
 	                   AST::BinaryOp,
 	                   AST::UnaryOp,
 	                   AST::MethodCall,
@@ -1418,6 +1438,24 @@ module Dragonstone
               when AST::RetryStatement
                 generate_retry_statement(ctx, stmt)
               when AST::AliasDefinition
+                if stmt.type_expression.is_a?(AST::SimpleTypeExpression)
+                  segments = stmt.type_expression.as(AST::SimpleTypeExpression).name.split("::")
+                  resolved = emit_constant_lookup(ctx, segments)
+                  cond = ctx.fresh("alias_present")
+                  define_label = ctx.fresh_label("alias_define")
+                  merge_label = ctx.fresh_label("alias_merge")
+
+                  ctx.io << "  %#{cond} = icmp ne i8* #{resolved[:ref]}, null\n"
+                  ctx.io << "  br i1 %#{cond}, label %#{define_label}, label %#{merge_label}\n"
+                  ctx.io << "#{define_label}:\n"
+                  name_ptr = materialize_string_pointer(ctx, qualify_name(stmt.name))
+                  runtime_call(ctx, "i8*", @runtime[:constant_define], [
+                    {type: "i8*", ref: name_ptr},
+                    {type: "i8*", ref: resolved[:ref]},
+                  ])
+                  ctx.io << "  br label %#{merge_label}\n"
+                  ctx.io << "#{merge_label}:\n"
+                end
                 false
               when AST::AccessorMacro
                 generate_accessor_macro(ctx, stmt)
@@ -1636,6 +1674,16 @@ module Dragonstone
                 generate_variable_reference(ctx, node.name)
               when AST::ArgvExpression
                 runtime_call(ctx, "i8*", @runtime[:argv_get], [] of CallArg)
+              when AST::ArgcExpression
+                runtime_call(ctx, "i8*", @runtime[:argc_get], [] of CallArg)
+              when AST::ArgfExpression
+                runtime_call(ctx, "i8*", @runtime[:argf_get], [] of CallArg)
+              when AST::StdoutExpression
+                runtime_call(ctx, "i8*", @runtime[:stdout_get], [] of CallArg)
+              when AST::StderrExpression
+                runtime_call(ctx, "i8*", @runtime[:stderr_get], [] of CallArg)
+              when AST::StdinExpression
+                runtime_call(ctx, "i8*", @runtime[:stdin_get], [] of CallArg)
               when AST::BinaryOp
                 case node.operator
                 when :"&&", :"and"
@@ -2169,7 +2217,7 @@ module Dragonstone
               unless node.rescue_clauses.empty?
                 body = [AST::BeginExpression.new(node.body, node.rescue_clauses, location: node.location)] of AST::Node
               end
-              generate_block_literal_impl(ctx, node.typed_parameters, body)
+              generate_block_literal_impl(ctx, node.typed_parameters, body, capture: false)
             end
 
             private def generate_attribute_assignment(ctx : FunctionContext, node : AST::AttributeAssignment) : ValueRef
@@ -2184,10 +2232,10 @@ module Dragonstone
               end
             end
 
-            private def generate_block_literal_impl(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node)) : ValueRef
+            private def generate_block_literal_impl(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node), capture : Bool = true) : ValueRef
               fn_name = unique_block_symbol
               fn_type = "i8*"
-              captures = collect_block_captures(ctx, params, body)
+              captures = capture ? collect_block_captures(ctx, params, body) : [] of BlockCaptureInfo
               env_pointer = captures.empty? ? value_ref("i8*", "null", constant: true) : build_block_environment(ctx, captures)
 
               param_specs = params.map_with_index do |param, index|
@@ -2609,6 +2657,11 @@ module Dragonstone
 	              when AST::Literal,
 	                   AST::Variable,
 	                   AST::ArgvExpression,
+	                   AST::ArgcExpression,
+	                   AST::ArgfExpression,
+	                   AST::StdoutExpression,
+	                   AST::StderrExpression,
+	                   AST::StdinExpression,
 	                   AST::BinaryOp,
 	                   AST::MethodCall,
 	                   AST::UnaryOp,

@@ -202,6 +202,16 @@ module Dragonstone
 
             when AST::ArgvExpression
                 emit(OPC::LOAD_ARGV)
+            when AST::ArgcExpression
+                emit(OPC::LOAD_ARGC)
+            when AST::ArgfExpression
+                emit(OPC::LOAD_ARGF)
+            when AST::StdoutExpression
+                emit(OPC::LOAD_STDOUT)
+            when AST::StderrExpression
+                emit(OPC::LOAD_STDERR)
+            when AST::StdinExpression
+                emit(OPC::LOAD_STDIN)
 
             when AST::Assignment
                 compile_assignment(node)
@@ -872,8 +882,7 @@ module Dragonstone
             chunk = fn_compiler.compile_function_body(node.body, preserve_last: true, parameter_names: node.typed_parameters.map(&.name))
             chunk_idx = const_index(chunk)
             signature_idx = const_index(build_signature(node.typed_parameters, node.return_type))
-            name_idx = name_index("<lambda>")
-            emit(OPC::MAKE_FUNCTION, name_idx, signature_idx, chunk_idx)
+            emit(OPC::MAKE_PARA, signature_idx, chunk_idx)
         end
 
         private def compile_block_literal(node : AST::BlockLiteral)
@@ -1158,7 +1167,7 @@ module Dragonstone
         private def adjust_stack(opcode : Int32, operands : Array(Int32))
             case opcode
 
-            when OPC::CONST, OPC::LOAD, OPC::LOAD_ARGV
+            when OPC::CONST, OPC::LOAD, OPC::LOAD_ARGV, OPC::LOAD_STDOUT, OPC::LOAD_STDERR, OPC::LOAD_STDIN, OPC::LOAD_ARGC, OPC::LOAD_ARGF
                 stack_push
 
             when OPC::STORE
@@ -1270,6 +1279,9 @@ module Dragonstone
                 stack_push
 
             when OPC::MAKE_BLOCK
+                stack_push
+
+            when OPC::MAKE_PARA
                 stack_push
 
             when OPC::STORE_INDEX

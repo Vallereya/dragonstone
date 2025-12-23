@@ -95,6 +95,77 @@ DS
         result.output.should eq "false\n"
     end
 
+    it "exposes builtin IO streams in the native backend" do
+        source = <<-DS
+stdout.echo "Hello"
+stderr.echo "World"
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "Hello\nWorld\n"
+    end
+
+    it "exposes argc in the native backend" do
+        result = Dragonstone.run("echo argc\n", argv: ["one", "two"])
+        result.output.should eq "2\n"
+    end
+
+    it "supports argf.read in the native backend" do
+        tmp_dir = File.join(Dir.current, "tmp")
+        Dir.mkdir_p(tmp_dir)
+        path = File.join(tmp_dir, "argf_native.txt")
+        File.write(path, "ARGF_NATIVE")
+
+        result = Dragonstone.run("stdout.echo argf.read\n", argv: [path])
+        result.output.should eq "ARGF_NATIVE\n"
+    end
+
+    it "allows fun literals to see globals in the native backend" do
+        source = <<-DS
+x = 10
+f = fun() do
+    x
+end
+echo f.call()
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "10\n"
+    end
+
+    it "does not capture locals in fun literals in the native backend" do
+        source = <<-DS
+def maker
+    x = 1
+    fun() do
+        x
+    end
+end
+
+f = maker()
+echo f.call()
+DS
+        expect_raises(Dragonstone::NameError) do
+            Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        end
+    end
+
+    it "allows aliasing constant paths" do
+        source = <<-DS
+module Outer
+    class Inner
+        def greet
+            "hi"
+        end
+    end
+end
+
+alias AliasInner = Outer::Inner
+obj = AliasInner.new
+echo obj.greet
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "hi\n"
+    end
+
     it "creates and uses para literals" do
         source = <<-DS
 #! typed

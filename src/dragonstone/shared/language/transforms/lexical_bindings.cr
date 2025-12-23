@@ -310,7 +310,7 @@ module Dragonstone
                         AST::Variable.new(resolved, location: node.location)
                     when AST::ConstantPath
                         AST::ConstantPath.new(node.names, location: node.location)
-                    when AST::Literal, AST::ArgvExpression, AST::BagConstructor, AST::InstanceVariable, AST::InstanceVariableDeclaration
+                    when AST::Literal, AST::ArgvExpression, AST::ArgcExpression, AST::ArgfExpression, AST::StdoutExpression, AST::StderrExpression, AST::StdinExpression, AST::BagConstructor, AST::InstanceVariable, AST::InstanceVariableDeclaration
                         node
                     else
                         node

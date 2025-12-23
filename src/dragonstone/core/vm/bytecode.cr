@@ -13,8 +13,26 @@ module Dragonstone
             end
         end
 
+        class BuiltinStream
+            enum Kind
+                Stdout
+                Stderr
+            end
+
+            getter kind : Kind
+
+            def initialize(@kind : Kind)
+            end
+        end
+
+        class BuiltinStdin
+        end
+
+        class BuiltinArgf
+        end
+
         alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule | ::Dragonstone::Runtime::GC::Area(Value) | GCHost
+        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | ParaValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule | BuiltinStream | BuiltinStdin | BuiltinArgf | ::Dragonstone::Runtime::GC::Area(Value) | GCHost
 
         class ParameterSpec
             getter name_index : Int32
@@ -45,6 +63,15 @@ module Dragonstone
 
             def initialize(@name : String, @signature : FunctionSignature, @code : CompiledCode, is_abstract : Bool = false)
                 @abstract = is_abstract
+            end
+        end
+
+        class ParaValue
+            getter signature : FunctionSignature
+            getter code : CompiledCode
+            getter env : Hash(String, Value)
+
+            def initialize(@signature : FunctionSignature, @code : CompiledCode, @env : Hash(String, Value))
             end
         end
 

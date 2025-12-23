@@ -158,6 +158,14 @@ static DSValue *root_self_box = NULL;
 static int64_t ds_program_argc = 0;
 static char **ds_program_argv = NULL;
 static DSValue *ds_program_argv_box = NULL;
+static void *ds_builtin_stdout = NULL;
+static void *ds_builtin_stderr = NULL;
+static void *ds_builtin_stdin = NULL;
+static void *ds_builtin_argf = NULL;
+static void *ds_builtin_io_stream_class = NULL;
+static void *ds_builtin_stdin_class = NULL;
+static void *ds_builtin_argf_class = NULL;
+static bool ds_io_builtins_initialized = false;
 
 void dragonstone_runtime_push_exception_frame(void *frame_ptr) {
     DSExceptionFrame *frame = (DSExceptionFrame *)frame_ptr;
@@ -372,6 +380,11 @@ void *dragonstone_runtime_tuple_literal(int64_t l, void **e);
 void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v);
 void dragonstone_runtime_set_argv(int64_t argc, char **argv);
 void *dragonstone_runtime_argv(void);
+void *dragonstone_runtime_argc(void);
+void *dragonstone_runtime_stdout(void);
+void *dragonstone_runtime_stderr(void);
+void *dragonstone_runtime_stdin(void);
+void *dragonstone_runtime_argf(void);
 
 void *dragonstone_runtime_gt(void *lhs, void *rhs);
 void *dragonstone_runtime_lt(void *lhs, void *rhs);
@@ -2017,6 +2030,180 @@ void *dragonstone_runtime_argv(void) {
 
     ds_program_argv_box = box;
     return box;
+}
+
+void *dragonstone_runtime_argc(void) {
+    int64_t count = 0;
+    if (ds_program_argc > 1 && ds_program_argv) {
+        count = ds_program_argc - 1;
+    }
+    return dragonstone_runtime_box_i64(count);
+}
+
+static void *ds_make_instance(void *class_box_ptr) {
+    if (!ds_is_boxed(class_box_ptr)) return NULL;
+    DSValue *cbox = (DSValue *)class_box_ptr;
+    if (cbox->kind != DS_VALUE_CLASS) return NULL;
+    DSClass *cls = (DSClass *)cbox->as.ptr;
+    DSInstance *inst = (DSInstance *)ds_alloc(sizeof(DSInstance));
+    inst->klass = cls;
+    inst->ivars = NULL;
+    DSValue *inst_box = ds_new_box(DS_VALUE_INSTANCE);
+    inst_box->as.ptr = inst;
+    return inst_box;
+}
+
+static char *ds_read_line(FILE *fp) {
+    if (!fp) return ds_strdup("");
+    char buf[4096];
+    if (!fgets(buf, (int)sizeof(buf), fp)) return ds_strdup("");
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) len--;
+    char *out = (char *)ds_alloc(len + 1);
+    memcpy(out, buf, len);
+    out[len] = '\0';
+    return out;
+}
+
+static char *ds_read_to_end(FILE *fp) {
+    if (!fp) return ds_strdup("");
+    size_t cap = 4096;
+    size_t len = 0;
+    char *out = (char *)ds_alloc(cap);
+    int ch;
+    while ((ch = fgetc(fp)) != EOF) {
+        if (len + 1 >= cap) {
+            cap *= 2;
+            char *resized = (char *)realloc(out, cap);
+            if (!resized) abort();
+            out = resized;
+        }
+        out[len++] = (char)ch;
+    }
+    out[len] = '\0';
+    return out;
+}
+
+static void ds_stream_write(FILE *out, const char *text) {
+    if (!out) return;
+    if (text) fputs(text, out);
+}
+
+static void *ds_iostream_eecholn(void *receiver, void *value) {
+    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
+    void *str_ptr = value;
+    if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
+    ds_stream_write(out, (const char *)str_ptr);
+    return NULL;
+}
+
+static void *ds_iostream_echoln(void *receiver, void *value) {
+    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
+    void *str_ptr = value;
+    if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
+    ds_stream_write(out, (const char *)str_ptr);
+    fputc('\n', out);
+    return NULL;
+}
+
+static void *ds_iostream_debug(void *receiver, void *value) {
+    return ds_iostream_echoln(receiver, value);
+}
+
+static void *ds_iostream_debug_inline(void *receiver, void *value) {
+    return ds_iostream_eecholn(receiver, value);
+}
+
+static void *ds_iostream_flush(void *receiver) {
+    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
+    fflush(out);
+    return NULL;
+}
+
+static void *ds_stdin_read(void *receiver) {
+    (void)receiver;
+    return ds_read_line(stdin);
+}
+
+static void *ds_argf_read(void *receiver) {
+    (void)receiver;
+    if (!(ds_program_argc > 1 && ds_program_argv)) {
+        return ds_read_to_end(stdin);
+    }
+
+    size_t cap = 4096;
+    size_t len = 0;
+    char *out = (char *)ds_alloc(cap);
+    out[0] = '\0';
+
+    for (int64_t i = 1; i < ds_program_argc; ++i) {
+        const char *path = ds_program_argv[i];
+        if (!path) continue;
+        FILE *fp = fopen(path, "rb");
+        if (!fp) continue;
+        fseek(fp, 0, SEEK_END);
+        long fsize = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        if (fsize > 0) {
+            size_t need = (size_t)fsize;
+            if (len + need + 1 >= cap) {
+                while (len + need + 1 >= cap) cap *= 2;
+                char *resized = (char *)realloc(out, cap);
+                if (!resized) abort();
+                out = resized;
+            }
+            size_t got = fread(out + len, 1, need, fp);
+            len += got;
+            out[len] = '\0';
+        }
+        fclose(fp);
+    }
+
+    return out;
+}
+
+static void ds_init_io_builtins(void) {
+    if (ds_io_builtins_initialized) return;
+
+    ds_builtin_io_stream_class = dragonstone_runtime_define_class((void *)"IOStream");
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"eecholn", (void *)&ds_iostream_eecholn, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"echoln", (void *)&ds_iostream_echoln, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"debug", (void *)&ds_iostream_debug, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"debug_inline", (void *)&ds_iostream_debug_inline, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"flush", (void *)&ds_iostream_flush, 0);
+
+    ds_builtin_stdout = ds_make_instance(ds_builtin_io_stream_class);
+    ds_builtin_stderr = ds_make_instance(ds_builtin_io_stream_class);
+
+    ds_builtin_stdin_class = dragonstone_runtime_define_class((void *)"StandardInput");
+    dragonstone_runtime_define_method(ds_builtin_stdin_class, (void *)"read", (void *)&ds_stdin_read, 0);
+    ds_builtin_stdin = ds_make_instance(ds_builtin_stdin_class);
+
+    ds_builtin_argf_class = dragonstone_runtime_define_class((void *)"ARGF");
+    dragonstone_runtime_define_method(ds_builtin_argf_class, (void *)"read", (void *)&ds_argf_read, 0);
+    ds_builtin_argf = ds_make_instance(ds_builtin_argf_class);
+
+    ds_io_builtins_initialized = true;
+}
+
+void *dragonstone_runtime_stdout(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stdout;
+}
+
+void *dragonstone_runtime_stderr(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stderr;
+}
+
+void *dragonstone_runtime_stdin(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stdin;
+}
+
+void *dragonstone_runtime_argf(void) {
+    ds_init_io_builtins();
+    return ds_builtin_argf;
 }
 
 void *dragonstone_runtime_array_literal(int64_t length, void **elements) { return ds_create_array_box(length, elements); }

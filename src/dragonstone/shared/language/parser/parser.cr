@@ -1281,6 +1281,21 @@ module Dragonstone
             when :ARGV
                 advance
                 AST::ArgvExpression.new(location: token.location)
+            when :ARGC
+                advance
+                AST::ArgcExpression.new(location: token.location)
+            when :ARGF
+                advance
+                AST::ArgfExpression.new(location: token.location)
+            when :STDIN
+                advance
+                AST::StdinExpression.new(location: token.location)
+            when :STDOUT
+                advance
+                AST::StdoutExpression.new(location: token.location)
+            when :STDERR
+                advance
+                AST::StderrExpression.new(location: token.location)
             when :YIELD
                 parse_yield_expression
             when :SUPER

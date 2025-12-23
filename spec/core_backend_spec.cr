@@ -241,6 +241,33 @@ DS
         result.output.should eq "Hello, Jalyn!\n36\n"
     end
 
+    it "captures lexical variables in para literals" do
+        source = <<-DS
+def make_adder(x)
+    adder = ->(y) { x + y }
+    adder
+end
+
+add5 = make_adder(5)
+echo add5.call(3)
+
+def make_counter
+    x = 0
+    counter = -> {
+        x += 1
+        x
+    }
+    counter
+end
+
+counter = make_counter()
+echo counter.call()
+echo counter.call()
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "8\n1\n2\n"
+    end
+
     it "supports tuple and named tuple literals" do
         source = <<-DS
 data = {1, "two", 3}

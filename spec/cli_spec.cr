@@ -165,13 +165,12 @@ describe Dragonstone::CLI do
         end
     end
 
-    it "does not treat `use \"io\"` inside io.ds as a self-import" do
+    it "runs builtin IO calls" do
         dir = File.join(Dir.current, "tmp_cli_self_import_#{Process.pid}_#{Random.new.rand(1_000_000)}")
         Dir.mkdir_p(dir)
         begin
             path = File.join(dir, "io.ds")
             File.write(path, <<-DS)
-use "io"
 stdout.eecho "Starting operation..."
 stdout.flush
 stdout.echo " done."
@@ -183,7 +182,7 @@ DS
 
             status.should eq(0)
             stderr.to_s.should be_empty
-            # Note: io module writes to fd=1 directly (C write), so it bypasses `stdout` IO buffer here.
+            stdout.to_s.should eq("Starting operation... done.\n")
         ensure
             FileUtils.rm_rf(dir)
         end

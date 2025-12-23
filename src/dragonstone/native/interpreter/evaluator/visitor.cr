@@ -145,6 +145,22 @@ module Dragonstone
 
         def visit_alias_definition(node : AST::AliasDefinition) : RuntimeValue?
             register_type_alias(node.name, node.type_expression, node)
+            if node.type_expression.is_a?(AST::SimpleTypeExpression)
+                type_name = node.type_expression.as(AST::SimpleTypeExpression).name
+                names = type_name.split("::")
+                if names.size >= 1
+                    begin
+                        value = visit_constant_path(AST::ConstantPath.new(names, location: node.location))
+                        if current_container && @container_definition_depth.positive?
+                            define_container_constant(current_container.not_nil!, node.name, value, node)
+                        else
+                            set_constant(node.name, value, location: node.location)
+                        end
+                    rescue
+                        # Keep alias type-only if RHS isn't a resolvable constant path.
+                    end
+                end
+            end
             nil
         end
 
@@ -166,6 +182,26 @@ module Dragonstone
 
         def visit_argv_expression(_node : AST::ArgvExpression) : RuntimeValue?
             argv_value
+        end
+
+        def visit_argc_expression(_node : AST::ArgcExpression) : RuntimeValue?
+            argv.size.to_i64
+        end
+
+        def visit_argf_expression(_node : AST::ArgfExpression) : RuntimeValue?
+            builtin_argf
+        end
+
+        def visit_stdout_expression(_node : AST::StdoutExpression) : RuntimeValue?
+            builtin_stdout
+        end
+
+        def visit_stderr_expression(_node : AST::StderrExpression) : RuntimeValue?
+            builtin_stderr
+        end
+
+        def visit_stdin_expression(_node : AST::StdinExpression) : RuntimeValue?
+            builtin_stdin
         end
 
         def visit_constant_path(node : AST::ConstantPath) : RuntimeValue?
@@ -551,7 +587,7 @@ module Dragonstone
         end
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope, node.rescue_clauses, node.return_type)
+            Function.new(nil, node.typed_parameters, node.body, @scopes.first, @type_scopes.first, node.rescue_clauses, node.return_type)
         end
 
         private def define_singleton_method(target, node : AST::FunctionDef, closure : Scope, type_closure : TypeScope)

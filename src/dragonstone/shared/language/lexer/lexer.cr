@@ -50,6 +50,11 @@ module Dragonstone
             eecho
             puts 
             argv
+            argc
+            argf
+            stdin
+            stdout
+            stderr
             if 
             else 
             elsif 
@@ -580,6 +585,11 @@ module Dragonstone
                     when "echo", "puts" then :ECHO
                     when "eecho" then :EECHO
                     when "argv" then :ARGV
+                    when "argc" then :ARGC
+                    when "argf" then :ARGF
+                    when "stdin" then :STDIN
+                    when "stdout" then :STDOUT
+                    when "stderr" then :STDERR
                     when "if" then :IF
                     when "else" then :ELSE
                     when "elsif", "elseif" then :ELSIF

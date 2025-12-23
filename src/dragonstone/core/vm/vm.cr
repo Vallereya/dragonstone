@@ -35,6 +35,7 @@ module Dragonstone
             property signature : Bytecode::FunctionSignature?
             property callable_name : String?
             property method_owner : Bytecode::ClassValue?
+            property para_env : Hash(String, Bytecode::Value)?
             property gc_flags : ::Dragonstone::Runtime::GC::Flags
 
             def initialize(
@@ -45,6 +46,7 @@ module Dragonstone
                 signature : Bytecode::FunctionSignature? = nil,
                 callable_name : String? = nil,
                 method_owner : Bytecode::ClassValue? = nil,
+                para_env : Hash(String, Bytecode::Value)? = nil,
                 gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
             )
                 @ip = 0
@@ -60,6 +62,7 @@ module Dragonstone
                 @signature = signature
                 @callable_name = callable_name
                 @method_owner = method_owner
+                @para_env = para_env
                 @gc_flags = gc_flags
             end
         end
@@ -76,6 +79,15 @@ module Dragonstone
 
         private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
             @type_aliases[name] = expr
+            return unless expr.is_a?(AST::SimpleTypeExpression)
+
+            begin
+                segments = expr.as(AST::SimpleTypeExpression).name.split("::").map { |part| part.as(Bytecode::Value) }
+                value = resolve_constant_path(segments)
+                define_constant_in_current(name, value)
+            rescue
+                # Keep alias type-only if RHS isn't a resolvable constant path.
+            end
         end
 
         private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
@@ -141,10 +153,11 @@ module Dragonstone
                 return true unless element_type
                 value.elements.all? { |element| type_matches?(element, element_type, seen_aliases) }
             when "para"
-                return false unless value.is_a?(Bytecode::FunctionValue)
+                return false unless value.is_a?(Bytecode::FunctionValue) || value.is_a?(Bytecode::ParaValue)
                 param_types = expr.arguments[0...-1]
                 return true if param_types.empty?
-                value.signature.parameters.size == param_types.size
+                signature = value.is_a?(Bytecode::FunctionValue) ? value.signature : value.as(Bytecode::ParaValue).signature
+                signature.parameters.size == param_types.size
             else
                 false
             end
@@ -811,6 +824,15 @@ module Dragonstone
 
         private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
             @type_aliases[name] = expr
+            return unless expr.is_a?(AST::SimpleTypeExpression)
+
+            begin
+                segments = expr.as(AST::SimpleTypeExpression).name.split("::").map { |part| part.as(Bytecode::Value) }
+                value = resolve_constant_path(segments)
+                define_constant_in_current(name, value)
+            rescue
+                # Keep alias type-only if RHS isn't a resolvable constant path.
+            end
         end
 
         private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
@@ -909,6 +931,10 @@ module Dragonstone
         @singleton_methods : Hash(UInt64, Hash(String, Bytecode::FunctionValue))
         @pending_self : Bytecode::Value?
         @argv_value : Array(Bytecode::Value)
+        @builtin_stdout : Bytecode::BuiltinStream
+        @builtin_stderr : Bytecode::BuiltinStream
+        @builtin_stdin : Bytecode::BuiltinStdin
+        @builtin_argf : Bytecode::BuiltinArgf
 
         def initialize(
             @bytecode : CompiledCode,
@@ -943,6 +969,10 @@ module Dragonstone
             @singleton_methods = {} of UInt64 => Hash(String, Bytecode::FunctionValue)
             @pending_self = nil
             @argv_value = argv.map { |arg| arg.as(Bytecode::Value) }
+            @builtin_stdout = Bytecode::BuiltinStream.new(Bytecode::BuiltinStream::Kind::Stdout)
+            @builtin_stderr = Bytecode::BuiltinStream.new(Bytecode::BuiltinStream::Kind::Stderr)
+            @builtin_stdin = Bytecode::BuiltinStdin.new
+            @builtin_argf = Bytecode::BuiltinArgf.new
             @gc_manager = ::Dragonstone::Runtime::GC::Manager(Bytecode::Value).new(
                 ->(value : Bytecode::Value) : Bytecode::Value { ::Dragonstone::Runtime::GC.deep_copy_bytecode(value) }
             )
@@ -1043,6 +1073,16 @@ module Dragonstone
                     push(resolve_variable(name_idx, name))
                 when OPC::LOAD_ARGV
                     push(@argv_value)
+                when OPC::LOAD_STDOUT
+                    push(@builtin_stdout)
+                when OPC::LOAD_STDERR
+                    push(@builtin_stderr)
+                when OPC::LOAD_STDIN
+                    push(@builtin_stdin)
+                when OPC::LOAD_ARGC
+                    push(@argv_value.size.to_i64)
+                when OPC::LOAD_ARGF
+                    push(@builtin_argf)
                 when OPC::LOAD_CONST_PATH
                     const_idx = fetch_byte
                     segments = current_code.consts[const_idx].as(Array(Bytecode::Value))
@@ -1379,6 +1419,25 @@ module Dragonstone
                     signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
                     push(Bytecode::BlockValue.new(signature, code))
+                when OPC::MAKE_PARA
+                    signature_idx = fetch_byte
+                    code_idx = fetch_byte
+                    signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
+                    code = current_code.consts[code_idx].as(CompiledCode)
+                    env = {} of String => Bytecode::Value
+                    frame = current_frame
+                    if locals = frame.locals
+                        if defined = frame.locals_defined
+                            defined.each_with_index do |is_defined, idx|
+                                next unless is_defined
+                                name = current_code.names[idx]
+                                next if name == "self"
+                                slot = locals[idx]?
+                                env[name] = slot.nil? ? nil : slot
+                            end
+                        end
+                    end
+                    push(Bytecode::ParaValue.new(signature, code, env))
                 when OPC::YIELD
                     argc = fetch_byte
                     args = pop_values(argc)
@@ -1483,6 +1542,12 @@ module Dragonstone
                         slot = locals[name_idx]?
                         return slot.nil? ? nil : slot
                     end
+                end
+            end
+
+            if env = frame.para_env
+                if env.has_key?(name)
+                    return env[name]
                 end
             end
 
@@ -1653,6 +1718,13 @@ module Dragonstone
             end
 
             frame = current_frame
+            if env = frame.para_env
+                if env.has_key?(name)
+                    env[name] = value
+                    frame.para_env = env
+                    return
+                end
+            end
             locals = frame.locals
             defined = frame.locals_defined
 
@@ -1855,9 +1927,10 @@ module Dragonstone
             signature : Bytecode::FunctionSignature? = nil,
             callable_name : String? = nil,
             method_owner : Bytecode::ClassValue? = nil,
+            para_env : Hash(String, Bytecode::Value)? = nil,
             gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
         ) : Frame
-            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, gc_flags)
+            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, para_env, gc_flags)
             @frames << frame
             frame
         end
@@ -1870,9 +1943,11 @@ module Dragonstone
             callable_name : String? = nil,
             self_value : Bytecode::Value? = nil,
             locals_source : Frame? = nil,
-            method_owner : Bytecode::ClassValue? = nil
+            method_owner : Bytecode::ClassValue? = nil,
+            *,
+            para_env : Hash(String, Bytecode::Value)? = nil
         ) : Frame
-            frame = push_frame(code, true, block_value, signature, callable_name, method_owner, signature.gc_flags)
+            frame = push_frame(code, true, block_value, signature, callable_name, method_owner, para_env, signature.gc_flags)
             enter_gc_context(frame.gc_flags)
             if ENV["DS_DEBUG_STACK_ENTRY"]?
                 STDERR.puts "ENTER #{callable_name || "<lambda>"} stack_base=#{frame.stack_base} stack=#{@stack.inspect}"
@@ -2416,6 +2491,8 @@ module Dragonstone
                 value.name
             when Bytecode::FunctionValue
                 "#<Function #{value.name}>"
+            when Bytecode::ParaValue
+                "#<Para>"
             when Bytecode::BlockValue
                 "#<Block>"
             when FFIModule
@@ -2471,6 +2548,8 @@ module Dragonstone
                 value.name
             when Bytecode::FunctionValue
                 "#<Function #{value.name}>"
+            when Bytecode::ParaValue
+                "#<Para>"
             when Bytecode::BlockValue
                 "#<Block>"
             when FFIModule
@@ -2502,6 +2581,7 @@ module Dragonstone
             when Range(Int64, Int64) then "Range"
             when Range(Char, Char) then "Range"
             when Bytecode::FunctionValue then "Function"
+            when Bytecode::ParaValue then "Para"
             when Bytecode::BlockValue then "Block"
             when FFIModule then "FFIModule"
             when ::Dragonstone::Runtime::GC::Area(Bytecode::Value) then "Area"
@@ -2620,6 +2700,68 @@ module Dragonstone
             end
 
             case receiver
+
+            when Bytecode::BuiltinStream
+                raise ArgumentError.new("BuiltinStream##{method} does not accept a block") if block_value
+
+                case method
+                when "echoln"
+                    line = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
+                    emit_output(line)
+                    nil
+                when "eecholn"
+                    text = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
+                    emit_output_inline(text)
+                    nil
+                when "debug"
+                    raise ArgumentError.new("BuiltinStream#debug expects 1 argument, got #{args.size}") unless args.size == 1
+                    flush_debug_inline
+                    emit_output(args[0].nil? ? "" : stringify(args[0]))
+                    args[0]
+                when "debug_inline"
+                    raise ArgumentError.new("BuiltinStream#debug_inline expects 1 argument, got #{args.size}") unless args.size == 1
+                    flush_debug_inline
+                    emit_output_inline(args[0].nil? ? "" : stringify(args[0]))
+                    args[0]
+                when "flush"
+                    raise ArgumentError.new("BuiltinStream#flush expects 0 arguments, got #{args.size}") unless args.empty?
+                    nil
+                else
+                    raise "Unknown method #{method} on BuiltinStream"
+                end
+
+            when Bytecode::BuiltinStdin
+                raise ArgumentError.new("BuiltinStdin##{method} does not accept a block") if block_value
+                case method
+                when "read"
+                    raise ArgumentError.new("BuiltinStdin#read expects 0 arguments, got #{args.size}") unless args.empty?
+                    (STDIN.gets || "").chomp
+                else
+                    raise "Unknown method #{method} on BuiltinStdin"
+                end
+
+            when Bytecode::BuiltinArgf
+                raise ArgumentError.new("BuiltinArgf##{method} does not accept a block") if block_value
+                case method
+                when "read"
+                    raise ArgumentError.new("BuiltinArgf#read expects 0 arguments, got #{args.size}") unless args.empty?
+                    if @argv_value.empty?
+                        STDIN.gets_to_end
+                    else
+                        String.build do |io|
+                            @argv_value.each do |path|
+                                unless path.is_a?(String)
+                                    raise "ARGF expects argv entries to be strings"
+                                end
+                                io << File.read(path)
+                            end
+                        end
+                    end
+                else
+                    raise "Unknown method #{method} on BuiltinArgf"
+                end
 
             when String
                 case method
@@ -2764,9 +2906,25 @@ module Dragonstone
                     ensure_arity(signature, args.size, "<block>")
                     depth_before = @frames.size
                     push_callable_frame(receiver.code, signature, args, nil, "<block>")
-                    execute_with_frame_cleanup(depth_before)
+                    result = execute_with_frame_cleanup(depth_before)
+                    pop
+                    result
                 else
                     raise "Unknown method '#{method}' on Block"
+                end
+            when Bytecode::ParaValue
+                case method
+                when "call"
+                    raise ArgumentError.new("Para##{method} does not accept a block") if block_value
+                    signature = receiver.signature
+                    ensure_arity(signature, args.size, "<para>")
+                    depth_before = @frames.size
+                    push_callable_frame(receiver.code, signature, args, nil, "<para>", para_env: receiver.env)
+                    result = execute_with_frame_cleanup(depth_before)
+                    pop
+                    result
+                else
+                    raise "Unknown method '#{method}' on Para"
                 end
             when Bytecode::FunctionValue
                 call_function_method(receiver, method, args, block_value)
@@ -2875,7 +3033,9 @@ module Dragonstone
                 ensure_arity(signature, args.size, function.name)
                 depth_before = @frames.size
                 push_callable_frame(function.code, signature, args, nil, function.name)
-                execute_with_frame_cleanup(depth_before)
+                result = execute_with_frame_cleanup(depth_before)
+                pop
+                result
             else
                 raise "Unknown method '#{method}' for Function"
             end

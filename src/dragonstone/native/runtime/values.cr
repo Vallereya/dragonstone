@@ -63,8 +63,26 @@ module Dragonstone
         end
     end
 
+    class BuiltinStream
+        enum Kind
+            Stdout
+            Stderr
+        end
+
+        getter kind : Kind
+
+        def initialize(@kind : Kind)
+        end
+    end
+
+    class BuiltinStdin
+    end
+
+    class BuiltinArgf
+    end
+
     alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue | MapValue | ::Dragonstone::Runtime::GC::Area(RuntimeValue) | ::Dragonstone::Runtime::GC::Host
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue | MapValue | BuiltinStream | BuiltinStdin | BuiltinArgf | ::Dragonstone::Runtime::GC::Area(RuntimeValue) | ::Dragonstone::Runtime::GC::Host
 
     class TupleValue
         getter elements : Array(RuntimeValue)

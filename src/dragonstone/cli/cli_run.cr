@@ -62,8 +62,9 @@ module Dragonstone
 
         def run_file(filename : String, stdout : IO, stderr : IO, typed : Bool = false, backend : BackendMode? = nil, argv : Array(String) = [] of String) : Int32
             begin
-                result = Dragonstone.run_file(filename, argv, log_to_stdout: false, typed: typed, backend: backend)
-                stdout.puts result.output
+                interactive = STDIN.tty? && stdout.object_id == STDOUT.object_id
+                result = Dragonstone.run_file(filename, argv, log_to_stdout: interactive, typed: typed, backend: backend)
+                stdout.puts result.output unless interactive
                 return 0
             rescue e : Dragonstone::Error
                 stderr.puts "ERROR: #{e.message}"

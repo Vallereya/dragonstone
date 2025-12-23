@@ -164,6 +164,21 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         ir.includes?("@dragonstone_runtime_block_invoke").should be_true
     end
 
+    it "does not capture locals for fun literals" do
+        func = Dragonstone::AST::FunctionLiteral.new(
+            [] of Dragonstone::AST::TypedParameter,
+            [Dragonstone::AST::Variable.new("x")] of Dragonstone::AST::Node
+        )
+        program = build_program([
+            Dragonstone::AST::Assignment.new("x", Dragonstone::AST::Literal.new(1_i64)),
+            Dragonstone::AST::Assignment.new("f", func),
+        ] of Dragonstone::AST::Node)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        expect_raises(Exception, "Undefined local x") do
+            generator.generate(IO::Memory.new)
+        end
+    end
+
     it "declares constants via the runtime helper" do
         const_decl = Dragonstone::AST::ConstantDeclaration.new("MAGIC", Dragonstone::AST::Literal.new(99_i64))
         program = build_program([const_decl] of Dragonstone::AST::Node)
@@ -296,6 +311,42 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         ir.includes?("define i32 @main(i32 %argc, i8** %argv)").should be_true
         ir.includes?("@dragonstone_runtime_set_argv").should be_true
         ir.includes?("@dragonstone_runtime_argv()").should be_true
+    end
+
+    it "exposes builtin IO streams and argc/argf via runtime helpers" do
+        statements = [
+            Dragonstone::AST::StdoutExpression.new,
+            Dragonstone::AST::StderrExpression.new,
+            Dragonstone::AST::StdinExpression.new,
+            Dragonstone::AST::ArgcExpression.new,
+            Dragonstone::AST::ArgfExpression.new,
+        ] of Dragonstone::AST::Node
+        program = build_program(statements)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        io = IO::Memory.new
+
+        generator.generate(io)
+
+        ir = io.to_s
+        ir.includes?("@dragonstone_runtime_stdout()").should be_true
+        ir.includes?("@dragonstone_runtime_stderr()").should be_true
+        ir.includes?("@dragonstone_runtime_stdin()").should be_true
+        ir.includes?("@dragonstone_runtime_argc()").should be_true
+        ir.includes?("@dragonstone_runtime_argf()").should be_true
+    end
+
+    it "emits alias constant-path definitions via runtime constant define" do
+        alias_def = Dragonstone::AST::AliasDefinition.new(
+            "AliasInner",
+            Dragonstone::AST::SimpleTypeExpression.new("Outer::Inner")
+        )
+        program = build_program([alias_def] of Dragonstone::AST::Node)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        io = IO::Memory.new
+
+        generator.generate(io)
+
+        io.to_s.includes?("call i8* @dragonstone_runtime_define_constant").should be_true
     end
 
     it "unboxes typed block parameters" do
