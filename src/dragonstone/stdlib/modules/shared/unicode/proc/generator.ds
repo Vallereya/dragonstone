@@ -120,7 +120,8 @@ module Unicode
                 i = 0
                 while i < ranges.length
                     r = ranges[i]
-                    io.append("        {0x#{hex4(r.low)}, 0x#{hex4(r.high)}}")
+                    # Dragonstone stage1 numeric literals are decimal-only for now.
+                    io.append("        {#{r.low}, #{r.high}}")
                     io.append(",") if i + 1 < ranges.length
                     io.append("\n")
                     i = i + 1
@@ -194,14 +195,6 @@ module Unicode
 
             private def ascii_whitespace?(c: char): bool
                 return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
-            end
-
-            private def hex4(n: int): str
-                s = n.to_s(16).upcase
-                while s.length < 4
-                    s = "0" + s
-                end
-                return s
             end
 
             # placeholder methods for later phases (casing/normalization/etc.)
