@@ -4,6 +4,4 @@
 
 use "./proc/*"
 
-module Unicode
-    
-end
+echo UnicodeVersion

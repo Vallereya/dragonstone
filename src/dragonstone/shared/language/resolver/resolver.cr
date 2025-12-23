@@ -194,15 +194,16 @@ module Dragonstone
       end
       p = resolve_spec(spec, base_dir, exclude_path)
       if p.includes?("*")
-        glob_pattern = if p.ends_with?("/**")
-          p + "/*"
-        elsif p.ends_with?("\\**")
-          p + "\\*"
-        else
-          p
-        end
+        # Crystal's globbing behavior differs by platform regarding path separators.
+        # Normalize to forward slashes for globbing (works on Windows too), but keep
+        # a fallback attempt with the original pattern if needed.
+        glob_pattern = p.tr("\\", "/")
+        glob_pattern += "/*" if glob_pattern.ends_with?("/**")
 
-        Dir.glob(glob_pattern)
+        matches = Dir.glob(glob_pattern)
+        matches = Dir.glob(p) if matches.empty? && glob_pattern != p
+
+        matches
           .select { |f| File.file?(f) && File.extname(f) == config.file_ext }
           .map { |f| canonicalize(f, base: base_dir) }
       else

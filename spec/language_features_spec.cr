@@ -191,6 +191,20 @@ DS
         end
     end
 
+    it "supports use globs inside stdlib modules" do
+        tmp_dir = File.join(Dir.current, "tmp", "stdlib_use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            entry = File.join(tmp_dir, "entry.ds")
+            File.write(entry, "use \"unicode\"\necho UnicodeVersion\n")
+
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "17.0.0\n"
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "17.0.0\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
     it "allows fun literals to see globals in the native backend" do
         source = <<-DS
 x = 10
