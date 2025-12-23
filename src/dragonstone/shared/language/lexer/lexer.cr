@@ -101,6 +101,7 @@ module Dragonstone
             property
             enum
             struct
+            record
             alias
             extend
             with
@@ -630,6 +631,7 @@ module Dragonstone
                     when "property" then :PROPERTY
                     when "enum" then :ENUM
                     when "struct" then :STRUCT
+                    when "record" then :RECORD
                     when "alias" then :ALIAS
                     when "extend" then :EXTEND
                     when "with" then :WITH

@@ -28,6 +28,36 @@ rescue File::NotFoundError
   false
 end
 
+private module LLVMDefaultParamIntegration
+  @@available : Bool? = nil
+
+  def self.available? : Bool
+    cached = @@available
+    return cached unless cached.nil?
+
+    @@available = begin
+      unless clang_available?
+        false
+      else
+        dir = File.join("dev", "build", "spec", "llvm_default_params_probe_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(dir)
+        begin
+          source = File.join(dir, "probe.ds")
+          File.write(source, "echo \"probe\"")
+
+          stdout = IO::Memory.new
+          stderr = IO::Memory.new
+          status = Dragonstone::CLIBuild.build_command(["--target", "llvm", "--output", dir, source], stdout, stderr)
+          binary = File.join(dir, "dragonstone_llvm#{Dragonstone::CLIBuild::EXECUTABLE_SUFFIX}")
+          status == 0 && File.exists?(binary)
+        ensure
+          FileUtils.rm_rf(dir)
+        end
+      end
+    end
+  end
+end
+
 describe "Default parameters" do
   program = <<-DS
   def alpha(name: str = "Jules") -> str
@@ -55,7 +85,7 @@ describe "Default parameters" do
   end
 
   it "works when compiled via LLVM target when clang is available" do
-    pending!("clang is not available; skipping LLVM default parameter test") unless clang_available?
+    pending!("LLVM toolchain not available; skipping LLVM default parameter test") unless LLVMDefaultParamIntegration.available?
 
     dir = File.join("dev", "build", "spec", "default_params_llvm_spec_#{Random::Secure.hex(8)}")
     FileUtils.mkdir_p(dir)

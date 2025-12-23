@@ -119,6 +119,36 @@ DS
         result.output.should eq "ARGF_NATIVE\n"
     end
 
+    it "supports record declarations" do
+        source = <<-DS
+record Point
+    x
+    y
+end
+
+alpha = Point.new(1, 2)
+echo alpha.x
+echo alpha.y
+DS
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Native).output.should eq "1\n2\n"
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Core).output.should eq "1\n2\n"
+    end
+
+    it "supports typed record declarations" do
+        source = <<-DS
+#! typed
+record Person
+    name: str
+    age: int
+end
+
+bob = Person.new("Bob", 30)
+echo bob.age
+DS
+        Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Native).output.should eq "30\n"
+        Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Core).output.should eq "30\n"
+    end
+
     it "allows fun literals to see globals in the native backend" do
         source = <<-DS
 x = 10

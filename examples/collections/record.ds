@@ -1,0 +1,36 @@
+#[
+    Record Example
+]#
+
+#[
+    My version of Record.
+
+    Which is similar to Structs. But,
+    Records are immutable data structures,
+    this is based on the idea of Records from
+    languages like Crystal and Java. It 
+    automatically generates the struct, 
+    the constructor, and getters for those 
+    fields so you do not have to write them 
+    by hand.
+]#
+
+# Example One; Untyped fields.
+record Point
+    x
+    y
+end
+
+alpha = Point.new(1, 2)
+
+echo alpha.x  # -> 1
+echo alpha.y  # -> 2
+
+# Example Two; Typed fields.
+record Person
+    name: str
+    age: int
+end
+
+bob = Person.new("Bob", 30)
+echo "Name: #{bob.name}, Age: #{bob.age}"

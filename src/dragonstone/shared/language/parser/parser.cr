@@ -302,6 +302,8 @@ module Dragonstone
                 parse_enum_declaration
             when :STRUCT
                 parse_struct_declaration
+            when :RECORD
+                parse_record_declaration
             when :ALIAS
                 parse_alias_definition
             when :EXTEND
@@ -575,6 +577,36 @@ module Dragonstone
             AST::StructDefinition.new(name_token.value.as(String), body, annotations, location: struct_token.location)
         end
 
+        private def parse_record_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+            record_token = expect(:RECORD)
+            name_token = expect(:IDENTIFIER)
+
+            entries = [] of AST::AccessorEntry
+            parameters = [] of AST::TypedParameter
+
+            while current_token.type != :END && current_token.type != :EOF
+                field_token = expect(:IDENTIFIER)
+                field_name = field_token.value.as(String)
+
+                type_annotation = nil
+                if current_token.type == :COLON
+                    advance
+                    type_annotation = parse_type_expression
+                end
+
+                entries << AST::AccessorEntry.new(field_name, type_annotation)
+                parameters << AST::TypedParameter.new(field_name, type_annotation, field_name)
+            end
+
+            expect(:END)
+
+            body = [] of AST::Node
+            body << AST::AccessorMacro.new(:getter, entries, location: record_token.location) unless entries.empty?
+            body << AST::FunctionDef.new("initialize", parameters, [] of AST::Node, location: record_token.location)
+
+            AST::StructDefinition.new(name_token.value.as(String), body, annotations, location: record_token.location)
+        end
+
         private def parse_enum_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
             enum_token = expect(:ENUM)
             name_token = expect(:IDENTIFIER)
@@ -724,6 +756,8 @@ module Dragonstone
                 parse_class_definition(annotations: annotations)
             when :STRUCT
                 parse_struct_declaration(annotations)
+            when :RECORD
+                parse_record_declaration(annotations)
             when :ENUM
                 parse_enum_declaration(annotations)
             when :ABSTRACT

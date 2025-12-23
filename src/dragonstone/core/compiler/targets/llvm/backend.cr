@@ -545,7 +545,7 @@ module Dragonstone
                 end
               when AST::AccessorMacro
                 if current = @struct_stack.last?
-                  if node.kind == :property
+                  if node.kind == :property || node.kind == :getter
                     fields = struct_fields_for(current)
                     indices = struct_field_map_for(current)
                     node.entries.each do |entry|
@@ -4196,7 +4196,7 @@ module Dragonstone
                 field_type = llvm_type_of(type_expr)
                 field_type == "void" ? pointer_type_for("%DSValue") : field_type
               else
-                pointer_type_for("%DSValue")
+                "i8*"
               end
             end
 
@@ -4552,14 +4552,14 @@ module Dragonstone
               fields.each_with_index do |target_type_expr, index|
                 if index < args.size
                   arg = args[index]
-                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                   coerced = ensure_value_type(ctx, arg, target_type)
                   reg = ctx.fresh("structinit")
                   base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
                   ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{coerced[:type]} #{coerced[:ref]}, #{index}\n"
                   current_ref = "%#{reg}"
                 else
-                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                   zero = zero_value(target_type)
                   reg = ctx.fresh("structinit")
                   base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
@@ -4573,7 +4573,7 @@ module Dragonstone
               end
               args.each_with_index do |arg, index|
                 target_type_expr = fields[index]
-                target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                 coerced = ensure_value_type(ctx, arg, target_type)
                 reg = ctx.fresh("structinit")
                 base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
@@ -4613,7 +4613,7 @@ module Dragonstone
               raise "Struct field #{method_name} expects no arguments" unless args.empty?
               fields = @struct_layouts[struct_name]? || raise "Unknown struct layout #{struct_name}"
               field_type_expr = fields[index]?
-              field_type = field_type_expr ? llvm_type_of(field_type_expr) : pointer_type_for("%DSValue")
+              field_type = field_type_expr ? llvm_type_of(field_type_expr) : "i8*"
               reg = ctx.fresh("field")
               struct_type = receiver[:type]
               ctx.io << "  %#{reg} = extractvalue #{struct_type} #{receiver[:ref]}, #{index}\n"
