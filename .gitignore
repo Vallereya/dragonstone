@@ -19,6 +19,13 @@ dev/
 bootstrap/
 !bootstrap/README.md
 
+# Unicode Data Files.
+src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
+!src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt
+src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
+
 # Ignore any Output/Build Cache from testing.
 cache
 cache/
@@ -28,6 +35,7 @@ tmp
 tmp/
 .tmp
 .tmp/
+.crystal-cache
 
 # Ignore any IDE folders.
 .vscode

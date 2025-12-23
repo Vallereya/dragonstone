@@ -41,9 +41,9 @@ module Dragonstone
         private def rewrite_node(node : AST::Node, defaults : Hash(String, FunctionDefaults)) : AST::Node
           case node
           when AST::Assignment
-            AST::Assignment.new(node.name, rewrite_node(node.value, defaults), node.operator, node.type_annotation, location: node.location)
+            AST::Assignment.new(node.name, rewrite_node(node.value, defaults), node.operator, node.type_annotation, visibility: node.visibility, location: node.location)
           when AST::ConstantDeclaration
-            AST::ConstantDeclaration.new(node.name, rewrite_node(node.value, defaults), node.type_annotation, location: node.location)
+            AST::ConstantDeclaration.new(node.name, rewrite_node(node.value, defaults), node.type_annotation, visibility: node.visibility, location: node.location)
           when AST::BinaryOp
             AST::BinaryOp.new(rewrite_node(node.left, defaults), node.operator, rewrite_node(node.right, defaults), location: node.location)
           when AST::UnaryOp
@@ -193,17 +193,18 @@ module Dragonstone
               node.superclass,
               is_abstract: node.abstract?,
               annotations: node.annotations,
+              visibility: node.visibility,
               location: node.location
             )
           when AST::StructDefinition
-            AST::StructDefinition.new(node.name, node.body.map { |n| rewrite_node(n, defaults) }, annotations: node.annotations, location: node.location)
+            AST::StructDefinition.new(node.name, node.body.map { |n| rewrite_node(n, defaults) }, annotations: node.annotations, visibility: node.visibility, location: node.location)
           when AST::ModuleDefinition
-            AST::ModuleDefinition.new(node.name, node.body.map { |n| rewrite_node(n, defaults) }, annotations: node.annotations, location: node.location)
+            AST::ModuleDefinition.new(node.name, node.body.map { |n| rewrite_node(n, defaults) }, annotations: node.annotations, visibility: node.visibility, location: node.location)
           when AST::EnumDefinition
             members = node.members.map do |m|
               AST::EnumMember.new(m.name, m.value.try { |v| rewrite_node(v, defaults) }, location: m.location)
             end
-            AST::EnumDefinition.new(node.name, members, value_name: node.value_name, value_type: node.value_type, annotations: node.annotations, location: node.location)
+            AST::EnumDefinition.new(node.name, members, value_name: node.value_name, value_type: node.value_type, annotations: node.annotations, visibility: node.visibility, location: node.location)
           when AST::ExtendStatement
             AST::ExtendStatement.new(node.targets.map { |t| rewrite_node(t, defaults) }, location: node.location)
           else

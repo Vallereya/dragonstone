@@ -90,6 +90,23 @@ DS
         end
     end
 
+    it "allows visibility modifiers on bindings" do
+        source = <<-DS
+private con C = 1
+protected var x = 2
+public let y = 3
+public fix z = 4
+echo C
+echo x
+if true
+    echo y
+    echo z
+end
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "1\n2\n3\n4\n"
+    end
+
     it "supports Array#empty? in the native backend" do
         result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
         result.output.should eq "false\n"

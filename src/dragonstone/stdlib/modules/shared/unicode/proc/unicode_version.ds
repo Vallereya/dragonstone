@@ -1,0 +1,15 @@
+#[
+    This module provides Unicode version information and related procedures.
+
+    Currently supported [Unicode](https://home.unicode.org) version.
+]#
+
+module Unicode
+    module Proc
+        class Version
+            con version = "17.0.0"
+        end
+    end
+end
+
+con UnicodeVersion = Unicode::Proc::Version::version

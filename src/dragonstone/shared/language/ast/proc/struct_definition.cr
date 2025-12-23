@@ -4,12 +4,20 @@ module Dragonstone
             getter name : String
             getter body : NodeArray
             getter annotations : Array(Annotation)
+            getter visibility : Symbol
 
-            def initialize(name : String, body : NodeArray, annotations : Array(Annotation) = [] of Annotation, location : Location? = nil)
+            def initialize(
+                name : String,
+                body : NodeArray,
+                annotations : Array(Annotation) = [] of Annotation,
+                visibility : Symbol = :public,
+                location : Location? = nil
+            )
                 super(location: location)
                 @name = name
                 @body = body
                 @annotations = annotations
+                @visibility = visibility
             end
 
             def accept(visitor)
@@ -18,6 +26,7 @@ module Dragonstone
 
             def to_source : String
                 String.build do |io|
+                    io << "#{visibility} " unless visibility == :public
                     io << "struct " << name << "\n"
                     body.each do |stmt|
                         io << "  " << stmt.to_source << "\n"

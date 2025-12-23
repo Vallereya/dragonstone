@@ -1,7 +1,59 @@
 #[
-    
+    `unicode` module for Dragonstone Standard Library.
+
+    Creates data and procedural generators for Unicode characters and strings.
 ]#
 
-use "./proc/*"
+use "./proc/unicode_version.ds"
+use "./proc/data.ds"
 
-echo UnicodeVersion
+module Unicode
+    enum CaseOptions
+        ASCII
+        Turkic
+        Fold
+    end
+
+    enum NormalizationForms
+        NFC
+        NFD
+        NFKC
+        NFKD
+    end
+
+    enum QuickCheckOptions
+        Yes
+        No
+        Maybe
+    end
+
+    private def range_in?(ranges, codepoint: int): bool
+        left = 0
+        right = ranges.length - 1
+
+        while left <= right
+            mid = (left + right) // 2
+            range = ranges[mid]
+            low = range[0]
+            high = range[1]
+
+            if codepoint < low
+                right = mid - 1
+            elsif codepoint > high
+                left = mid + 1
+            else
+                return true
+            end
+        end
+
+        return false
+    end
+
+    def xid_start?(codepoint: int): bool
+        return range_in?(XID_START_RANGES, codepoint: codepoint)
+    end
+
+    def xid_continue?(codepoint: int): bool
+        return range_in?(XID_CONTINUE_RANGES, codepoint: codepoint)
+    end
+end

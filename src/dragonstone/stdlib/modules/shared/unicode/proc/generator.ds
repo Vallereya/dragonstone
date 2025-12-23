@@ -1,0 +1,222 @@
+#[
+    This module provides Unicode-related procedural generators.
+]#
+
+use "file_utilities"
+use "path_utilities"
+use "strings_build"
+use "./unicode_version.ds"
+
+module Unicode
+    module Proc
+        class Generator
+            SOURCE_DERIVED_CORE = "./src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt"
+            TARGET_DATA = "./src/dragonstone/stdlib/modules/shared/unicode/proc/data.ds"
+
+            enum DecompositionType
+                None
+                Canonical
+                Compatibility
+            end
+
+            record Range
+                low: int
+                high: int
+            end
+
+            record Entry
+                codepoint: int
+                name: str
+                general_category: str
+                decomposition_type: DecompositionType
+                decomposition_map: arr[int]?
+                upcase_map: int?
+                downcase_map: int?
+                casefold_map: int?
+            end
+
+            record SpecialCaseEntry
+                codepoint: int
+                value: arr[int]
+            end
+
+            record CaseRange
+                low: int
+                high: int
+                delta: int
+            end
+
+            record AltCaseRange
+                low: int
+                high: int
+            end
+
+            record StrideRange
+                low: int
+                high: int
+                stride: int
+            end
+
+            record CanonicalCombiningClassRange
+                low: int
+                high: int
+                options: Unicode::QuickCheckOptions
+            end
+
+            def generate_xid_ranges: tuple(arr(Range), arr(Range))
+                start_ranges: arr(Range) = []
+                continue_ranges: arr(Range) = []
+
+                content = File.read(SOURCE_DERIVED_CORE)
+                lines = content.split("\n")
+
+                lines.each do |raw|
+                    line = strip_ascii(remove_comment(raw))
+                    next if line.empty?
+
+                    pieces = line.split(";")
+                    next unless pieces.length >= 2
+
+                    code_field = strip_ascii(pieces[0])
+                    prop = strip_ascii(pieces[1])
+
+                    if prop == "XID_Start"
+                        start_ranges.push(parse_codepoint_range(code_field))
+                    elsif prop == "XID_Continue"
+                        continue_ranges.push(parse_codepoint_range(code_field))
+                    end
+                end
+
+                return {merge_ranges(start_ranges), merge_ranges(continue_ranges)}
+            end
+
+            def render_data_ds: str
+                xid_start, xid_continue = generate_xid_ranges
+
+                return strings.build do |io|
+                    io.append("#[\n")
+                    io.append("    ---------------------------------\n")
+                    io.append("    ----------- UnicodeData ---------\n")
+                    io.append("    -------- (generated file) -------\n")
+                    io.append("    ---------------------------------\n")
+                    io.append("]#\n\n")
+                    io.append("module Unicode\n")
+                    io.append("    con UNICODE_VERSION = \"#{UnicodeVersion}\"\n\n")
+
+                    io.append("    # Unicode XID_Start (identifier start) ranges.\n")
+                    io.append("    con XID_START_RANGES = [\n")
+                    append_ranges(io, xid_start)
+                    io.append("    ]\n\n")
+
+                    io.append("    # Unicode XID_Continue (identifier continue) ranges.\n")
+                    io.append("    con XID_CONTINUE_RANGES = [\n")
+                    append_ranges(io, xid_continue)
+                    io.append("    ]\n")
+                    io.append("end\n")
+                end
+            end
+
+            private def append_ranges(io, ranges: arr(Range))
+                i = 0
+                while i < ranges.length
+                    r = ranges[i]
+                    io.append("        {0x#{hex4(r.low)}, 0x#{hex4(r.high)}}")
+                    io.append(",") if i + 1 < ranges.length
+                    io.append("\n")
+                    i = i + 1
+                end
+            end
+
+            private def merge_ranges(ranges: arr(Range)): arr(Range)
+                merged: arr(Range) = []
+                return merged if ranges.empty?
+
+                current = ranges[0]
+                i = 1
+                while i < ranges.length
+                    nxt = ranges[i]
+                    if nxt.low <= current.high + 1
+                        if nxt.high > current.high
+                            current = Range.new(current.low, nxt.high)
+                        end
+                    else
+                        merged.push(current)
+                        current = nxt
+                    end
+                    i = i + 1
+                end
+
+                merged.push(current)
+                return merged
+            end
+
+            private def parse_codepoint_range(field: str): Range
+                parts = field.split("..")
+                if parts.length == 2
+                    low = strip_ascii(parts[0]).to_i(16)
+                    high = strip_ascii(parts[1]).to_i(16)
+                    return Range.new(low, high)
+                end
+
+                val = strip_ascii(field).to_i(16)
+                return Range.new(val, val)
+            end
+
+            private def remove_comment(line: str): str
+                i = 0
+                while i < line.length
+                    if line[i] == '#'
+                        return line.slice(0, i)
+                    end
+                    i = i + 1
+                end
+                return line
+            end
+
+            private def strip_ascii(s: str): str
+                left = 0
+                right = s.length - 1
+
+                while left <= right && ascii_whitespace?(s[left])
+                    left = left + 1
+                end
+
+                while right >= left && ascii_whitespace?(s[right])
+                    right = right - 1
+                end
+
+                if right < left
+                    return ""
+                end
+
+                return s.slice(left, right - left + 1)
+            end
+
+            private def ascii_whitespace?(c: char): bool
+                return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
+            end
+
+            private def hex4(n: int): str
+                s = n.to_s(16).upcase
+                while s.length < 4
+                    s = "0" + s
+                end
+                return s
+            end
+
+            # placeholder methods for later phases (casing/normalization/etc.)
+            def case_ranges
+            end
+
+        end
+
+        def generate_data
+            generator = Unicode::Proc::Generator.new
+            content = generator.render_data_ds
+            File.create(Unicode::Proc::Generator::TARGET_DATA, content, true)
+            return 0
+        end
+    end
+end
+
+Unicode::Proc.generate_data

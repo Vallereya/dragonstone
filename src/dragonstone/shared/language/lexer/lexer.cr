@@ -96,6 +96,7 @@ module Dragonstone
             use
             from
             as
+            public
             private
             protected
             getter
@@ -626,6 +627,7 @@ module Dragonstone
                     when "use" then :USE
                     when "from" then :FROM
                     when "as" then :AS
+                    when "public" then :PUBLIC
                     when "private" then :PRIVATE
                     when "protected" then :PROTECTED
                     when "getter" then :GETTER

@@ -63,13 +63,13 @@ module Dragonstone
                         rewritten_value = rewrite_node(node.value, scopes, counter, containers)
                         mangled = fresh_name("__ds_let", node.name, counter)
                         scopes.last.bindings[node.name] = mangled
-                        ([AST::Assignment.new(mangled, rewritten_value, operator: nil, type_annotation: node.type_annotation, location: node.location)] of AST::Node)
+                        ([AST::Assignment.new(mangled, rewritten_value, operator: nil, type_annotation: node.type_annotation, visibility: node.visibility, location: node.location)] of AST::Node)
                     when AST::FixDeclaration
                         rewritten_value = rewrite_node(node.value, scopes, counter, containers)
                         mangled = fresh_name("__ds_fix", node.name, counter)
                         scopes.last.bindings[node.name] = mangled
                         scopes.last.immutable.add(node.name)
-                        ([AST::Assignment.new(mangled, rewritten_value, operator: nil, type_annotation: node.type_annotation, location: node.location)] of AST::Node)
+                        ([AST::Assignment.new(mangled, rewritten_value, operator: nil, type_annotation: node.type_annotation, visibility: node.visibility, location: node.location)] of AST::Node)
                     else
                         [rewrite_node(node, scopes, counter, containers)]
                     end
@@ -83,10 +83,10 @@ module Dragonstone
                         validate_mutation!(node.name, node.location, scopes)
                         name = resolve_binding_name(node.name, scopes)
                         value = rewrite_node(node.value, scopes, counter, containers)
-                        AST::Assignment.new(name, value, operator: node.operator, type_annotation: node.type_annotation, location: node.location)
+                        AST::Assignment.new(name, value, operator: node.operator, type_annotation: node.type_annotation, visibility: node.visibility, location: node.location)
                     when AST::ConstantDeclaration
                         value = rewrite_node(node.value, scopes, counter, containers)
-                        AST::ConstantDeclaration.new(node.name, value, node.type_annotation, location: node.location)
+                        AST::ConstantDeclaration.new(node.name, value, node.type_annotation, visibility: node.visibility, location: node.location)
                     when AST::BinaryOp
                         left = rewrite_node(node.left, scopes, counter, containers)
                         right = rewrite_node(node.right, scopes, counter, containers)
@@ -248,11 +248,12 @@ module Dragonstone
                             node.superclass,
                             is_abstract: node.abstract?,
                             annotations: annotations,
+                            visibility: node.visibility,
                             location: node.location
                         )
                     when AST::StructDefinition
                         body = rewrite_node_array(node.body, scopes, counter, containers)
-                        AST::StructDefinition.new(node.name, body, rewrite_annotations(node.annotations, scopes, counter, containers), location: node.location)
+                        AST::StructDefinition.new(node.name, body, rewrite_annotations(node.annotations, scopes, counter, containers), visibility: node.visibility, location: node.location)
                     when AST::ModuleDefinition
                         containers << ContainerEntry.new(:module, node.name)
                         body = [] of AST::Node
@@ -263,7 +264,7 @@ module Dragonstone
                         ensure
                             containers.pop
                         end
-                        AST::ModuleDefinition.new(node.name, body, annotations, location: node.location)
+                        AST::ModuleDefinition.new(node.name, body, annotations, visibility: node.visibility, location: node.location)
                     when AST::EnumDefinition
                         members = node.members.map do |member|
                             value = member.value ? rewrite_node(member.value.not_nil!, scopes, counter, containers) : nil
@@ -275,6 +276,7 @@ module Dragonstone
                             value_name: node.value_name,
                             value_type: node.value_type,
                             annotations: rewrite_annotations(node.annotations, scopes, counter, containers),
+                            visibility: node.visibility,
                             location: node.location
                         )
                     when AST::InstanceVariableAssignment

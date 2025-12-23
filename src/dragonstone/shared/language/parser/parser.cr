@@ -318,6 +318,8 @@ module Dragonstone
                 parse_visibility_prefixed_statement(:private)
             when :PROTECTED
                 parse_visibility_prefixed_statement(:protected)
+            when :PUBLIC
+                parse_visibility_prefixed_statement(:public)
             when :RETURN
                 parse_return_statement
             when :CASE, :SELECT
@@ -349,7 +351,7 @@ module Dragonstone
             end
         end
 
-        private def parse_constant_declaration : AST::Node
+        private def parse_constant_declaration(visibility : Symbol = :public) : AST::Node
             keyword = expect(:CON)
             name_token = expect(:IDENTIFIER)
             type_annotation = nil
@@ -360,10 +362,10 @@ module Dragonstone
             expect(:ASSIGN)
             value = parse_expression
             location = name_token.location || keyword.location
-            AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, location: location)
+            AST::ConstantDeclaration.new(name_token.value.as(String), value, type_annotation, visibility: visibility, location: location)
         end
 
-        private def parse_variable_declaration : AST::Node
+        private def parse_variable_declaration(visibility : Symbol = :public) : AST::Node
             keyword = expect(:VAR)
             name_token = expect(:IDENTIFIER)
             name = name_token.value.as(String)
@@ -385,10 +387,10 @@ module Dragonstone
             expect(:ASSIGN)
             value = parse_expression
             location = name_token.location || keyword.location
-            AST::Assignment.new(name, value, operator: nil, type_annotation: type_annotation, location: location)
+            AST::Assignment.new(name, value, operator: nil, type_annotation: type_annotation, visibility: visibility, location: location)
         end
 
-        private def parse_let_declaration : AST::Node
+        private def parse_let_declaration(visibility : Symbol = :public) : AST::Node
             keyword = expect(:LET)
             name_token = expect(:IDENTIFIER)
             name = name_token.value.as(String)
@@ -410,10 +412,10 @@ module Dragonstone
             expect(:ASSIGN)
             value = parse_expression
             location = name_token.location || keyword.location
-            AST::LetDeclaration.new(name, value, type_annotation, location: location)
+            AST::LetDeclaration.new(name, value, type_annotation, visibility: visibility, location: location)
         end
 
-        private def parse_fix_declaration : AST::Node
+        private def parse_fix_declaration(visibility : Symbol = :public) : AST::Node
             keyword = expect(:FIX)
             name_token = expect(:IDENTIFIER)
             name = name_token.value.as(String)
@@ -431,7 +433,7 @@ module Dragonstone
             expect(:ASSIGN)
             value = parse_expression
             location = name_token.location || keyword.location
-            AST::FixDeclaration.new(name, value, type_annotation, location: location)
+            AST::FixDeclaration.new(name, value, type_annotation, visibility: visibility, location: location)
         end
 
         private def parse_extend_statement : AST::Node
@@ -446,7 +448,15 @@ module Dragonstone
         end
 
         private def parse_visibility_prefixed_statement(visibility : Symbol) : AST::Node
-            expect(visibility == :private ? :PRIVATE : :PROTECTED)
+            token_type = case visibility
+                when :public    then :PUBLIC
+                when :private   then :PRIVATE
+                when :protected then :PROTECTED
+                else
+                    raise "Unknown visibility: #{visibility}"
+                end
+
+            expect(token_type)
             case current_token.type
             when :DEF
                 parse_function_def(visibility)
@@ -455,6 +465,8 @@ module Dragonstone
                 case current_token.type
                 when :DEF
                     parse_function_def(visibility, is_abstract: true)
+                when :CLASS
+                    parse_class_definition(is_abstract: true, visibility: visibility)
                 else
                     error("Expected def after #{visibility} abstract", current_token)
                 end
@@ -464,8 +476,33 @@ module Dragonstone
                 parse_accessor_macro(:setter, visibility)
             when :PROPERTY
                 parse_accessor_macro(:property, visibility)
+            when :MODULE
+                parse_module_definition(visibility: visibility)
+            when :CLASS
+                parse_class_definition(visibility: visibility)
+            when :STRUCT
+                parse_struct_declaration(visibility: visibility)
+            when :RECORD
+                parse_record_declaration(visibility: visibility)
+            when :ENUM
+                parse_enum_declaration(visibility: visibility)
+            when :CON
+                parse_constant_declaration(visibility)
+            when :VAR
+                parse_variable_declaration(visibility)
+            when :LET
+                parse_let_declaration(visibility)
+            when :FIX
+                parse_fix_declaration(visibility)
+            when :FUN
+                next_tok = peek_token
+                if next_tok && next_tok.type == :IDENTIFIER
+                    parse_fun_declaration(visibility)
+                else
+                    error("Expected identifier after #{visibility} fun", current_token)
+                end
             else
-                error("Expected def/getter/setter/property after #{visibility}", current_token)
+                error("Expected a declaration after #{visibility}", current_token)
             end
         end
 
@@ -536,12 +573,12 @@ module Dragonstone
             AST::DebugEcho.new(expression, true, location: token.location)
         end
 
-        private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+        private def parse_module_definition(annotations : Array(AST::Annotation) = [] of AST::Annotation, visibility : Symbol = :public) : AST::Node
             module_token = expect(:MODULE)
             name_token = expect(:IDENTIFIER)
             body = parse_block([:END])
             expect(:END)
-            AST::ModuleDefinition.new(name_token.value.as(String), body, annotations, location: module_token.location)
+            AST::ModuleDefinition.new(name_token.value.as(String), body, annotations, visibility: visibility, location: module_token.location)
         end
 
         private def parse_abstract_prefixed_statement(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
@@ -556,7 +593,7 @@ module Dragonstone
             end
         end
 
-        private def parse_class_definition(is_abstract : Bool = false, annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+        private def parse_class_definition(is_abstract : Bool = false, annotations : Array(AST::Annotation) = [] of AST::Annotation, visibility : Symbol = :public) : AST::Node
             class_token = expect(:CLASS)
             name_token = expect(:IDENTIFIER)
             superclass = nil
@@ -566,18 +603,18 @@ module Dragonstone
             end
             body = parse_block([:END])
             expect(:END)
-            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, is_abstract, annotations, location: class_token.location)
+            AST::ClassDefinition.new(name_token.value.as(String), body, superclass, is_abstract, annotations, visibility: visibility, location: class_token.location)
         end
 
-        private def parse_struct_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+        private def parse_struct_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation, visibility : Symbol = :public) : AST::Node
             struct_token = expect(:STRUCT)
             name_token = expect(:IDENTIFIER)
             body = parse_block([:END])
             expect(:END)
-            AST::StructDefinition.new(name_token.value.as(String), body, annotations, location: struct_token.location)
+            AST::StructDefinition.new(name_token.value.as(String), body, annotations, visibility: visibility, location: struct_token.location)
         end
 
-        private def parse_record_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+        private def parse_record_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation, visibility : Symbol = :public) : AST::Node
             record_token = expect(:RECORD)
             name_token = expect(:IDENTIFIER)
 
@@ -604,10 +641,10 @@ module Dragonstone
             body << AST::AccessorMacro.new(:getter, entries, location: record_token.location) unless entries.empty?
             body << AST::FunctionDef.new("initialize", parameters, [] of AST::Node, location: record_token.location)
 
-            AST::StructDefinition.new(name_token.value.as(String), body, annotations, location: record_token.location)
+            AST::StructDefinition.new(name_token.value.as(String), body, annotations, visibility: visibility, location: record_token.location)
         end
 
-        private def parse_enum_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation) : AST::Node
+        private def parse_enum_declaration(annotations : Array(AST::Annotation) = [] of AST::Annotation, visibility : Symbol = :public) : AST::Node
             enum_token = expect(:ENUM)
             name_token = expect(:IDENTIFIER)
 
@@ -640,6 +677,7 @@ module Dragonstone
                 value_name: value_name,
                 value_type: value_type,
                 annotations: annotations,
+                visibility: visibility,
                 location: enum_token.location
             )
         end
@@ -1796,7 +1834,7 @@ module Dragonstone
         # end
 
         # New method to handle: fun name(args) ... end
-        private def parse_fun_declaration : AST::Node
+        private def parse_fun_declaration(visibility : Symbol = :public) : AST::Node
             token = expect(:FUN)
             name_token = expect(:IDENTIFIER)
             func_node = parse_function_literal_body(token.location)
@@ -1804,9 +1842,9 @@ module Dragonstone
 
             # Check if it's a constant (Uppercase) or variable (lowercase) assignment
             if constant_name?(name)
-                AST::ConstantDeclaration.new(name, func_node, nil, location: token.location)
+                AST::ConstantDeclaration.new(name, func_node, nil, visibility: visibility, location: token.location)
             else
-                AST::Assignment.new(name, func_node, location: token.location)
+                AST::Assignment.new(name, func_node, visibility: visibility, location: token.location)
             end
         end
 

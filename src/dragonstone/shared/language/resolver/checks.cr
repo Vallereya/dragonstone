@@ -1,5 +1,5 @@
 require "../diagnostics/errors"
-require "unicode"
+require "./utf8"
 
 module Dragonstone
     module Encoding
@@ -7,7 +7,7 @@ module Dragonstone
             extend self
 
             def ensure_valid_utf8!(bytes : Bytes, path : String)
-                return if Unicode.valid?(bytes)
+                return if UTF8.valid?(bytes)
                 raise encoding_error(path, "Invalid UTF-8 byte sequence detected while reading #{File.basename(path)}")
             end
 
