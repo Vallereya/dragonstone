@@ -266,7 +266,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     example
 ```
 
-###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules and `.` for classes.
+###### Example of a Module with `con`, an immutable constant, and `::` for scope resolution for modules and `.` for classes. Dragonstone also supports both `module` and `mod` for user preference.
 ```crystal
     module Grades
         con Score = 100
@@ -282,7 +282,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     echo Grades::Greeting.greet
 ```
 
-###### Example of a `Class`.
+###### Example of a `Class`, dragonstone also support both `class` and `cls` for user preference.
 ```crystal
     class Person
         happy = true
@@ -356,7 +356,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     )
 ```
 
-###### Example of a `Abstract Class` and `Super`.
+###### Example of a `Abstract Class` and `Super`, dragonstone supports both `abstract` and `abs` for preference.
 ```crystal
     abstract class Animal
         def make_sound(sound)

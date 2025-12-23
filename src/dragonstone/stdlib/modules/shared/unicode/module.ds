@@ -8,6 +8,8 @@ use "./proc/unicode_version.ds"
 use "./proc/data.ds"
 
 module Unicode
+    extend self
+
     enum CaseOptions
         ASCII
         Turkic

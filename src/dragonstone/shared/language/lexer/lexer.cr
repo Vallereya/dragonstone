@@ -1,11 +1,10 @@
 # ---------------------------------
 # ------------- Lexer -------------
 # ---------------------------------
-require "unicode"
-require "string/grapheme"
 require "../resolver/encoding"
 require "../diagnostics/errors"
 require "../../runtime/symbol"
+require "./xid"
 
 module Dragonstone
     alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | SymbolValue | Array(Tuple(Symbol, String))
@@ -785,25 +784,25 @@ module Dragonstone
         end
 
         private def identifier_start?(char : Char) : Bool
-            char.ascii_letter? || char == '_' || unicode_identifier_start?(char)
+            char == '_' || char.ascii_letter? || UnicodeXID.xid_start?(char.ord)
         end
 
         private def identifier_part?(char : Char) : Bool
-            char.ascii_letter? || char.ascii_number? || char == '_' || unicode_identifier_part?(char)
+            char == '_' || char.ascii_letter? || char.ascii_number? || UnicodeXID.xid_continue?(char.ord)
         end
 
         private def unicode_identifier_start?(char : Char) : Bool
             return false if char.ascii?
-            Unicode.letter?(char) || emoji_identifier_char?(char)
+            UnicodeXID.xid_start?(char.ord)
         end
 
         private def unicode_identifier_part?(char : Char) : Bool
             return false if char.ascii?
-            Unicode.letter?(char) || Unicode.number?(char) || char.mark? || emoji_identifier_char?(char)
+            UnicodeXID.xid_continue?(char.ord)
         end
 
         private def emoji_identifier_char?(char : Char) : Bool
-            String::Grapheme::Property.from(char).extended_pictographic?
+            false
         end
 
         private def read_escape_sequence(_literal : Symbol, start_line : Int32, start_col : Int32) : Char
