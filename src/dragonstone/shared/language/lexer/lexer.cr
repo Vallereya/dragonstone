@@ -67,8 +67,11 @@ module Dragonstone
             fun 
             function
             abstract
+            abs
             module 
+            mod
             class 
+            cls
             return 
             true 
             false 
@@ -599,9 +602,9 @@ module Dragonstone
                     when "do" then :DO
                     when "def", "define" then :DEF
                     when "fun", "function" then :FUN
-                    when "abstract" then :ABSTRACT
-                    when "module" then :MODULE
-                    when "class" then :CLASS
+                    when "abstract", "abs" then :ABSTRACT
+                    when "module", "mod" then :MODULE
+                    when "class", "cls" then :CLASS
                     when "return" then :RETURN
                     when "typeof" then :TYPEOF
                     when "con" then :CON

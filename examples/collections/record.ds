@@ -32,5 +32,5 @@ record Person
     age: int
 end
 
-bob = Person.new("Bob", 30)
-echo "Name: #{bob.name}, Age: #{bob.age}"
+greet = Person.new("V", 30)
+echo "Name: #{greet.name}, Age: #{greet.age}"

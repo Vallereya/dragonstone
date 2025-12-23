@@ -475,6 +475,17 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     echo "x: #{point.x}, y: #{point.y}"
 ```
 
+###### Example of a `record`, similar to `struct` but are are immutable data structures that automatically generate the struct, the constructor, and getters for those fields.
+```crystal
+    record Person
+        name: str
+        age: int
+    end
+
+    greet = Person.new("V", 30)
+    echo "Name: #{greet.name}, Age: #{greet.age}"
+```
+
 ###### Examples of Type Casting/Switching.
 ```crystal
     def process(input)
@@ -504,27 +515,14 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     echo add(magic, 8)
 ```
 
-###### What's being grabbed from (./examples/test_use.ds), and using the `con` keyword again.
+###### What's being grabbed from (./examples/test_use.ds).
 ```crystal
-    con magic = 42
+    magic = 42
 
     def add(a, b)
         a + b
     end
 ```
-
-###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
-```crystal
-    # Both by file and selectively using `from` with it.
-    use "./test_use"
-    use { divide } from "./raise"
-
-    # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
-    # because it was the only thing I could find that would grab the examples from GitHub.
-    use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
-    use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
-```
-> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them.
 
 #### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
@@ -576,6 +574,19 @@ echo square.call(6)
     end
 ```
 
+###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
+```crystal
+    # Both by file and selectively using `from` with it.
+    use "./test_use"
+    use { divide } from "./raise"
+
+    # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
+    # because it was the only thing I could find that would grab the examples from GitHub.
+    use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
+    use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
+```
+> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them.
+
 #### See the `examples/` directory for more sample `.ds` files.
 
 ## ⚡ Benchmark Information
@@ -622,41 +633,6 @@ You can run these yourself from the `./scripts/benchmark` directory.
     PyPy                = ~10-20 seconds    (using JIT)
     Node.js             = ~10-30 seconds    (using V8)
 ```
-
-## 📜 Project History
-> **Note from V on the history of Dragonstone** 
-
-The current Dragonstone implementation in this repository is v5. Development on v5 began in April 2025, but this repository only started receiving those updates and commits in October 2025.
-
-Dragonstone has gone through multiple full rewrites, not because earlier versions "*failed*", but because each one taught me what the project actually needed to become the language I had in my head.
-
-### v1: Python
-Dragonstone started roughly in the Summer of 2023 as a "for fun" experiment written in Python. Building a programming language was something I’d wanted to do for a long time, and v1 was my way of trying it out, out of curiosity.
-
-After about three months, it stopped feeling like just a toy. I realized the idea could become something genuinely serious. Which also meant I needed a better foundation than what I’d built in the initial prototype.
-
-### v2: A Ruby Rewrite
-So I restarted as v2, rebuilding in Ruby. I worked on this version for roughly 6 months, but performance quickly became an issue. It wasn’t just "slow", it was unusably slow. At its worst, even something as simple as running `Hello World!` could take around 15 seconds.
-
-That was the moment I accepted that if Dragonstone was going to actually be something, the strategy needed to change.
-
-### v3: A Ruby & C Hybrid
-Next came v3, a much larger build that lasted about 9 months. This version was with Ruby and C, trying to put the critical pieces into native code.
-
-It helped, but it also introduced a new problem. Bridging Ruby <-> C constantly was annoying, and the parts that had to stay on the Ruby side still felt slow. Over time, the complexity and glue started to outweigh the benefits, so I eventually scrapped v3 as well.
-
-### v4: Another Hybrid with Ruby, Crystal, & C
-After that, I built v4, using Ruby, Crystal, and C, and spent around another 9 months on it. The goal was to get the best of both worlds by keeping the high-level flexibility while improving performance and structure using Crystal and native modules.
-
-In practice, though, I ran into many of the same issues as v3. Just too much cross-language complexity and too many moving parts. Eventually I burned out on the architecture, even though the idea of making Dragonstone still wouldn’t let go.
-
-### The Gap
-From January 2025 to April 2025, I stepped back, researched, and experimented. During that time, I was also thinking seriously about my larger EDEN project which I wanted a top-to-bottom system where high-performance compiled modules would need to cooperate smoothly with high-level scripted logic.
-
-That requirement made some questions. What implementation path gives me long-term performance without constant friction/issues? and would allow me to use an FFI to include others? I explored several systems language options, with C, C++, GO, and Rust as the main contenders.
-
-### v5: Crystal & C (April 2025 to Present)
-By that point, I had a lot of prior work and ideas tied up in Ruby, Crystal, and C. But, Ruby kept being the recurring issue. So for v5, I made a cut, I just dropped Ruby and shrank C. Most of the core ideas from v1-v4 were carried over (either directly ported or reimplemented), with Crystal being the largest part, but v5 is where the project finally feels like it’s going in the right direction.
 
 <br>
 

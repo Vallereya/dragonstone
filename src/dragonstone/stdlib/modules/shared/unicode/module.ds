@@ -2,6 +2,8 @@
     
 ]#
 
+use "./proc/*"
+
 module Unicode
     
 end
