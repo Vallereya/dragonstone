@@ -42,10 +42,31 @@ module Dragonstone
         return u
       end
       ast = @resolver.cache.get(path) || raise "Internal: missing AST for #{path}"
-      unit = @runtime.compile_or_eval(ast, path, preferred_backend: preferred_backend)
+      unit = @runtime.compile_or_eval(export_only_program(ast), path, preferred_backend: preferred_backend)
       @runtime.unit_cache[{path, preferred_backend}] = unit
       @runtime.unit_cache[{path, unit.backend.backend_mode}] = unit
       unit
+    end
+
+    private def export_only_program(ast : AST::Program) : AST::Program
+      filtered = ast.statements.select { |stmt| exportable_statement?(stmt) }
+      AST::Program.new(filtered, ast.use_decls, location: ast.location)
+    end
+
+    private def exportable_statement?(stmt : AST::Node) : Bool
+      case stmt
+      when AST::ClassDefinition,
+           AST::ModuleDefinition,
+           AST::StructDefinition,
+           AST::EnumDefinition,
+           AST::FunctionDef,
+           AST::ConstantDeclaration,
+           AST::AliasDefinition,
+           AST::ExtendStatement
+        true
+      else
+        false
+      end
     end
   end
 end

@@ -194,7 +194,15 @@ module Dragonstone
       end
       p = resolve_spec(spec, base_dir, exclude_path)
       if p.includes?("*")
-        Dir.glob(p)
+        glob_pattern = if p.ends_with?("/**")
+          p + "/*"
+        elsif p.ends_with?("\\**")
+          p + "\\*"
+        else
+          p
+        end
+
+        Dir.glob(glob_pattern)
           .select { |f| File.file?(f) && File.extname(f) == config.file_ext }
           .map { |f| canonicalize(f, base: base_dir) }
       else

@@ -149,6 +149,48 @@ DS
         Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Core).output.should eq "30\n"
     end
 
+    it "imports modules without executing top-level statements" do
+        tmp_dir = File.join(Dir.current, "tmp", "use_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            lib_path = File.join(tmp_dir, "lib.ds")
+            File.write(lib_path, "echo \"SIDE_EFFECT\"\ncon MAGIC = 42\n")
+
+            entry = File.join(tmp_dir, "entry.ds")
+            File.write(entry, "use \"./lib\"\necho MAGIC\n")
+
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "42\n"
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "42\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
+    it "supports use globs for directories" do
+        tmp_dir = File.join(Dir.current, "tmp", "use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            mods_dir = File.join(tmp_dir, "mods")
+            FileUtils.mkdir_p(mods_dir)
+            File.write(File.join(mods_dir, "a.ds"), "con A = 1\n")
+            FileUtils.mkdir_p(File.join(mods_dir, "sub"))
+            File.write(File.join(mods_dir, "sub", "b.ds"), "con B = 2\n")
+
+            entry_star = File.join(tmp_dir, "entry_star.ds")
+            File.write(entry_star, "use \"./mods/*\"\necho A\necho B\n")
+            expect_raises(Dragonstone::NameError) do
+                Dragonstone.run_file(entry_star, backend: Dragonstone::BackendMode::Native)
+            end
+
+            entry_globstar = File.join(tmp_dir, "entry_globstar.ds")
+            File.write(entry_globstar, "use \"./mods/**\"\necho A\necho B\n")
+            Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Native).output.should eq "1\n2\n"
+            Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Core).output.should eq "1\n2\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
     it "allows fun literals to see globals in the native backend" do
         source = <<-DS
 x = 10
