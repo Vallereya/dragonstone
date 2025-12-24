@@ -2181,6 +2181,14 @@ module Dragonstone
         private def shift_left(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
             overload = invoke_operator_overload(a, "<<", b)
             return overload unless overload.nil?
+
+            if a.is_a?(Bytecode::BuiltinStream)
+                text = display_value(b)
+                @stdout_io << text
+                print text if @log_to_stdout
+                return a
+            end
+
             integer_op(a, b) { |x, y| x << y }
         end
 

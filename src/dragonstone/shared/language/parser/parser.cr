@@ -1104,7 +1104,24 @@ module Dragonstone
                 else
                     right_precedence = op_info[:associativity] == :right ? op_info[:precedence] - 1 : op_info[:precedence]
                     right = parse_expression(right_precedence)
-                    left = AST::BinaryOp.new(left, op_info[:operator].as(Symbol), right, location: token.location)
+                    operator = op_info[:operator].as(Symbol)
+
+                    # Stream extraction syntax sugar:
+                    # `stdin >> var` => `var = stdin.read`
+                    if operator == :>> && left.is_a?(AST::StdinExpression) && right.is_a?(AST::Variable)
+                        var = right.as(AST::Variable)
+                        read_call = AST::MethodCall.new("read", [] of AST::Node, left, location: token.location)
+                        left = AST::Assignment.new(
+                            var.name,
+                            read_call,
+                            operator: nil,
+                            type_annotation: var.type_annotation,
+                            visibility: :public,
+                            location: token.location
+                        )
+                    else
+                        left = AST::BinaryOp.new(left, operator, right, location: token.location)
+                    end
                 end
             end
 

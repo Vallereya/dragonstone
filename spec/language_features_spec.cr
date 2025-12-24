@@ -412,6 +412,36 @@ DS
         result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
     end
 
+    it "supports stdout << output in the native backend" do
+        source = <<-DS
+stdout << "Hello"
+stdout << " "
+stdout << "World"
+stdout << "\\n"
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "Hello World\n"
+    end
+
+    it "parses stdin >> var as assignment" do
+        source = "stdin >> name\n"
+        tokens = Dragonstone::Lexer.new(source).tokenize
+        ast = Dragonstone::Parser.new(tokens).parse
+
+        stmt = ast.statements.first
+        stmt.should be_a(Dragonstone::AST::Assignment)
+
+        assign = stmt.as(Dragonstone::AST::Assignment)
+        assign.name.should eq "name"
+        assign.operator.should be_nil
+
+        value = assign.value
+        value.should be_a(Dragonstone::AST::MethodCall)
+        call = value.as(Dragonstone::AST::MethodCall)
+        call.name.should eq "read"
+        call.receiver.should be_a(Dragonstone::AST::StdinExpression)
+    end
+
     it "raises when super is used outside a method in the native backend" do
         expect_raises(Dragonstone::InterpreterError) do
             Dragonstone.run("super(1)\n", backend: Dragonstone::BackendMode::Native)

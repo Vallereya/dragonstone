@@ -311,6 +311,16 @@ module Dragonstone
             overload = invoke_operator_overload(left, operator, right, node)
             return overload unless overload.nil?
 
+            if left.is_a?(BuiltinStream)
+                case operator
+                when :<<
+                    append_output_inline(display_value(right))
+                    return left
+                when :>>
+                    runtime_error(TypeError, "Unsupported operands for >>", node)
+                end
+            end
+
             lint = to_int(left, node)
             rint = to_int(right, node)
 

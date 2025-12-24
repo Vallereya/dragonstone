@@ -91,6 +91,17 @@ DS
         result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
     end
 
+    it "supports stdout << output in the core backend" do
+        source = <<-DS
+stdout << "Hello"
+stdout << " "
+stdout << "World"
+stdout << "\\n"
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Hello World\n"
+    end
+
     it "supports super calls in class methods" do
         source = <<-DS
 class Person
