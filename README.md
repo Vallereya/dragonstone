@@ -25,7 +25,7 @@
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
 Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
 
-> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.3` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet.
+> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.3` the LLVM backend has limited support, there are some minor gaps between it and the interpreter and a few edge cases. However all examples, excluding the stdlibs are working fine. Please report any you find so they can be fixed. In regards to the C, Crystal, and the Ruby backends these still need built out as they only create temporary artifacts for echo/strings, I haven't merged that work yet. The priority right now is 100% llvm backend support.
 
 <br>
 
@@ -585,7 +585,6 @@ echo square.call(6)
     use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
     use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 ```
-> **WARNING:** I've mostly resolved issues with imports that occurred after the interpreter/compiler split, you might still come across some edge cases, please report any you find so I can fix them.
 
 #### See the `examples/` directory for more sample `.ds` files.
 

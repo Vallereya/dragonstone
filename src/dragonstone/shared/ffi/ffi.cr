@@ -1008,4 +1008,8 @@ module Dragonstone
             end
         end
     end
+
+    module Host
+        
+    end
 end
