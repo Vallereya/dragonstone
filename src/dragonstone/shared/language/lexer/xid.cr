@@ -7,15 +7,18 @@ module Dragonstone
     #
     # This parses `DerivedCoreProperties.txt` (checked into the repo) at program
     # startup and exposes `xid_start?` / `xid_continue?` for lexer identifier
-    # rules. Emoji identifiers are intentionally omitted for now.
+    # rules, plus `extended_pictographic?` for emoji identifiers.
     module UnicodeXID
         extend self
 
         private RELATIVE_DERIVED_CORE_PROPERTIES = "src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt"
+        private RELATIVE_EMOJI_DATA = "src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt"
 
         @@xid_start_ranges : Array(Tuple(Int32, Int32))?
         @@xid_continue_ranges : Array(Tuple(Int32, Int32))?
+        @@extended_pictographic_ranges : Array(Tuple(Int32, Int32))?
         @@warned_missing = false
+        @@warned_missing_emoji = false
 
         def xid_start?(codepoint : Int32) : Bool
             ensure_loaded
@@ -25,6 +28,11 @@ module Dragonstone
         def xid_continue?(codepoint : Int32) : Bool
             ensure_loaded
             range_in?(@@xid_continue_ranges.not_nil!, codepoint)
+        end
+
+        def extended_pictographic?(codepoint : Int32) : Bool
+            ensure_emoji_loaded
+            range_in?(@@extended_pictographic_ranges.not_nil!, codepoint)
         end
 
         private def range_in?(ranges : Array(Tuple(Int32, Int32)), codepoint : Int32) : Bool
@@ -52,6 +60,11 @@ module Dragonstone
             start_ranges, continue_ranges = load_xid_ranges
             @@xid_start_ranges = start_ranges
             @@xid_continue_ranges = continue_ranges
+        end
+
+        private def ensure_emoji_loaded : Nil
+            return if @@extended_pictographic_ranges
+            @@extended_pictographic_ranges = load_extended_pictographic_ranges
         end
 
         private def load_xid_ranges : Tuple(Array(Tuple(Int32, Int32)), Array(Tuple(Int32, Int32)))
@@ -124,6 +137,42 @@ module Dragonstone
             merged
         end
 
+        private def load_extended_pictographic_ranges : Array(Tuple(Int32, Int32))
+            ranges = [] of Tuple(Int32, Int32)
+            path = emoji_data_path
+
+            begin
+                File.each_line(path) do |raw|
+                    line = raw.split('#', 2)[0].strip
+                    next if line.empty?
+
+                    pieces = line.split(';', 2)
+                    next unless pieces.size == 2
+
+                    code_field = pieces[0].strip
+                    prop = pieces[1].strip
+                    next unless prop == "Extended_Pictographic"
+
+                    if (dots = code_field.index(".."))
+                        low = code_field[0, dots].to_i(16)
+                        high = code_field[dots + 2, code_field.size - (dots + 2)].to_i(16)
+                        ranges << {low, high}
+                    else
+                        cp = code_field.to_i(16)
+                        ranges << {cp, cp}
+                    end
+                end
+            rescue ex : File::NotFoundError
+                unless @@warned_missing_emoji
+                    @@warned_missing_emoji = true
+                    STDERR.puts "WARNING: Missing #{RELATIVE_EMOJI_DATA}; emoji identifiers will be disabled."
+                end
+            end
+
+            ranges.sort_by!(&.[0])
+            merge_ranges(ranges)
+        end
+
         private def derived_core_properties_path : String
             candidates = [] of String
 
@@ -149,6 +198,33 @@ module Dragonstone
 
             # Fall back to relative path (will be handled by `load_xid_ranges`).
             RELATIVE_DERIVED_CORE_PROPERTIES
+        end
+
+        private def emoji_data_path : String
+            candidates = [] of String
+
+            if explicit = ENV["DRAGONSTONE_UCD_EMOJI_DATA"]?
+                candidates << explicit
+            end
+
+            if root = ENV["DRAGONSTONE_ROOT"]?
+                candidates << File.join(root, RELATIVE_EMOJI_DATA)
+            end
+
+            candidates << File.join(Dir.current, RELATIVE_EMOJI_DATA)
+
+            if exe = Process.executable_path
+                exe_dir = File.dirname(exe)
+                candidates << File.join(exe_dir, RELATIVE_EMOJI_DATA)
+                candidates << File.expand_path(File.join(exe_dir, "..", RELATIVE_EMOJI_DATA))
+            end
+
+            candidates.each do |path|
+                return path if File.exists?(path)
+            end
+
+            # Fall back to relative path (will be handled by `load_extended_pictographic_ranges`).
+            RELATIVE_EMOJI_DATA
         end
     end
 end

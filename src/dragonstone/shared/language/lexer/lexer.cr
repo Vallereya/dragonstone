@@ -784,25 +784,25 @@ module Dragonstone
         end
 
         private def identifier_start?(char : Char) : Bool
-            char == '_' || char.ascii_letter? || UnicodeXID.xid_start?(char.ord)
+            char == '_' || char.ascii_letter? || UnicodeXID.xid_start?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def identifier_part?(char : Char) : Bool
-            char == '_' || char.ascii_letter? || char.ascii_number? || UnicodeXID.xid_continue?(char.ord)
+            char == '_' || char.ascii_letter? || char.ascii_number? || UnicodeXID.xid_continue?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def unicode_identifier_start?(char : Char) : Bool
             return false if char.ascii?
-            UnicodeXID.xid_start?(char.ord)
+            UnicodeXID.xid_start?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def unicode_identifier_part?(char : Char) : Bool
             return false if char.ascii?
-            UnicodeXID.xid_continue?(char.ord)
+            UnicodeXID.xid_continue?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def emoji_identifier_char?(char : Char) : Bool
-            false
+            UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def read_escape_sequence(_literal : Symbol, start_line : Int32, start_col : Int32) : Char
@@ -821,6 +821,9 @@ module Dragonstone
             when 'b'
                 advance
                 '\b'
+            when 'e'
+                advance
+                '\e'
             when 'f'
                 advance
                 '\f'

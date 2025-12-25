@@ -41,6 +41,14 @@ module Dragonstone
     module FFI
         alias InteropValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(InteropValue)
 
+        private RELATIVE_DERIVED_GENERAL_CATEGORY = "src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/extracted/DerivedGeneralCategory.txt"
+        private RELATIVE_DERIVED_COMBINING_CLASS = "src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/extracted/DerivedCombiningClass.txt"
+
+        @@general_category_ranges : Array(Tuple(String, Array(Tuple(Int32, Int32))))?
+        @@combining_class_ranges : Array(Tuple(Int32, Int32, Int32))?
+        @@warned_missing_general_category = false
+        @@warned_missing_combining_class = false
+
         @@net_next_handle : Int64 = 1_i64
         @@net_listeners = {} of Int64 => TCPServer
         @@net_clients = {} of Int64 => TCPSocket
@@ -276,6 +284,102 @@ module Dragonstone
 
                 parent_str = parent.to_s.gsub("\\", "/")
                 parent_str.empty? ? "." : (parent_str == "." ? "./" : parent_str)
+
+            when "unicode_normalize"
+                value = expect_string(arguments, 0, function_name)
+                form = expect_optional_string(arguments, 1, function_name, default: "NFC")
+
+                case form.upcase
+                when "NFD"
+                    value.unicode_normalize(:nfd)
+                when "NFKD"
+                    value.unicode_normalize(:nfkd)
+                when "NFKC"
+                    value.unicode_normalize(:nfkc)
+                else
+                    value.unicode_normalize(:nfc)
+                end
+
+            when "unicode_canonical_equivalent"
+                left = expect_string(arguments, 0, function_name)
+                right = expect_string(arguments, 1, function_name)
+                left.unicode_normalize(:nfd) == right.unicode_normalize(:nfd)
+
+            when "unicode_upcase"
+                value = expect_string(arguments, 0, function_name)
+                option = unicode_case_option(expect_optional_string(arguments, 1, function_name, default: "NONE"))
+                value.upcase(option)
+
+            when "unicode_downcase"
+                value = expect_string(arguments, 0, function_name)
+                option = unicode_case_option(expect_optional_string(arguments, 1, function_name, default: "NONE"))
+                value.downcase(option)
+
+            when "unicode_titlecase"
+                value = expect_string(arguments, 0, function_name)
+                option = unicode_case_option(expect_optional_string(arguments, 1, function_name, default: "NONE"))
+                value.capitalize(option)
+
+            when "unicode_casefold"
+                value = expect_string(arguments, 0, function_name)
+                value.downcase(Unicode::CaseOptions::Fold)
+
+            when "unicode_graphemes"
+                value = expect_string(arguments, 0, function_name)
+                output = [] of InteropValue
+                value.graphemes.each do |grapheme|
+                    output << grapheme.to_s
+                end
+                output
+
+            when "unicode_grapheme_count"
+                value = expect_string(arguments, 0, function_name)
+                value.graphemes.size
+
+            when "unicode_general_category"
+                codepoint = expect_int(arguments, 0, function_name)
+                general_category_for(codepoint)
+
+            when "unicode_combining_class"
+                codepoint = expect_int(arguments, 0, function_name)
+                combining_class_for(codepoint)
+
+            when "unicode_whitespace"
+                codepoint = expect_int(arguments, 0, function_name)
+                char = codepoint_to_char(codepoint)
+                char ? char.whitespace? : false
+
+            when "unicode_letter"
+                codepoint = expect_int(arguments, 0, function_name)
+                char = codepoint_to_char(codepoint)
+                char ? Unicode.letter?(char) : false
+
+            when "unicode_number"
+                codepoint = expect_int(arguments, 0, function_name)
+                char = codepoint_to_char(codepoint)
+                char ? Unicode.number?(char) : false
+
+            when "unicode_mark"
+                codepoint = expect_int(arguments, 0, function_name)
+                char = codepoint_to_char(codepoint)
+                char ? Unicode.mark?(char) : false
+
+            when "unicode_control"
+                codepoint = expect_int(arguments, 0, function_name)
+                char = codepoint_to_char(codepoint)
+                char ? Unicode.control?(char) : false
+
+            when "unicode_compare"
+                left = expect_string(arguments, 0, function_name)
+                right = expect_string(arguments, 1, function_name)
+                mode = expect_optional_string(arguments, 2, function_name, default: "DEFAULT")
+
+                if mode.upcase == "CASEFOLD"
+                    left = left.downcase(Unicode::CaseOptions::Fold)
+                    right = right.downcase(Unicode::CaseOptions::Fold)
+                end
+
+                left <=> right
 
             when "net_listen_tcp"
                 host = expect_optional_string(arguments, 0, function_name, default: "0.0.0.0")
@@ -514,6 +618,249 @@ module Dragonstone
             raw.to_i
         rescue TypeCastError
             raise "#{function_name} argument #{index + 1} must be an Int"
+        end
+
+        private def self.unicode_case_option(raw : String) : Unicode::CaseOptions
+            case raw.upcase
+            when "ASCII"
+                Unicode::CaseOptions::ASCII
+            when "TURKIC"
+                Unicode::CaseOptions::Turkic
+            when "FOLD"
+                Unicode::CaseOptions::Fold
+            else
+                Unicode::CaseOptions::None
+            end
+        end
+
+        private def self.codepoint_to_char(codepoint : Int32) : Char?
+            return nil if codepoint < 0 || codepoint > Char::MAX_CODEPOINT
+            codepoint.chr
+        rescue
+            nil
+        end
+
+        private def self.general_category_for(codepoint : Int32) : String
+            return "Cn" unless valid_codepoint?(codepoint)
+            ensure_general_category_loaded
+            @@general_category_ranges.not_nil!.each do |entry|
+                category = entry[0]
+                ranges = entry[1]
+                return category if range_in?(ranges, codepoint)
+            end
+            "Cn"
+        end
+
+        private def self.combining_class_for(codepoint : Int32) : Int32
+            return 0 unless valid_codepoint?(codepoint)
+            ensure_combining_class_loaded
+            ranges = @@combining_class_ranges.not_nil!
+            left = 0
+            right = ranges.size - 1
+
+            while left <= right
+                mid = (left + right) // 2
+                low = ranges[mid][0]
+                high = ranges[mid][1]
+
+                if codepoint < low
+                    right = mid - 1
+                elsif codepoint > high
+                    left = mid + 1
+                else
+                    return ranges[mid][2]
+                end
+            end
+
+            0
+        end
+
+        private def self.ensure_general_category_loaded
+            return if @@general_category_ranges
+            @@general_category_ranges = load_general_category_ranges
+        end
+
+        private def self.ensure_combining_class_loaded
+            return if @@combining_class_ranges
+            @@combining_class_ranges = load_combining_class_ranges
+        end
+
+        private def self.load_general_category_ranges : Array(Tuple(String, Array(Tuple(Int32, Int32))))
+            categories = {} of String => Array(Tuple(Int32, Int32))
+            path = derived_general_category_path
+
+            begin
+                File.each_line(path) do |raw|
+                    line = raw.split('#', 2)[0].strip
+                    next if line.empty?
+
+                    pieces = line.split(';', 2)
+                    next unless pieces.size == 2
+
+                    code_field = pieces[0].strip
+                    category = pieces[1].strip
+                    ranges = categories[category]? || begin
+                        fresh_ranges = [] of Tuple(Int32, Int32)
+                        categories[category] = fresh_ranges
+                        fresh_ranges
+                    end
+
+                    if (dots = code_field.index(".."))
+                        low = code_field[0, dots].to_i(16)
+                        high = code_field[dots + 2, code_field.size - (dots + 2)].to_i(16)
+                        ranges << {low, high}
+                    else
+                        cp = code_field.to_i(16)
+                        ranges << {cp, cp}
+                    end
+                end
+            rescue ex : File::NotFoundError
+                unless @@warned_missing_general_category
+                    @@warned_missing_general_category = true
+                    STDERR.puts "WARNING: Missing #{RELATIVE_DERIVED_GENERAL_CATEGORY}; general category lookups will default to Cn."
+                end
+            end
+
+            categories.keys.sort.map do |key|
+                ranges = categories[key]
+                ranges.sort_by!(&.[0])
+                {key, merge_ranges(ranges)}
+            end
+        end
+
+        private def self.load_combining_class_ranges : Array(Tuple(Int32, Int32, Int32))
+            ranges = [] of Tuple(Int32, Int32, Int32)
+            path = derived_combining_class_path
+
+            begin
+                File.each_line(path) do |raw|
+                    line = raw.split('#', 2)[0].strip
+                    next if line.empty?
+
+                    pieces = line.split(';', 2)
+                    next unless pieces.size == 2
+
+                    code_field = pieces[0].strip
+                    class_val = pieces[1].strip.to_i
+
+                    if (dots = code_field.index(".."))
+                        low = code_field[0, dots].to_i(16)
+                        high = code_field[dots + 2, code_field.size - (dots + 2)].to_i(16)
+                        ranges << {low, high, class_val}
+                    else
+                        cp = code_field.to_i(16)
+                        ranges << {cp, cp, class_val}
+                    end
+                end
+            rescue ex : File::NotFoundError
+                unless @@warned_missing_combining_class
+                    @@warned_missing_combining_class = true
+                    STDERR.puts "WARNING: Missing #{RELATIVE_DERIVED_COMBINING_CLASS}; combining class lookups will default to 0."
+                end
+            end
+
+            ranges.sort_by!(&.[0])
+            ranges
+        end
+
+        private def self.range_in?(ranges : Array(Tuple(Int32, Int32)), codepoint : Int32) : Bool
+            left = 0
+            right = ranges.size - 1
+
+            while left <= right
+                mid = (left + right) // 2
+                low = ranges[mid][0]
+                high = ranges[mid][1]
+
+                if codepoint < low
+                    right = mid - 1
+                elsif codepoint > high
+                    left = mid + 1
+                else
+                    return true
+                end
+            end
+
+            false
+        end
+
+        private def self.merge_ranges(ranges : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
+            return ranges if ranges.empty?
+
+            merged = [] of Tuple(Int32, Int32)
+            current_low, current_high = ranges[0]
+
+            i = 1
+            while i < ranges.size
+                low, high = ranges[i]
+                if low <= current_high + 1
+                    current_high = high if high > current_high
+                else
+                    merged << {current_low, current_high}
+                    current_low = low
+                    current_high = high
+                end
+                i += 1
+            end
+
+            merged << {current_low, current_high}
+            merged
+        end
+
+        private def self.valid_codepoint?(codepoint : Int32) : Bool
+            codepoint >= 0 && codepoint <= Char::MAX_CODEPOINT
+        end
+
+        private def self.derived_general_category_path : String
+            candidates = [] of String
+
+            if explicit = ENV["DRAGONSTONE_UCD_DERIVED_GENERAL_CATEGORY"]?
+                candidates << explicit
+            end
+
+            if root = ENV["DRAGONSTONE_ROOT"]?
+                candidates << File.join(root, RELATIVE_DERIVED_GENERAL_CATEGORY)
+            end
+
+            candidates << File.join(Dir.current, RELATIVE_DERIVED_GENERAL_CATEGORY)
+
+            if exe = Process.executable_path
+                exe_dir = File.dirname(exe)
+                candidates << File.join(exe_dir, RELATIVE_DERIVED_GENERAL_CATEGORY)
+                candidates << File.expand_path(File.join(exe_dir, "..", RELATIVE_DERIVED_GENERAL_CATEGORY))
+            end
+
+            candidates.each do |path|
+                return path if File.exists?(path)
+            end
+
+            RELATIVE_DERIVED_GENERAL_CATEGORY
+        end
+
+        private def self.derived_combining_class_path : String
+            candidates = [] of String
+
+            if explicit = ENV["DRAGONSTONE_UCD_DERIVED_COMBINING_CLASS"]?
+                candidates << explicit
+            end
+
+            if root = ENV["DRAGONSTONE_ROOT"]?
+                candidates << File.join(root, RELATIVE_DERIVED_COMBINING_CLASS)
+            end
+
+            candidates << File.join(Dir.current, RELATIVE_DERIVED_COMBINING_CLASS)
+
+            if exe = Process.executable_path
+                exe_dir = File.dirname(exe)
+                candidates << File.join(exe_dir, RELATIVE_DERIVED_COMBINING_CLASS)
+                candidates << File.expand_path(File.join(exe_dir, "..", RELATIVE_DERIVED_COMBINING_CLASS))
+            end
+
+            candidates.each do |path|
+                return path if File.exists?(path)
+            end
+
+            RELATIVE_DERIVED_COMBINING_CLASS
         end
 
         private def self.expect_headers(arguments : Array(InteropValue), index : Int32, function_name : String) : Array(Array(InteropValue))

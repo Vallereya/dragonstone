@@ -1,1 +1,3 @@
 use "modules/shared/colorize/module"
+
+alias Color = Colorize::Object

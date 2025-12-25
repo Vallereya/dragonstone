@@ -11,6 +11,7 @@ module Unicode
     module Proc
         class Generator
             SOURCE_DERIVED_CORE = "./src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt"
+            SOURCE_EMOJI_DATA = "./src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt"
             TARGET_DATA = "./src/dragonstone/stdlib/modules/shared/unicode/proc/data.ds"
 
             enum DecompositionType
@@ -90,8 +91,32 @@ module Unicode
                 return {merge_ranges(start_ranges), merge_ranges(continue_ranges)}
             end
 
+            def generate_extended_pictographic_ranges: arr(Range)
+                ranges: arr(Range) = []
+
+                content = File.read(SOURCE_EMOJI_DATA)
+                lines = content.split("\n")
+
+                lines.each do |raw|
+                    line = strip_ascii(remove_comment(raw))
+                    next if line.empty?
+
+                    pieces = line.split(";")
+                    next unless pieces.length >= 2
+
+                    code_field = strip_ascii(pieces[0])
+                    prop = strip_ascii(pieces[1])
+                    next unless prop == "Extended_Pictographic"
+
+                    ranges.push(parse_codepoint_range(code_field))
+                end
+
+                return merge_ranges(ranges)
+            end
+
             def render_data_ds: str
                 xid_start, xid_continue = generate_xid_ranges
+                ext_pictographic = generate_extended_pictographic_ranges
 
                 return strings.build do |io|
                     io.append("#[\n")
@@ -111,6 +136,12 @@ module Unicode
                     io.append("    # Unicode XID_Continue (identifier continue) ranges.\n")
                     io.append("    con XID_CONTINUE_RANGES = [\n")
                     append_ranges(io, xid_continue)
+                    io.append("    ]\n")
+
+                    io.append("\n")
+                    io.append("    # Unicode Extended_Pictographic (emoji) ranges.\n")
+                    io.append("    con EXTENDED_PICTOGRAPHIC_RANGES = [\n")
+                    append_ranges(io, ext_pictographic)
                     io.append("    ]\n")
                     io.append("end\n")
                 end
