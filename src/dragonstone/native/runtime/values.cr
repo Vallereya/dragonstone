@@ -304,6 +304,12 @@ module Dragonstone
             end
         end
 
+        def each_constant
+            @constants.each do |name, value|
+                yield name, value
+            end
+        end
+
         def constant?(name : String) : Bool
             @constants.has_key?(name)
         end
@@ -314,6 +320,25 @@ module Dragonstone
 
         def fetch_constant(name : String) : RuntimeValue
             @constants[name]
+        end
+
+        def merge_from!(other : DragonModule)
+            other.each_method do |name, method|
+                define_method(name, method.dup_with_owner(self))
+            end
+
+            other.each_constant do |name, value|
+                if constant?(name)
+                    existing = fetch_constant(name)
+                    if existing.is_a?(DragonModule) && value.is_a?(DragonModule)
+                        existing.as(DragonModule).merge_from!(value.as(DragonModule))
+                    else
+                        define_constant(name, value)
+                    end
+                else
+                    define_constant(name, value)
+                end
+            end
         end
     end
 

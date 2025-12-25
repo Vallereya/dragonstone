@@ -17,6 +17,12 @@ module Dragonstone
             while idx < args.size
                 arg = args[idx]
 
+                if filename
+                    script_argv << arg
+                    idx += 1
+                    next
+                end
+
                 if arg == "--typed"
                     typed = true
 
@@ -40,11 +46,8 @@ module Dragonstone
                     stderr.puts "Unknown option: #{arg}"
                     return 1
 
-                elsif filename.nil?
-                    filename = arg
-
                 else
-                    script_argv << arg
+                    filename = arg
                 end
 
                 idx += 1
