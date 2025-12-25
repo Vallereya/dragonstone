@@ -1,53 +1,53 @@
 module utilities
     class file
         def open(path: str, mode: str, create_dirs: bool)
-            ffi.call_crystal("file_open", [path, mode, create_dirs])
+            ffi.call("file_open", [path, mode, create_dirs])
         end
 
         def read(path: str) -> str
-            ffi.call_crystal("file_read", [path])
+            ffi.call("file_read", [path])
         end
 
         def write(path: str, content: str, create_dirs: bool) -> int
-            ffi.call_crystal("file_write", [path, content, create_dirs])
+            ffi.call("file_write", [path, content, create_dirs])
         end
 
         def append(path: str, content: str, create_if_missing: bool) -> int
-            ffi.call_crystal("file_append", [path, content, create_if_missing])
+            ffi.call("file_append", [path, content, create_if_missing])
         end
 
         def create(path: str, contents: str, create_dirs: bool) -> str
-            ffi.call_crystal("file_create", [path, contents, create_dirs])
+            ffi.call("file_create", [path, contents, create_dirs])
         end
 
         def delete(path: str) -> bool
-            ffi.call_crystal("file_delete", [path])
+            ffi.call("file_delete", [path])
         end
     end
 
     class path
         def create(target: str) -> str
-            ffi.call_crystal("path_create", [target])
+            ffi.call("path_create", [target])
         end
 
         def normalize(value: str) -> str
-            ffi.call_crystal("path_normalize", [value])
+            ffi.call("path_normalize", [value])
         end
 
         def parent(value: str) -> str
-            ffi.call_crystal("path_parent", [value])
+            ffi.call("path_parent", [value])
         end
 
         def base(value: str) -> str
-            ffi.call_crystal("path_base", [value])
+            ffi.call("path_base", [value])
         end
 
         def expand(value: str) -> str
-            ffi.call_crystal("path_expand", [value])
+            ffi.call("path_expand", [value])
         end
 
         def delete(value: str) -> str
-            ffi.call_crystal("path_delete", [value])
+            ffi.call("path_delete", [value])
         end
     end
 

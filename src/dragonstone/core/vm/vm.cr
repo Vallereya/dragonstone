@@ -3073,6 +3073,9 @@ module Dragonstone
         private def call_ffi_method(method : String, args : Array(Bytecode::Value)) : Bytecode::Value
             case method
 
+            when "call"
+                call_ffi_native(args)
+
             when "call_ruby"
                 call_ffi_ruby(args)
 
@@ -3151,6 +3154,29 @@ module Dragonstone
 
             ruby_args = method_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
             result = Dragonstone::FFI.call_ruby(method_name, ruby_args)
+
+            from_ffi_value(result)
+        end
+
+        # FFI: Call native (ABI-backed) functions.
+        private def call_ffi_native(args : Array(Bytecode::Value)) : Bytecode::Value
+            unless args.size >= 2
+                raise "ffi.call requires at least 2 arguments: func_name, [args]"
+            end
+
+            func_name = args[0]
+            func_args = args[1]
+
+            unless func_name.is_a?(String)
+                raise "First argument to ffi.call must be a string"
+            end
+
+            unless func_args.is_a?(Array)
+                raise "Second argument to ffi.call must be an array"
+            end
+
+            native_args = func_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
+            result = Dragonstone::FFI.call(func_name, native_args)
 
             from_ffi_value(result)
         end

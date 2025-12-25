@@ -9,18 +9,18 @@
     These can be on the same line or broken up.
 ]#
 
-def style1
+# def style1
 
-    # Ruby's puts
-    ffi.call_ruby("puts", ["Hello from Ruby!"])
+#     # Ruby's puts
+#     ffi.call_ruby("puts", ["Hello from Ruby!"])
 
-    # Crystal's puts
-    ffi.call_crystal("puts", ["Hello from Crystal!"])
+#     # Crystal's puts
+#     ffi.call_crystal("puts", ["Hello from Crystal!"])
 
-    # C's printf
-    ffi.call_c("printf", ["Hello from C!"])
+#     # C's printf
+#     ffi.call_c("printf", ["Hello from C!\n"])
 
-end
+# end
 
 def style2
 
@@ -47,7 +47,7 @@ def style2
         with printf
 
         as {
-            "Hello from C!"
+            "Hello from C!\n"
         }
     end
 end

@@ -17,15 +17,28 @@
     % 	    modulus
 ]#
 
-a = 10
-b = 5
+a = 5
+b = 10
+c = 15
+d = 20
+e = 25
 
-sum = a + b
-diff = a - b
-prod = a * b
-floor = a // b
+# Addition
+add = a + b
+echo add
 
-echo sum
-echo diff
-echo prod
-echo floor
+# Subtraction
+sub = e - a
+echo sub
+
+# Multiplication
+multi = b * c
+echo multi
+
+# Division
+div = d / a
+echo div
+
+# Floor Division
+floor_div = e // b
+echo floor_div

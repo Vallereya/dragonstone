@@ -1,4 +1,4 @@
-use "modules/native/utilities/file_utilities/module"
+use "modules/shared/utilities/file_utilities/module"
 
 File = utilities.file()
 Path = utilities.path()

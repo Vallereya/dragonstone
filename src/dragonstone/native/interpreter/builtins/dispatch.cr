@@ -1014,6 +1014,9 @@ module Dragonstone
         private def call_ffi_dispatch(method : String, args : Array(RuntimeValue), node : AST::MethodCall) : RuntimeValue
             case method
 
+            when "call"
+                ffi_call_native(args, node)
+
             when "call_ruby"
                 ffi_call_ruby(args, node)
 
@@ -1090,6 +1093,27 @@ module Dragonstone
 
             ruby_args = method_args.as(Array(RuntimeValue)).map { |arg| Dragonstone::FFI.normalize(arg) }
             result = Dragonstone::FFI.call_ruby(method_name, ruby_args)
+            from_ffi_value(result)
+        end
+
+        private def ffi_call_native(args : Array(RuntimeValue), node : AST::MethodCall) : RuntimeValue
+            unless args.size >= 2
+                runtime_error(InterpreterError, "ffi.call requires at least 2 arguments: func_name, [args]", node)
+            end
+
+            func_name = args[0]
+            func_args = args[1]
+
+            unless func_name.is_a?(String)
+                runtime_error(TypeError, "First argument to ffi.call must be a string", node)
+            end
+
+            unless func_args.is_a?(Array(RuntimeValue))
+                runtime_error(TypeError, "Second argument to ffi.call must be an array", node)
+            end
+
+            native_args = func_args.as(Array(RuntimeValue)).map { |arg| Dragonstone::FFI.normalize(arg) }
+            result = Dragonstone::FFI.call(func_name, native_args)
             from_ffi_value(result)
         end
 
