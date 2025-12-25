@@ -1,6 +1,7 @@
 require "file_utils"
 require "socket"
 require "http"
+require "../runtime/abi/abi"
 
 # ---------------------------------
 # -------------- FFI --------------
@@ -148,142 +149,145 @@ module Dragonstone
             case function_name
 
             when "echo", "puts"
-                arguments.each { |argument| puts format_value(argument) }
+                arguments.each { |argument| write_stdout(format_value(argument), newline: true) }
                 nil
 
             when "print"
-                arguments.each { |argument| print format_value(argument) }
+                arguments.each { |argument| write_stdout(format_value(argument), newline: false) }
                 nil
 
             when "file_open"
                 path = expect_string(arguments, 0, function_name)
                 mode = expect_optional_string(arguments, 1, function_name, default: "r")
                 create_dirs = expect_optional_bool(arguments, 2, function_name, default: false)
+                expanded = abi_path_expand(path)
 
-                expanded = File.expand_path(path)
-
-                ensure_parent_directories(expanded) if create_dirs
+                if create_dirs
+                    parent = abi_path_parent(path)
+                    if parent != "." && parent != "./"
+                        abi_path_create(parent)
+                    end
+                end
 
                 case mode
                 when "r"
-                    raise "#{function_name}('#{path}', 'r') failed: file does not exist" unless File.exists?(expanded)
-                    raise "#{function_name}('#{path}', 'r') failed: '#{path}' is not a regular file" unless File.file?(expanded)
+                    raise "#{function_name}('#{path}', 'r') failed: file does not exist" unless abi_file_exists?(path)
+                    raise "#{function_name}('#{path}', 'r') failed: '#{path}' is not a regular file" unless abi_file_is_file?(path)
                 when "w"
-                    ensure_parent_directories(expanded)
-                    File.touch(expanded)
+                    ensure_write = DragonstoneABI.dragonstone_file_write(path, Pointer(UInt8).null, 0, 0)
+                    raise "#{function_name}('#{path}', 'w') failed to create file" if ensure_write < 0
                 when "a"
-                    ensure_parent_directories(expanded)
-                    File.touch(expanded)
+                    ensure_write = DragonstoneABI.dragonstone_file_write(path, Pointer(UInt8).null, 0, 1)
+                    raise "#{function_name}('#{path}', 'a') failed to create file" if ensure_write < 0
                 else
                     raise "#{function_name} invalid mode '#{mode}' (expected 'r', 'w' or 'a')"
                 end
 
+                exists = abi_file_exists?(path)
+                size = abi_file_size(path)
+
                 info = [] of InteropValue
                 info << display_path(expanded)
                 info << mode
-                info << File.exists?(expanded)
-                info << (File.exists?(expanded) && File.file?(expanded) ? File.size(expanded) : nil)
+                info << exists
+                info << (exists && abi_file_is_file?(path) && size >= 0 ? size : nil)
                 info
 
             when "file_read"
                 path = expect_string(arguments, 0, function_name)
-                safe_io(function_name, path) { File.read(path) }
+                safe_io(function_name, path) do
+                    ptr = DragonstoneABI.dragonstone_file_read(path)
+                    raise "#{function_name} failed for '#{path}': unable to read file" if ptr.null?
+                    abi_string(ptr)
+                end
 
             when "file_write"
                 path = expect_string(arguments, 0, function_name)
                 content = expect_string(arguments, 1, function_name)
                 create_dirs = expect_optional_bool(arguments, 2, function_name, default: false)
-
-                ensure_parent_directories(path) if create_dirs
+                if create_dirs
+                    parent = abi_path_parent(path)
+                    abi_path_create(parent) if parent != "." && parent != "./"
+                end
 
                 safe_io(function_name, path) do
-                    File.write(path, content)
-                    content.bytesize
+                    bytes = DragonstoneABI.dragonstone_file_write(path, content.to_unsafe, content.bytesize, 0)
+                    raise "#{function_name} failed for '#{path}': unable to write file" if bytes < 0
+                    bytes
                 end
 
             when "file_append"
                 path = expect_string(arguments, 0, function_name)
                 content = expect_string(arguments, 1, function_name)
                 create = expect_optional_bool(arguments, 2, function_name, default: true)
-
-                ensure_parent_directories(path) if create
-                File.touch(path) if create && !File.exists?(path)
+                if create
+                    parent = abi_path_parent(path)
+                    abi_path_create(parent) if parent != "." && parent != "./"
+                end
 
                 safe_io(function_name, path) do
-                    File.open(path, "a") { |io| io.print(content) }
-                    content.bytesize
+                    bytes = DragonstoneABI.dragonstone_file_write(path, content.to_unsafe, content.bytesize, 1)
+                    raise "#{function_name} failed for '#{path}': unable to append file" if bytes < 0
+                    bytes
                 end
 
             when "file_create"
                 path = expect_string(arguments, 0, function_name)
                 contents = arguments[1]? if arguments.size >= 2
                 create_dirs = expect_optional_bool(arguments, 2, function_name, default: true)
-
-                ensure_parent_directories(path) if create_dirs
-
-                safe_io(function_name, path) do
-                    case contents
-                    when String
-                        File.write(path, contents)
-                    when Nil, Bool, Int32, Int64, Float64, Char
-                        File.write(path, contents.to_s)
-                    when Array(InteropValue)
-                        serialized = contents.map { |element| format_value(element) }.join("\n")
-                        File.write(path, serialized)
-                    else
-                        File.touch(path)
-                    end
+                if create_dirs
+                    parent = abi_path_parent(path)
+                    abi_path_create(parent) if parent != "." && parent != "./"
                 end
 
-                display_path(File.expand_path(path))
+                safe_io(function_name, path) do
+                    payload = case contents
+                              when String
+                                  contents
+                              when Nil, Bool, Int32, Int64, Float64, Char
+                                  contents.to_s
+                              when Array(InteropValue)
+                                  contents.map { |element| format_value(element) }.join("\n")
+                              else
+                                  ""
+                              end
+                    bytes = DragonstoneABI.dragonstone_file_write(path, payload.to_unsafe, payload.bytesize, 0)
+                    raise "#{function_name} failed for '#{path}': unable to create file" if bytes < 0
+                end
+
+                display_path(abi_path_expand(path))
 
             when "file_delete"
                 path = expect_string(arguments, 0, function_name)
-
-                return false unless File.exists?(path) || Dir.exists?(path)
+                return false unless abi_file_exists?(path)
 
                 safe_io(function_name, path) do
-                    if File.file?(path)
-                        File.delete(path)
-                    elsif Dir.exists?(path)
-                        FileUtils.rm_rf(path)
-                    end
+                    DragonstoneABI.dragonstone_file_delete(path) != 0
                 end
-
-                true
 
             when "path_create"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                expanded = File.expand_path(raw)
-                ensure_parent_directories(expanded)
-                Dir.mkdir(expanded) unless Dir.exists?(expanded)
-                display_path(expanded)
+                display_path(abi_path_create(raw))
 
             when "path_normalize"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                Path.new(raw).normalize.to_s.gsub("\\", "/")
+                abi_path_normalize(raw)
 
             when "path_parent"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                parent = Path.new(raw).parent
-                parent ? parent.to_s.gsub("\\", "/") : "."
+                abi_path_parent(raw)
 
             when "path_base"
                 raw = expect_string(arguments, 0, function_name)
-                Path.new(raw).basename
+                abi_path_base(raw)
 
             when "path_expand"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                display_path(File.expand_path(raw))
+                display_path(abi_path_expand(raw))
 
             when "path_delete"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                normalized = Path.new(raw).normalize
-                parent = normalized.parent
-                return "." unless parent
-
-                parent_str = parent.to_s.gsub("\\", "/")
-                parent_str.empty? ? "." : (parent_str == "." ? "./" : parent_str)
+                abi_path_delete(raw)
 
             when "unicode_normalize"
                 value = expect_string(arguments, 0, function_name)
@@ -488,6 +492,16 @@ module Dragonstone
             else
                 raise "Unknown Crystal function: #{function_name}"
             end
+        end
+
+        private def self.write_stdout(text : String, newline : Bool) : Nil
+            payload = text.to_slice
+            DragonstoneABI.dragonstone_io_write_stdout(payload, payload.size)
+            if newline
+                newline_slice = "\n".to_slice
+                DragonstoneABI.dragonstone_io_write_stdout(newline_slice, newline_slice.size)
+            end
+            DragonstoneABI.dragonstone_io_flush_stdout
         end
 
         def self.call_c(function_name : String, arguments : Array(InteropValue)) : InteropValue
@@ -908,6 +922,55 @@ module Dragonstone
             rescue ArgumentError
                 expanded.to_s.gsub("\\", "/")
             end
+        end
+
+        private def self.abi_string(ptr : UInt8*) : String
+            return "" if ptr.null?
+            value = String.new(ptr)
+            DragonstoneABI.dragonstone_std_free(ptr.as(Void*))
+            value
+        end
+
+        private def self.abi_path_create(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_create(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_path_normalize(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_normalize(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_path_parent(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_parent(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_path_base(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_base(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_path_expand(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_expand(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_path_delete(path : String) : String
+            ptr = DragonstoneABI.dragonstone_path_delete(path)
+            abi_string(ptr)
+        end
+
+        private def self.abi_file_exists?(path : String) : Bool
+            DragonstoneABI.dragonstone_file_exists(path) != 0
+        end
+
+        private def self.abi_file_is_file?(path : String) : Bool
+            DragonstoneABI.dragonstone_file_is_file(path) != 0
+        end
+
+        private def self.abi_file_size(path : String) : Int64
+            DragonstoneABI.dragonstone_file_size(path)
         end
 
         private def self.next_net_handle : Int64

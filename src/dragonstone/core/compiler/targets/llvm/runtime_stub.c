@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <setjmp.h>
 #include <math.h>
+#include "../../../../shared/runtime/abi/abi.h"
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -155,8 +156,6 @@ static DSExceptionFrame *top_exception_frame = NULL;
 static void *current_exception_object = NULL;
 static DSSingletonMethod *singleton_methods = NULL;
 static DSValue *root_self_box = NULL;
-static int64_t ds_program_argc = 0;
-static char **ds_program_argv = NULL;
 static DSValue *ds_program_argv_box = NULL;
 static void *ds_builtin_stdout = NULL;
 static void *ds_builtin_stderr = NULL;
@@ -2004,25 +2003,22 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
 }
 
 void dragonstone_runtime_set_argv(int64_t argc, char **argv) {
-    ds_program_argc = argc;
-    ds_program_argv = argv;
+    dragonstone_io_set_argv(argc, argv);
     ds_program_argv_box = NULL;
 }
 
 void *dragonstone_runtime_argv(void) {
     if (ds_program_argv_box) return ds_program_argv_box;
 
-    int64_t count = 0;
-    if (ds_program_argc > 1 && ds_program_argv) {
-        count = ds_program_argc - 1;
-    }
+    int64_t count = dragonstone_io_argc();
+    const char **argv = dragonstone_io_argv();
 
     DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
     array->length = count;
     array->items = count > 0 ? (void **)ds_alloc(sizeof(void *) * (size_t)count) : NULL;
 
     for (int64_t i = 0; i < count; ++i) {
-        array->items[i] = ds_strdup(ds_program_argv[i + 1]);
+        array->items[i] = ds_strdup(argv[i]);
     }
 
     DSValue *box = ds_new_box(DS_VALUE_ARRAY);
@@ -2033,11 +2029,7 @@ void *dragonstone_runtime_argv(void) {
 }
 
 void *dragonstone_runtime_argc(void) {
-    int64_t count = 0;
-    if (ds_program_argc > 1 && ds_program_argv) {
-        count = ds_program_argc - 1;
-    }
-    return dragonstone_runtime_box_i64(count);
+    return dragonstone_runtime_box_i64(dragonstone_io_argc());
 }
 
 static void *ds_make_instance(void *class_box_ptr) {
@@ -2053,56 +2045,31 @@ static void *ds_make_instance(void *class_box_ptr) {
     return inst_box;
 }
 
-static char *ds_read_line(FILE *fp) {
-    if (!fp) return ds_strdup("");
-    char buf[4096];
-    if (!fgets(buf, (int)sizeof(buf), fp)) return ds_strdup("");
-    size_t len = strlen(buf);
-    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) len--;
-    char *out = (char *)ds_alloc(len + 1);
-    memcpy(out, buf, len);
-    out[len] = '\0';
-    return out;
-}
-
-static char *ds_read_to_end(FILE *fp) {
-    if (!fp) return ds_strdup("");
-    size_t cap = 4096;
-    size_t len = 0;
-    char *out = (char *)ds_alloc(cap);
-    int ch;
-    while ((ch = fgetc(fp)) != EOF) {
-        if (len + 1 >= cap) {
-            cap *= 2;
-            char *resized = (char *)realloc(out, cap);
-            if (!resized) abort();
-            out = resized;
-        }
-        out[len++] = (char)ch;
+static void ds_stream_write(bool is_err, const char *text) {
+    if (!text) return;
+    size_t len = strlen(text);
+    if (len == 0) return;
+    if (is_err) {
+        dragonstone_io_write_stderr((const uint8_t *)text, len);
+    } else {
+        dragonstone_io_write_stdout((const uint8_t *)text, len);
     }
-    out[len] = '\0';
-    return out;
-}
-
-static void ds_stream_write(FILE *out, const char *text) {
-    if (!out) return;
-    if (text) fputs(text, out);
 }
 
 static void *ds_iostream_eecholn(void *receiver, void *value) {
-    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
+    bool is_err = receiver == ds_builtin_stderr;
     void *str_ptr = value;
     if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
-    ds_stream_write(out, (const char *)str_ptr);
+    ds_stream_write(is_err, (const char *)str_ptr);
     return NULL;
 }
 
 static void *ds_iostream_echoln(void *receiver, void *value) {
-    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
+    bool is_err = receiver == ds_builtin_stderr;
     void *str_ptr = value;
     if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
-    ds_stream_write(out, (const char *)str_ptr);
-    fputc('\n', out);
+    ds_stream_write(is_err, (const char *)str_ptr);
+    ds_stream_write(is_err, "\n");
     return NULL;
 }
 
@@ -2115,51 +2082,23 @@ static void *ds_iostream_debug_inline(void *receiver, void *value) {
 }
 
 static void *ds_iostream_flush(void *receiver) {
-    FILE *out = (receiver == ds_builtin_stderr) ? stderr : stdout;
-    fflush(out);
+    bool is_err = receiver == ds_builtin_stderr;
+    if (is_err) {
+        dragonstone_io_flush_stderr();
+    } else {
+        dragonstone_io_flush_stdout();
+    }
     return NULL;
 }
 
 static void *ds_stdin_read(void *receiver) {
     (void)receiver;
-    return ds_read_line(stdin);
+    return dragonstone_io_read_stdin_line();
 }
 
 static void *ds_argf_read(void *receiver) {
     (void)receiver;
-    if (!(ds_program_argc > 1 && ds_program_argv)) {
-        return ds_read_to_end(stdin);
-    }
-
-    size_t cap = 4096;
-    size_t len = 0;
-    char *out = (char *)ds_alloc(cap);
-    out[0] = '\0';
-
-    for (int64_t i = 1; i < ds_program_argc; ++i) {
-        const char *path = ds_program_argv[i];
-        if (!path) continue;
-        FILE *fp = fopen(path, "rb");
-        if (!fp) continue;
-        fseek(fp, 0, SEEK_END);
-        long fsize = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-        if (fsize > 0) {
-            size_t need = (size_t)fsize;
-            if (len + need + 1 >= cap) {
-                while (len + need + 1 >= cap) cap *= 2;
-                char *resized = (char *)realloc(out, cap);
-                if (!resized) abort();
-                out = resized;
-            }
-            size_t got = fread(out + len, 1, need, fp);
-            len += got;
-            out[len] = '\0';
-        }
-        fclose(fp);
-    }
-
-    return out;
+    return dragonstone_io_read_argf();
 }
 
 static void ds_init_io_builtins(void) {

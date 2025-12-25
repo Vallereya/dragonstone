@@ -1,3 +1,0 @@
-name: ffi
-entry: module.ds
-requires: shared

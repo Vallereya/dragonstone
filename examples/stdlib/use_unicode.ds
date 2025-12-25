@@ -1,0 +1,33 @@
+#[ 
+    
+    Advanced Unicode Example
+
+]#
+
+# Example Five: Normalization/Canonicalization of Unicode.
+composed = "é"
+decomposed = "e\u{0301}"
+
+echo Unicode.normalize(composed, "NFC") == Unicode.normalize(decomposed, "NFC")
+echo Unicode.normalize(composed, "NFD") == Unicode.normalize(decomposed, "NFD")
+echo Unicode.canonical_equivalent?(composed, decomposed)
+
+compat = "①"
+echo Unicode.normalize(compat, "NFKC")
+
+# Example Six: Unicode case mapping and folding.
+echo Unicode.upcase("straße", "NONE")
+echo Unicode.downcase("İSTANBUL", "NONE")
+echo Unicode.titlecase("hello world", "NONE")
+echo Unicode.casefold("ß") == "ss"
+
+# Example Seven: Grapheme clusters and character properties.
+family = "👨‍👩‍👧‍👦"
+echo Unicode.grapheme_count(family)
+echo Unicode.graphemes(family)
+
+echo Unicode.general_category(65)
+echo Unicode.combining_class(769)
+echo Unicode.whitespace?(32)
+echo Unicode.letter?(955)
+echo Unicode.compare("resume", "résumé", "CASEFOLD")
