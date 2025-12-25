@@ -299,6 +299,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 ```
 
 ###### Also Ascii and Unicode are supported.
+> WARNING: As of `v0.1.4` unicode support has been removed, since this was using Crystal's `unicode` module a replacement is in the works. Currently the replacement only supports some unicode characters.
 ```crystal
     class 🔥
         あ = true
