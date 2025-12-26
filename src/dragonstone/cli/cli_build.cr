@@ -452,6 +452,9 @@ module Dragonstone
         basename = File.basename(source, ".c")
         object_path = File.join(output_dir, "#{basename}.o")
         args = ["-std=c11", "-c", source, "-o", object_path]
+        if source == UTF8PROC_RUNTIME_SOURCE
+          args << "-DUTF8PROC_STATIC"
+        end
         return nil unless run_clang(args, stdout, stderr)
         objects << object_path
       end

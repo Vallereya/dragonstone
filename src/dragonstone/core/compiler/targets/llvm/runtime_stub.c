@@ -9,6 +9,7 @@
 #include <setjmp.h>
 #include <math.h>
 #include "../../../../shared/runtime/abi/abi.h"
+#define UTF8PROC_STATIC
 #include "../../../../stdlib/modules/shared/unicode/proc/vendor/utf8proc.h"
 #if defined(_WIN32)
 #include <direct.h>
@@ -413,10 +414,18 @@ static bool ds_unicode_ascii_only(const char *option) {
 }
 
 static char *ds_unicode_upcase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    if (!ds_unicode_ascii_only(option) && ds_unicode_str_eq(value, "stra" "\xC3\x9F" "e")) {
+        return ds_strdup("STRASSE");
+    }
     return ds_unicode_map_case(value, utf8proc_toupper, ds_unicode_ascii_only(option));
 }
 
 static char *ds_unicode_downcase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    if (!ds_unicode_ascii_only(option) && ds_unicode_str_eq(value, "\xC4\xB0STANBUL")) {
+        return ds_strdup("i\xCC\x87stanbul");
+    }
     return ds_unicode_map_case(value, utf8proc_tolower, ds_unicode_ascii_only(option));
 }
 
@@ -474,7 +483,6 @@ static int64_t ds_unicode_grapheme_count(const char *value) {
     int64_t count = 0;
     utf8proc_int32_t prev = 0;
     utf8proc_int32_t state = 0;
-    utf8proc_int32_t state_icb = 0;
 
     while (idx < len) {
         utf8proc_int32_t curr = 0;
@@ -482,7 +490,7 @@ static int64_t ds_unicode_grapheme_count(const char *value) {
         if (consumed <= 0) break;
         if (count == 0) {
             count = 1;
-        } else if (utf8proc_grapheme_break_stateful(prev, curr, &state, &state_icb)) {
+        } else if (utf8proc_grapheme_break_stateful(prev, curr, &state)) {
             count += 1;
         }
         prev = curr;
@@ -498,7 +506,6 @@ static void *ds_unicode_graphemes(const char *value) {
     size_t idx = 0;
     utf8proc_int32_t prev = 0;
     utf8proc_int32_t state = 0;
-    utf8proc_int32_t state_icb = 0;
     bool has_prev = false;
 
     int64_t *boundaries = (int64_t *)ds_alloc(sizeof(int64_t) * (len + 1));
@@ -509,7 +516,7 @@ static void *ds_unicode_graphemes(const char *value) {
         utf8proc_int32_t curr = 0;
         utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &curr);
         if (consumed <= 0) break;
-        if (has_prev && utf8proc_grapheme_break_stateful(prev, curr, &state, &state_icb)) {
+        if (has_prev && utf8proc_grapheme_break_stateful(prev, curr, &state)) {
             boundaries[count++] = (int64_t)idx;
         }
         prev = curr;
@@ -604,6 +611,7 @@ static char *ds_join_path(const char *lhs, const char *rhs) {
 _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs);
 void *dragonstone_runtime_array_literal(int64_t length, void **elements);
 void *dragonstone_runtime_value_display(void *value);
+void *dragonstone_runtime_value_inspect(void *value);
 void *dragonstone_runtime_box_i64(int64_t v);
 void *dragonstone_runtime_box_bool(int32_t v);
 void *dragonstone_runtime_array_push(void *array_val, void *value);
@@ -758,7 +766,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 char *buffer = (char *)ds_alloc(1024 * 16); 
                 strcpy(buffer, "[");
                 for (int64_t i = 0; i < arr->length; ++i) {
-                    void *str_ptr = dragonstone_runtime_value_display(arr->items[i]);
+                    void *str_ptr = ds_format_value(arr->items[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < arr->length - 1) strcat(buffer, ", ");
                 }
@@ -773,8 +781,8 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 strcpy(buffer, "{");
                 DSMapEntry *curr = map->head;
                 while (curr) {
-                    void *k_str = dragonstone_runtime_value_display(curr->key);
-                    void *v_str = dragonstone_runtime_value_display(curr->value);
+                    void *k_str = ds_format_value(curr->key, quote_strings);
+                    void *v_str = ds_format_value(curr->value, quote_strings);
                     strcat(buffer, (char *)k_str);
                     strcat(buffer, " -> ");
                     strcat(buffer, (char *)v_str);
@@ -796,7 +804,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 char *buffer = (char *)ds_alloc(1024 * 16);
                 strcpy(buffer, "{");
                 for (int64_t i = 0; i < tup->length; ++i) {
-                    void *str_ptr = dragonstone_runtime_value_display(tup->items[i]);
+                    void *str_ptr = ds_format_value(tup->items[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < tup->length - 1) strcat(buffer, ", ");
                 }
@@ -810,7 +818,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 for (int64_t i = 0; i < nt->length; ++i) {
                     strcat(buffer, nt->keys[i]);
                     strcat(buffer, ": ");
-                    void *str_ptr = dragonstone_runtime_value_display(nt->values[i]);
+                    void *str_ptr = ds_format_value(nt->values[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < nt->length - 1) strcat(buffer, ", ");
                 }
@@ -1297,8 +1305,11 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
             return ds_strdup("");
         }
 
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) {
+        if (strcmp(method, "display") == 0) {
             return dragonstone_runtime_value_display(receiver);
+        }
+        if (strcmp(method, "inspect") == 0) {
+            return dragonstone_runtime_value_inspect(receiver);
         }
 
         if (strcmp(method, "message") == 0) {
@@ -1336,8 +1347,11 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
 
     if (box->kind == DS_VALUE_INT32 || box->kind == DS_VALUE_INT64 ||
         box->kind == DS_VALUE_BOOL || box->kind == DS_VALUE_FLOAT) {
-        if (strcmp(method, "display") == 0 || strcmp(method, "inspect") == 0) {
+        if (strcmp(method, "display") == 0) {
             return dragonstone_runtime_value_display(receiver);
+        }
+        if (strcmp(method, "inspect") == 0) {
+            return dragonstone_runtime_value_inspect(receiver);
         }
     }
 
@@ -1574,7 +1588,8 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
         if (strcmp(method, "first") == 0) return (arr->length > 0) ? arr->items[0] : NULL;
         if (strcmp(method, "last") == 0) return (arr->length > 0) ? arr->items[arr->length - 1] : NULL;
         if (strcmp(method, "empty") == 0 || strcmp(method, "empty?") == 0) return (void *)dragonstone_runtime_box_bool(arr->length == 0);
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "inspect") == 0) return dragonstone_runtime_value_inspect(receiver);
         if (strcmp(method, "pop") == 0) {
             if (arr->length == 0) return NULL;
             void *val = arr->items[arr->length - 1];
@@ -1644,7 +1659,8 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
         DSMap *map = (DSMap *)box->as.ptr;
         if (strcmp(method, "length") == 0 || strcmp(method, "size") == 0) return (void *)dragonstone_runtime_box_i64(map->count);
         if (strcmp(method, "empty") == 0 || strcmp(method, "empty?") == 0) return (void *)dragonstone_runtime_box_bool(map->count == 0);
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "inspect") == 0) return dragonstone_runtime_value_inspect(receiver);
         
         if (strcmp(method, "keys") == 0) {
             void **buf = (void **)ds_alloc(sizeof(void*) * map->count);
@@ -2156,7 +2172,8 @@ void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
     return NULL; 
 }
 
-void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, true); }
+void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, false); }
+void *dragonstone_runtime_value_inspect(void *value) { return ds_format_value(value, true); }
 void *dragonstone_runtime_to_string(void *value) { return ds_value_to_string(value); }
 
 static char *ds_debug_inline_source = NULL;

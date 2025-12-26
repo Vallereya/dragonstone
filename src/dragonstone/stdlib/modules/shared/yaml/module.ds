@@ -4,21 +4,10 @@
     This module provides YAML parsing and serialization.
 ]#
 
-use "modules/shared/yaml/proc/exception"
-use "modules/shared/yaml/proc/token"
-use "modules/shared/yaml/proc/lexer"
-use "modules/shared/yaml/proc/parser"
-use "modules/shared/yaml/proc/string"
+use "modules/shared/yaml/proc/**"
 
 module YAML
     extend self
 
-    def parse(input)
-        Parser.new(input).parse
-    end
 
-    def parse_file(path)
-        content = ffi.call("file_read", [path])
-        Parser.new(content).parse
-    end
 end
