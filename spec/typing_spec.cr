@@ -65,4 +65,33 @@ DS
             Dragonstone.run(failure_source, typed: true)
         end
     end
+
+    it "supports explicit numeric width names" do
+        int32_matcher = Dragonstone::Typing::Builtins.matcher_for("int32")
+        int64_matcher = Dragonstone::Typing::Builtins.matcher_for("int64")
+        float32_matcher = Dragonstone::Typing::Builtins.matcher_for("float32")
+        float64_matcher = Dragonstone::Typing::Builtins.matcher_for("float64")
+
+        int32_matcher.not_nil!.call(1_i32).should be_true
+        int32_matcher.not_nil!.call(1_i64).should be_false
+
+        int64_matcher.not_nil!.call(1_i64).should be_true
+        int64_matcher.not_nil!.call(1_i32).should be_false
+
+        float32_matcher.not_nil!.call(1.0_f32).should be_true
+        float32_matcher.not_nil!.call(1.0_f64).should be_false
+
+        float64_matcher.not_nil!.call(1.0_f64).should be_true
+        float64_matcher.not_nil!.call(1.0_f32).should be_false
+    end
+
+    it "rejects non-numeric values for numeric annotations" do
+        source = <<-DS
+#! typed
+value: float32 = "nope"
+DS
+        expect_raises(Dragonstone::TypeError) do
+            Dragonstone.run(source, typed: true)
+        end
+    end
 end

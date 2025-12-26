@@ -162,6 +162,114 @@ module Dragonstone
             runtime_error(TypeError, "Expected #{descriptor.to_s}, got #{describe_runtime_value(value)}", node_or_location)
         end
 
+        private def coerce_value_for_type(type_expr : AST::TypeExpression?, value, node_or_location = nil)
+            return value unless type_expr
+            simple = type_expr.as?(AST::SimpleTypeExpression)
+            return value unless simple
+
+            name = simple.name.downcase
+            explicit_width = name == "int32" || name == "int64" || name == "float32" || name == "float64"
+            return value unless typing_enabled? || explicit_width
+
+            case name
+            when "int32"
+                coerce_int32(value, node_or_location)
+            when "int64", "int", "integer"
+                coerce_int64(value, node_or_location)
+            when "float32"
+                coerce_float32(value, node_or_location)
+            when "float64", "float"
+                coerce_float64(value, node_or_location)
+            else
+                value
+            end
+        end
+
+        private def coerce_int32(value, node_or_location)
+            case value
+            when Int32
+                value
+            when Int64
+                unless value >= Int32::MIN && value <= Int32::MAX
+                    runtime_error(TypeError, "Expected int32, got #{describe_runtime_value(value)}", node_or_location)
+                end
+                value.to_i32
+            when Float32
+                coerce_float_to_int32(value.to_f64, node_or_location)
+            when Float64
+                coerce_float_to_int32(value, node_or_location)
+            else
+                runtime_error(TypeError, "Expected int32, got #{describe_runtime_value(value)}", node_or_location)
+            end
+        end
+
+        private def coerce_int64(value, node_or_location)
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            when Float32
+                coerce_float_to_int64(value.to_f64, node_or_location)
+            when Float64
+                coerce_float_to_int64(value, node_or_location)
+            else
+                runtime_error(TypeError, "Expected int64, got #{describe_runtime_value(value)}", node_or_location)
+            end
+        end
+
+        private def coerce_float32(value, node_or_location)
+            case value
+            when Float32
+                value
+            when Float64
+                value.to_f32
+            when Int32
+                value.to_f32
+            when Int64
+                value.to_f32
+            else
+                runtime_error(TypeError, "Expected float32, got #{describe_runtime_value(value)}", node_or_location)
+            end
+        end
+
+        private def coerce_float64(value, node_or_location)
+            case value
+            when Float64
+                value
+            when Float32
+                value.to_f64
+            when Int32
+                value.to_f64
+            when Int64
+                value.to_f64
+            else
+                runtime_error(TypeError, "Expected float64, got #{describe_runtime_value(value)}", node_or_location)
+            end
+        end
+
+        private def coerce_float_to_int32(value : Float64, node_or_location)
+            if value.nan? || value.infinite?
+                runtime_error(TypeError, "Expected int32, got #{value}", node_or_location)
+            end
+            int_value = value.to_i64
+            unless int_value >= Int32::MIN && int_value <= Int32::MAX
+                runtime_error(TypeError, "Expected int32, got #{value}", node_or_location)
+            end
+            int_value.to_i32
+        rescue OverflowError
+            runtime_error(TypeError, "Expected int32, got #{value}", node_or_location)
+        end
+
+        private def coerce_float_to_int64(value : Float64, node_or_location)
+            if value.nan? || value.infinite?
+                runtime_error(TypeError, "Expected int64, got #{value}", node_or_location)
+            end
+            value.to_i64
+        rescue OverflowError
+            runtime_error(TypeError, "Expected int64, got #{value}", node_or_location)
+        end
+
         private def ensure_descriptor_match!(descriptor : Typing::Descriptor?, value, node_or_location = nil)
             return unless descriptor
 

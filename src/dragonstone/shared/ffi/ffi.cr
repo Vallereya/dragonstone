@@ -9,12 +9,12 @@ require "../runtime/abi/abi"
 
 module Dragonstone
     module FFI
-        alias InteropValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | Array(InteropValue)
+        alias InteropValue = Nil | Bool | Int32 | Int64 | Float32 | Float64 | String | Char | Array(InteropValue)
 
         module Utils
             def normalize(value) : InteropValue
                 case value
-                when Nil, Bool, Int32, Int64, Float64, String, Char
+                when Nil, Bool, Int32, Int64, Float32, Float64, String, Char
                     value
                 when Array
                     normalized = [] of InteropValue
@@ -29,11 +29,17 @@ module Dragonstone
                 case value
                 when String then value
                 when Nil then "nil"
-                when Bool, Int32, Int64, Float64 then value.to_s
+                when Bool, Int32, Int64 then value.to_s
+                when Float64 then format_float(value)
+                when Float32 then format_float(value.to_f64)
                 when Char then value.to_s
                 when Array then "[#{value.map { |element| format_value(element) }.join(", ")}]"
                 else value.to_s
                 end
+            end
+
+            def format_float(value : Float64) : String
+                sprintf("%.15g", value)
             end
 
             def expect_string(arguments : Array(InteropValue), index : Int32, function_name : String) : String

@@ -67,6 +67,35 @@ describe Dragonstone::VM do
         output.to_s.should eq("\n")
     end
 
+    it "formats floats without trailing noise" do
+        source = <<-'DS'
+echo 5.0
+echo 99.02000000000001
+DS
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("5\n99.02\n")
+    end
+
+    it "coerces float32 annotations in the core backend" do
+        source = <<-'DS'
+pi: float32 = 3.14159265358
+echo pi
+DS
+        expected = sprintf("%.15g", 3.14159265358_f32.to_f64)
+        bytecode = compile_bytecode(source)
+        output = IO::Memory.new
+        vm = Dragonstone::VM.new(bytecode, stdout_io: output)
+
+        vm.run
+
+        output.to_s.should eq("#{expected}\n")
+    end
+
     it "exposes argv keyword" do
         source = "echo argv\n"
         bytecode = compile_bytecode(source)

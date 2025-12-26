@@ -1,19 +1,16 @@
-a = 5
-b = 10
-c = 15
-d = 20
-e = 25
+a: float32 = 3.14159265358
+b: float64 = 3.14159265
+c: float = 3.141592653589793
 
-# Floating Point Division
-float_div = c / b
-echo float_div
+echo a
+echo b
+echo c
 
-float_div: float = c / b
-echo float_div
 
-# Integer Division
-int_div = d // a
-echo int_div
+x: int32 = 100
+y: int64 = 1000000000000
+z: int = 100000
 
-int_div: int = d // a
-echo int_div
+echo x
+echo y
+echo z

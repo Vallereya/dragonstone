@@ -3826,6 +3826,11 @@ module Dragonstone
               when "double"
                 format_ptr = materialize_string_pointer(ctx, "%g\n")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "float"
+                format_ptr = materialize_string_pointer(ctx, "%g\n")
+                reg = ctx.fresh("fpext")
+                ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double %#{reg})\n"
               when "i1"
                 true_ptr = materialize_string_pointer(ctx, "true")
                 false_ptr = materialize_string_pointer(ctx, "false")
@@ -3851,6 +3856,11 @@ module Dragonstone
               when "double"
                 format_ptr = materialize_string_pointer(ctx, "%g")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "float"
+                format_ptr = materialize_string_pointer(ctx, "%g")
+                reg = ctx.fresh("fpext")
+                ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double %#{reg})\n"
               when "i1"
                 true_ptr = materialize_string_pointer(ctx, "true")
                 false_ptr = materialize_string_pointer(ctx, "false")
@@ -3908,6 +3918,8 @@ module Dragonstone
                 coerce_integer(ctx, value, 64)
               when "i1"
                 coerce_boolean_exact(ctx, value)
+              when "float"
+                ensure_float(ctx, value)
               when "double"
                 ensure_double(ctx, value)
               else
@@ -4087,6 +4099,37 @@ module Dragonstone
               end
             end
 
+            private def ensure_float(ctx : FunctionContext, value : ValueRef) : ValueRef
+              case value[:type]
+              when "float"
+                value
+              when "double"
+                reg = ctx.fresh("fptrunc")
+                ctx.io << "  %#{reg} = fptrunc double #{value[:ref]} to float\n"
+                value_ref("float", "%#{reg}")
+              when "i8*"
+                double_value = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
+                reg = ctx.fresh("fptrunc")
+                ctx.io << "  %#{reg} = fptrunc double #{double_value[:ref]} to float\n"
+                value_ref("float", "%#{reg}")
+              else
+                if integer_type?(value[:type])
+                  reg = ctx.fresh("sitofp")
+                  ctx.io << "  %#{reg} = sitofp #{value[:type]} #{value[:ref]} to float\n"
+                  value_ref("float", "%#{reg}")
+                elsif value[:type].starts_with?("%") && value[:type].ends_with?("*")
+                  cast = ctx.fresh("anycast")
+                  ctx.io << "  %#{cast} = bitcast #{value[:type]} #{value[:ref]} to i8*\n"
+                  double_value = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: "%#{cast}"}])
+                  reg = ctx.fresh("fptrunc")
+                  ctx.io << "  %#{reg} = fptrunc double #{double_value[:ref]} to float\n"
+                  value_ref("float", "%#{reg}")
+                else
+                  raise "Cannot treat #{value[:type]} as floating-point"
+                end
+              end
+            end
+
             private def emit_float_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
               lhs = ensure_double(ctx, lhs)
               rhs = ensure_double(ctx, rhs)
@@ -4162,11 +4205,11 @@ module Dragonstone
               when AST::SimpleTypeExpression
                 name = type_expr.name
                 case name
-                when "Int32", "int"              then "i32"
-                when "Int64"                     then "i64"
+                when "Int32", "int", "int32"     then "i32"
+                when "Int64", "int64"            then "i64"
                 when "Bool", "bool"              then "i1"
-                when "Float32"                   then "float"
-                when "Float64", "Float", "float" then "double"
+                when "Float32", "float32"        then "float"
+                when "Float64", "Float", "float", "float64" then "double"
                 when "String", "str"             then "i8*"
                 when "Char", "char"              then "i8*"
                 when "para", "Para"              then "i8*" # Treat para types as block handles

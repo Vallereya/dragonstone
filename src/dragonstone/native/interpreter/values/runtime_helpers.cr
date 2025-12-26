@@ -15,6 +15,9 @@ module Dragonstone
             when Float64
                 "Float"
 
+            when Float32
+                "Float"
+
             when Bool
                 "Boolean"
 
@@ -99,7 +102,10 @@ module Dragonstone
                 value.to_i64.to_s
 
             when Float64
-                value.to_s
+                format_float(value)
+
+            when Float32
+                format_float(value.to_f64)
 
             when Char
                 value.to_s
@@ -170,6 +176,11 @@ module Dragonstone
 
             when Bool
                 value.to_s
+            when Float64
+                format_float(value)
+
+            when Float32
+                format_float(value.to_f64)
 
             when FFIModule
                 "ffi"
@@ -207,6 +218,9 @@ module Dragonstone
             when Float64
                 AST::Literal.new(value, location: node.location)
 
+            when Float32
+                AST::Literal.new(value.to_f64, location: node.location)
+
             when String
                 AST::Literal.new(value, location: node.location)
 
@@ -217,6 +231,10 @@ module Dragonstone
                 runtime_error(InterpreterError, "Cannot use value of type #{value.class} in attribute assignment", node)
             
             end
+        end
+
+        private def format_float(value : Float64) : String
+            sprintf("%.15g", value)
         end
 
         private def evaluate_interpolation(content : String)

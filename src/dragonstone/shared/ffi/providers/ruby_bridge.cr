@@ -65,6 +65,8 @@ module Dragonstone
                             LibRuby.rb_int2inum(value.to_i64)
                         when Float64
                             LibRuby.rb_float_new(value)
+                        when Float32
+                            LibRuby.rb_float_new(value.to_f64)
                         when Char
                             LibRuby.rb_utf8_str_new_cstr(value.to_s)
                         when String

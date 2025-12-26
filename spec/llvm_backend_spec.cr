@@ -122,6 +122,42 @@ describe Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator do
         (ensure_pos < ret_pos).should be_true
     end
 
+    it "converts doubles to float32 when return type requires it" do
+        func = Dragonstone::AST::FunctionDef.new(
+            "float32_fn",
+            [] of Dragonstone::AST::TypedParameter,
+            [Dragonstone::AST::ReturnStatement.new(Dragonstone::AST::Literal.new(1.0_f64))] of Dragonstone::AST::Node,
+            [] of Dragonstone::AST::RescueClause,
+            Dragonstone::AST::SimpleTypeExpression.new("float32")
+        )
+        program = build_program([func] of Dragonstone::AST::Node)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        io = IO::Memory.new
+
+        generator.generate(io)
+
+        section = extract_function_body(io.to_s, "define float @\"float32_fn\"")
+        section.includes?("fptrunc double").should be_true
+    end
+
+    it "extends float32 values when emitting echo" do
+        assignment = Dragonstone::AST::Assignment.new(
+            "pi",
+            Dragonstone::AST::Literal.new(3.14159265358_f64),
+            type_annotation: Dragonstone::AST::SimpleTypeExpression.new("float32")
+        )
+        call = Dragonstone::AST::MethodCall.new("echo", [Dragonstone::AST::Variable.new("pi")] of Dragonstone::AST::Node)
+        program = build_program([assignment, call] of Dragonstone::AST::Node)
+        generator = Dragonstone::Core::Compiler::Targets::LLVM::IRGenerator.new(program)
+        io = IO::Memory.new
+
+        generator.generate(io)
+
+        ir = io.to_s
+        ir.includes?("fptrunc double").should be_true
+        ir.includes?("fpext float").should be_true
+    end
+
     it "wraps begin/rescue expressions with exception handler scaffolding" do
         rescue_clause = Dragonstone::AST::RescueClause.new(
             ["StandardError"],

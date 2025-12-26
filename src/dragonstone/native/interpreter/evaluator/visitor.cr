@@ -84,6 +84,7 @@ module Dragonstone
             else
                 node.value.accept(self)
             end
+            value = coerce_value_for_type(node.type_annotation, value, node)
             set_variable(node.name, value, location: node.location, type_descriptor: descriptor)
             value
         end
@@ -132,6 +133,7 @@ module Dragonstone
         def visit_constant_declaration(node : AST::ConstantDeclaration) : RuntimeValue?
             descriptor = typing_enabled? && node.type_annotation ? descriptor_for(node.type_annotation.not_nil!) : nil
             value = node.value.accept(self)
+            value = coerce_value_for_type(node.type_annotation, value, node)
             ensure_type!(descriptor, value, node) if descriptor
             if current_container && @container_definition_depth.positive?
                 define_container_constant(current_container.not_nil!, node.name, value, node)

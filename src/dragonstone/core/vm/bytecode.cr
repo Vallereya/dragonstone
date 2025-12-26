@@ -32,7 +32,7 @@ module Dragonstone
         end
 
         alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-        alias Value = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | ParaValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule | BuiltinStream | BuiltinStdin | BuiltinArgf | ::Dragonstone::Runtime::GC::Area(Value) | GCHost
+        alias Value = Nil | Bool | Int32 | Int64 | Float32 | Float64 | String | Char | SymbolValue | Array(Value) | TupleValue | NamedTupleValue | RangeValue | CompiledCode | FunctionSignature | FunctionValue | ParaValue | BlockValue | BagConstructorValue | BagValue | MapValue | ModuleValue | ClassValue | StructValue | InstanceValue | EnumValue | EnumMemberValue | RaisedExceptionValue | AST::TypeExpression | FFIModule | BuiltinStream | BuiltinStdin | BuiltinArgf | ::Dragonstone::Runtime::GC::Area(Value) | GCHost
 
         class ParameterSpec
             getter name_index : Int32

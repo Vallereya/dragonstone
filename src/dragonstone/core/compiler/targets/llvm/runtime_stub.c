@@ -78,6 +78,27 @@ typedef struct {
     void *env;
 } DSBlock;
 
+static void *ds_alloc(size_t size);
+
+static void ds_map_append_entry(DSMap *map, void *key, void *value) {
+    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
+    entry->key = key;
+    entry->value = value;
+    entry->next = NULL;
+
+    if (!map->head) {
+        map->head = entry;
+    } else {
+        DSMapEntry *tail = map->head;
+        while (tail->next) {
+            tail = tail->next;
+        }
+        tail->next = entry;
+    }
+
+    map->count++;
+}
+
 typedef struct DSMethod {
     char *name;
     void *func_ptr;
@@ -433,13 +454,7 @@ static DSValue *ds_create_map_box(int64_t length, void **keys, void **values) {
     map->count = 0;
 
     for (int64_t i = 0; i < length; ++i) {
-        DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-        entry->key = keys[i];
-        entry->value = values[i];
-        
-        entry->next = map->head;
-        map->head = entry;
-        map->count++;
+        ds_map_append_entry(map, keys[i], values[i]);
     }
 
     DSValue *box = ds_new_box(DS_VALUE_MAP);
@@ -541,7 +556,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                     void *k_str = dragonstone_runtime_value_display(curr->key);
                     void *v_str = dragonstone_runtime_value_display(curr->value);
                     strcat(buffer, (char *)k_str);
-                    strcat(buffer, ": ");
+                    strcat(buffer, " -> ");
                     strcat(buffer, (char *)v_str);
                     if (curr->next) strcat(buffer, ", ");
                     curr = curr->next;
@@ -1340,12 +1355,7 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                 args[1] = curr->value;
                 void *res = dragonstone_runtime_block_invoke(block_val, 2, args);
                 if (dragonstone_runtime_case_compare(res, dragonstone_runtime_box_bool(true))) {
-                    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-                    entry->key = curr->key;
-                    entry->value = curr->value;
-                    entry->next = out->head;
-                    out->head = entry;
-                    out->count++;
+                    ds_map_append_entry(out, curr->key, curr->value);
                 }
                 curr = curr->next;
             }
@@ -1940,12 +1950,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
         curr = curr->next;
     }
 
-    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-    entry->key = ds_strdup(name_str);
-    entry->value = val;
-    entry->next = inst->ivars->head;
-    inst->ivars->head = entry;
-    inst->ivars->count++;
+    ds_map_append_entry(inst->ivars, ds_strdup(name_str), val);
     return val;
 }
 
@@ -2255,12 +2260,7 @@ void *dragonstone_runtime_index_set(void *object, void *index_value, void *value
             }
             curr = curr->next;
         }
-        DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-        entry->key = index_value;
-        entry->value = value;
-        entry->next = map->head;
-        map->head = entry;
-        map->count++;
+        ds_map_append_entry(map, index_value, value);
         return value;
     }
 

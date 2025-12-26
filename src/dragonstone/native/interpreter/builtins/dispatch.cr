@@ -78,6 +78,9 @@ module Dragonstone
             when Float64
                 index.to_i32
 
+            when Float32
+                index.to_i32
+
             else
                 runtime_error(TypeError, "Index must be a number", node)
 
@@ -102,6 +105,8 @@ module Dragonstone
             when Int32
                 value.to_i64
             when Float64
+                value.to_i64
+            when Float32
                 value.to_i64
             else
                 runtime_error(TypeError, "Enum values must be numeric", node)
@@ -936,6 +941,8 @@ module Dragonstone
                 nil
             when Float64
                 nil
+            when Float32
+                nil
             when Char
                 nil
             when SymbolValue
@@ -1162,7 +1169,7 @@ module Dragonstone
         private def from_ffi_value(value : Dragonstone::FFI::InteropValue) : RuntimeValue
             case value
 
-            when Nil, Bool, Int32, Int64, Float64, String, Char
+            when Nil, Bool, Int32, Int64, Float32, Float64, String, Char
                 value
 
             when Array

@@ -98,6 +98,112 @@ module Dragonstone
             end
         end
 
+        private def coerce_value_for_type(type_expr : AST::TypeExpression, value : Bytecode::Value, context : String) : Bytecode::Value
+            return value unless type_expr.is_a?(AST::SimpleTypeExpression)
+
+            name = type_expr.as(AST::SimpleTypeExpression).name.downcase
+            explicit_width = name == "int32" || name == "int64" || name == "float32" || name == "float64"
+            return value unless @typing_enabled || explicit_width
+            case name
+            when "int32"
+                coerce_int32(value, context)
+            when "int64", "int", "integer"
+                coerce_int64(value, context)
+            when "float32"
+                coerce_float32(value, context)
+            when "float64", "float"
+                coerce_float64(value, context)
+            else
+                value
+            end
+        end
+
+        private def coerce_int32(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Int32
+                value
+            when Int64
+                ensure_int32_range(value, context)
+                value.to_i32
+            when Float32
+                coerce_float_to_int32(value.to_f64, context)
+            when Float64
+                coerce_float_to_int32(value, context)
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_int64(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            when Float32
+                coerce_float_to_int64(value.to_f64, context)
+            when Float64
+                coerce_float_to_int64(value, context)
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_float32(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Float32
+                value
+            when Float64
+                value.to_f32
+            when Int32
+                value.to_f32
+            when Int64
+                value.to_f32
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float32, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_float64(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Float64
+                value
+            when Float32
+                value.to_f64
+            when Int32
+                value.to_f64
+            when Int64
+                value.to_f64
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float64, got #{describe_value(value)}")
+            end
+        end
+
+        private def ensure_int32_range(value : Int64, context : String) : Nil
+            return if value >= Int32::MIN && value <= Int32::MAX
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+        end
+
+        private def coerce_float_to_int32(value : Float64, context : String) : Bytecode::Value
+            if value.nan? || value.infinite?
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+            end
+            int_value = value.to_i64
+            ensure_int32_range(int_value, context)
+            int_value.to_i32
+        rescue OverflowError
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+        end
+
+        private def coerce_float_to_int64(value : Float64, context : String) : Bytecode::Value
+            if value.nan? || value.infinite?
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
+            end
+            value.to_i64
+        rescue OverflowError
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
+        end
+
         private def type_matches?(value : Bytecode::Value, expr : AST::TypeExpression, seen_aliases : Set(String)) : Bool
             case expr
             when AST::SimpleTypeExpression
@@ -117,11 +223,19 @@ module Dragonstone
             case name.downcase
             when "int"
                 value.is_a?(Int32) || value.is_a?(Int64)
+            when "int32"
+                value.is_a?(Int32)
+            when "int64"
+                value.is_a?(Int64)
             when "str", "string"
                 value.is_a?(String)
             when "bool"
                 value.is_a?(Bool)
             when "float"
+                value.is_a?(Float32) || value.is_a?(Float64)
+            when "float32"
+                value.is_a?(Float32)
+            when "float64"
                 value.is_a?(Float64)
             when "char"
                 value.is_a?(Char)
@@ -862,11 +976,19 @@ module Dragonstone
             case name.downcase
             when "int"
                 value.is_a?(Int32) || value.is_a?(Int64)
+            when "int32"
+                value.is_a?(Int32)
+            when "int64"
+                value.is_a?(Int64)
             when "str", "string"
                 value.is_a?(String)
             when "bool"
                 value.is_a?(Bool)
             when "float"
+                value.is_a?(Float32) || value.is_a?(Float64)
+            when "float32"
+                value.is_a?(Float32)
+            when "float64"
                 value.is_a?(Float64)
             when "char"
                 value.is_a?(Char)
@@ -1475,8 +1597,9 @@ module Dragonstone
                     type_idx = fetch_byte
                     value = pop
                     type_expr = current_code.consts[type_idx].as(AST::TypeExpression)
-                    enforce_type(type_expr, value, "assignment")
-                    push(value)
+                    coerced = coerce_value_for_type(type_expr, value, "assignment")
+                    enforce_type(type_expr, coerced, "assignment")
+                    push(coerced)
                 when OPC::RET
                     result = handle_return
                     return result if target_depth && @frames.size == target_depth
@@ -2090,6 +2213,7 @@ module Dragonstone
 
                 when Int32 then a + b
                 when Int64 then a + b
+                when Float32 then a + b
                 when Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
@@ -2098,7 +2222,7 @@ module Dragonstone
             when Int64
                 case b
 
-                when Int32, Int64, Float64 then a + b
+                when Int32, Int64, Float32, Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
 
@@ -2106,7 +2230,15 @@ module Dragonstone
             when Float64
                 case b
 
-                when Int32, Int64, Float64 then a + b
+                when Int32, Int64, Float32, Float64 then a + b
+
+                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+
+                end
+            when Float32
+                case b
+
+                when Int32, Int64, Float32, Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
 
@@ -2133,7 +2265,13 @@ module Dragonstone
                 lhs % rhs
             when Float64
                 rhs = case b
-                    when Int32, Int64, Float64 then b.to_f64
+                    when Int32, Int64, Float32, Float64 then b.to_f64
+                    else raise "Type error"
+                end
+                a % rhs
+            when Float32
+                rhs = case b
+                    when Int32, Int64, Float32, Float64 then b.to_f64
                     else raise "Type error"
                 end
                 a % rhs
@@ -2148,11 +2286,11 @@ module Dragonstone
             overload = invoke_operator_overload(a, "//", b)
             return overload unless overload.nil?
 
-            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
+            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
             numeric_op(a, b) do |x, y|
-                if x.is_a?(Float64) || y.is_a?(Float64)
+                if x.is_a?(Float32) || x.is_a?(Float64) || y.is_a?(Float32) || y.is_a?(Float64)
                     (x.to_f64 / y.to_f64).floor
                 else
                     x.to_i64 // y.to_i64
@@ -2234,7 +2372,7 @@ module Dragonstone
         private def div(a, b)
             overload = invoke_operator_overload(a, "/", b)
             return overload unless overload.nil?
-            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
+            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
             numeric_op(a, b) { |x, y| x / y }
@@ -2243,10 +2381,10 @@ module Dragonstone
         private def numeric_op(a, b, &block)
             case a
 
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 case b
 
-                when Int32, Int64, Float64
+                when Int32, Int64, Float32, Float64
                     yield a, b
 
                 else
@@ -2286,10 +2424,10 @@ module Dragonstone
         private def numeric_compare(a, b, &block)
             case a
 
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 case b
 
-                when Int32, Int64, Float64
+                when Int32, Int64, Float32, Float64
                     yield a, b
 
                 else
@@ -2313,7 +2451,7 @@ module Dragonstone
             end
 
             case a
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 numeric_spaceship(a, b)
             when String
                 string_spaceship(a, b)
@@ -2331,6 +2469,7 @@ module Dragonstone
                 base = a.to_i64
                 exp = case b
                     when Int32, Int64 then b.to_i64
+                    when Float32 then b.to_i64
                     when Float64 then b.to_i64
                     else
                         raise "Type error"
@@ -2348,9 +2487,19 @@ module Dragonstone
                     factor *= factor
                 end
                 result
+            when Float32
+                exponent = case b
+                    when Int32, Int64 then b.to_f64
+                    when Float32 then b.to_f64
+                    when Float64 then b
+                    else
+                        raise "Type error"
+                    end
+                a.to_f64 ** exponent
             when Float64
                 exponent = case b
                     when Int32, Int64 then b.to_f64
+                    when Float32 then b.to_f64
                     when Float64 then b
                     else
                         raise "Type error"
@@ -2362,7 +2511,7 @@ module Dragonstone
         end
 
         private def numeric_spaceship(a, b) : Int64
-            unless b.is_a?(Int32) || b.is_a?(Int64) || b.is_a?(Float64)
+            unless b.is_a?(Int32) || b.is_a?(Int64) || b.is_a?(Float32) || b.is_a?(Float64)
                 raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
             end
             l = a.is_a?(Float64) ? a : a.to_f64
@@ -2385,6 +2534,8 @@ module Dragonstone
                 value
             when Int32
                 value.to_i64
+            when Float32
+                value.to_f64
             when Float64
                 value
             else
@@ -2457,8 +2608,12 @@ module Dragonstone
             case value
             when Nil
                 ""
-            when Bool, Int32, Int64, Float64
+            when Bool, Int32, Int64
                 value.to_s
+            when Float32
+                format_float(value.to_f64)
+            when Float64
+                format_float(value)
             when String
                 value
             when Char
@@ -2516,8 +2671,12 @@ module Dragonstone
                 "nil"
             when String
                 value.inspect
-            when Bool, Int32, Int64, Float64
+            when Bool, Int32, Int64
                 value.to_s
+            when Float32
+                format_float(value.to_f64)
+            when Float64
+                format_float(value)
             when Char
                 value.inspect
             when SymbolValue
@@ -2566,13 +2725,17 @@ module Dragonstone
                 value.to_s
             end
         end
+
+        private def format_float(value : Float64) : String
+            sprintf("%.15g", value)
+        end
         
         private def type_of(value : Bytecode::Value) : String
             case value
             when Nil then "Nil"
             when Bool then "Boolean"
             when Int32, Int64 then "Integer"
-            when Float64 then "Float"
+            when Float32, Float64 then "Float"
             when String then "String"
             when Array then "Array"
             when Bytecode::MapValue then "Map"
@@ -2645,6 +2808,8 @@ module Dragonstone
             when Int32
                 index
             when Int64
+                index.to_i
+            when Float32
                 index.to_i
             when Float64
                 index.to_i
@@ -3056,7 +3221,7 @@ module Dragonstone
         private def from_ffi_value(value : Dragonstone::FFI::InteropValue) : Bytecode::Value
             case value
 
-            when Nil, Bool, Int32, Int64, Float64, String, Char
+            when Nil, Bool, Int32, Int64, Float32, Float64, String, Char
                 value
 
             when Array
