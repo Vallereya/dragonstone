@@ -953,6 +953,10 @@ module Dragonstone
                 nil
             when FFIModule
                 nil
+            when Runtime::GC::Area
+                nil
+            when Runtime::GC::Host
+                nil
             else
                 value.object_id
             end
@@ -1062,10 +1066,10 @@ module Dragonstone
             when "end"
                 runtime_error(InterpreterError, "gc.end accepts at most 1 argument", node) if args.size > 1
                 target = args.first?
-                if target && !target.is_a?(Runtime::GC::Area(RuntimeValue))
+                if target && !target.is_a?(Runtime::GC::Area)
                     runtime_error(TypeError, "gc.end expects an Area or no argument", node)
                 end
-                manager.end_area(target.as?(Runtime::GC::Area(RuntimeValue)))
+                manager.end_area(target.as?(Runtime::GC::Area))
                 nil
             when "current_area"
                 runtime_error(InterpreterError, "gc.current_area does not take arguments", node) unless args.empty?

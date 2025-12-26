@@ -862,19 +862,19 @@ module Dragonstone
         end
 
         private def enter_gc_context(flags : ::Dragonstone::Runtime::GC::Flags) : Nil
-            if flags.disable
+            if flags.effective_gc_disabled?
                 @gc_manager.disable
             end
-            if flags.area
-                @gc_manager.begin_area
+            if flags.effective_gc_area?
+                @gc_manager.begin_area(flags.effective_area_name)
             end
         end
 
         private def exit_gc_context(flags : ::Dragonstone::Runtime::GC::Flags) : Nil
-            if flags.area
+            if flags.effective_gc_area?
                 @gc_manager.end_area
             end
-            if flags.disable
+            if flags.effective_gc_disabled?
                 @gc_manager.enable
             end
         end
@@ -2139,6 +2139,9 @@ module Dragonstone
             result = pop
             frame = @frames.pop?
             raise "Return from empty frame stack" unless frame
+            if frame.gc_flags.escape_return && frame.gc_flags.effective_gc_area?
+                result = @gc_manager.copy(result)
+            end
             exit_gc_context(frame.gc_flags)
             if @frames.empty?
                 raise "Return from top-level frame not supported"
@@ -2755,7 +2758,7 @@ module Dragonstone
             when Bytecode::ParaValue then "Para"
             when Bytecode::BlockValue then "Block"
             when FFIModule then "FFIModule"
-            when ::Dragonstone::Runtime::GC::Area(Bytecode::Value) then "Area"
+            when ::Dragonstone::Runtime::GC::Area then "Area"
             when Bytecode::GCHost then "GC"
             else "Object"
             end
@@ -3279,10 +3282,10 @@ module Dragonstone
             when "end"
                 raise ArgumentError.new("gc.end accepts at most 1 argument") if args.size > 1
                 target = args.first?
-                if target && !target.is_a?(::Dragonstone::Runtime::GC::Area(Bytecode::Value))
+                if target && !target.is_a?(::Dragonstone::Runtime::GC::Area)
                     raise ArgumentError.new("gc.end expects an Area or no argument")
                 end
-                manager.end_area(target.as?(::Dragonstone::Runtime::GC::Area(Bytecode::Value)))
+                manager.end_area(target.as?(::Dragonstone::Runtime::GC::Area))
                 nil
             when "current_area"
                 raise ArgumentError.new("gc.current_area does not take arguments") unless args.empty?

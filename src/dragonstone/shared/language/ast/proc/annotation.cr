@@ -4,8 +4,14 @@ module Dragonstone
             getter name : String
             getter arguments : Array(Node)
             getter location : Location?
+            getter memory : MemoryAnnotation?
 
-            def initialize(@name : String, @arguments : Array(Node) = [] of Node, @location : Location? = nil)
+            def initialize(
+                @name : String,
+                @arguments : Array(Node) = [] of Node,
+                @location : Location? = nil,
+                @memory : MemoryAnnotation? = nil
+            )
             end
 
             enum MemoryOperator
@@ -18,6 +24,7 @@ module Dragonstone
                 property ownership : OwnershipMode?
                 property operator : MemoryOperator?
                 property area_name : String?
+                property escape_return : Bool = false
                 
                 def gc_enabled? : Bool
                     case garbage

@@ -35,11 +35,11 @@
 
     Document.allocate(area) = allocate into the Area instead of the GC heap.
 
-    gc.copy(...) = explicitly move data from the Area into GC-managed memory.
+    GC.escape(...) = explicitly move data from the Area into GC-managed memory.
 
     doc.drop() = deterministic cleanup of Area-backed resources.
 
-    ## Crossing from Area to GC with gc.copy
+    ## Crossing from Area to GC with GC.escape
 
     ## Using Areas (Arenas) for Bulk Allocation
     ## Batch allocations = allocate a bunch of stuff in an area, clear it all 
@@ -140,8 +140,8 @@ def build_cache(area: Area): Map(int, Value)
         doc.load_from_source(i)
 
         # Convert the document into a GC-managed value by copying.
-        # gc.copy is the explicit boundary from Area memory → GC heap.
-        value = gc.copy(doc.to_value)
+    # GC.escape is the explicit boundary from Area memory -> GC heap.
+    value = GC.escape(doc.to_value)
         cache[i] = value
 
         i += 1
@@ -155,7 +155,7 @@ def build_cache(area: Area): Map(int, Value)
 end
 
 #[ 
-    Scoped GC area (@[gc.area])
+    Scoped GC area (@[Garbage(area)])
 
     Create a temporary Area, allocate a whole level’s worth of data in it, 
     then either copy what you need or keep the whole Level in that area
@@ -167,7 +167,7 @@ end
 def load_level(path: str): Level
 
     # Start a new Area. Optional capacity hint for performance.
-    area = gc.begin(capacity: 64 * MB)
+    area = GC.begin_area
 
     # Allocate big blobs in the Area (not on the GC heap).
     data = area.allocate(bytes: 1000000)
@@ -178,22 +178,22 @@ def load_level(path: str): Level
 
     # Create a GC-managed Level by copying the pieces we want to keep.
     level = Level.new(
-        data: gc.copy(data),
-        textures: gc.copy(textures)
+        data: GC.escape(data),
+        textures: GC.escape(textures)
     )
 
     # Free everything allocated in this Area in a single operation.
-    gc.end(area)
+    GC.end_area(area)
 
     # `level` is now fully GC-managed and safe to return.
     return level
 end
 
 # Zero-copy variant: Level lives in the Area.
-# Caller is responsible for calling gc.end(area) when done.
+# Caller is responsible for calling GC.end_area(area) when done.
 @[Garbage(area)]
 def load_level_in_area(path: str): Tuple(Area, Level)
-    area = gc.begin
+    area = GC.begin_area
 
     data = area.allocate(bytes: 1000000)
     textures = area.allocate(array: Texture, 256)
@@ -203,7 +203,7 @@ def load_level_in_area(path: str): Tuple(Area, Level)
     # Level is built directly in the Area.
     level = Level.allocate(area, data, textures)
 
-    # Do NOT gc.end(area) here; the caller owns the Area lifetime.
+    # Do NOT GC.end_area(area) here; the caller owns the Area lifetime.
     return { area, level }
 end
 
@@ -215,7 +215,7 @@ def build_cache(area): Map(int, Value)
     i = 0
     while i < 1_000_000
         doc.load_from_source(i)
-        cache[i] = gc.copy(doc.to_value)
+        cache[i] = GC.escape(doc.to_value)
         doc.reset
         i += 1
     end
@@ -225,18 +225,18 @@ def build_cache(area): Map(int, Value)
 end
 
 def load_level(path: str): Level
-    area = gc.begin(capacity: 64 * 1024 * 1024)
+    area = GC.begin_area
 
     data     = area.allocate(bytes: 1_000_000)
     textures = area.allocate(array: Texture, count: 256)
     load_level_data(path, data, textures)
 
     level = Level.allocate(
-        data: gc.copy(data),
-        meta: gc.copy(textures)
+        data: GC.escape(data),
+        meta: GC.escape(textures)
     )
 
-    gc.end(area)
+    GC.end_area(area)
     level
 end
 
@@ -280,8 +280,8 @@ def Load(area: Area): Level
     alias meta = doc.meta
 
     let level: Level = Level.allocate(
-        data: gc.copy(data),
-        meta: gc.copy(meta)
+        data: GC.escape(data),
+        meta: GC.escape(meta)
     )
 
     doc.drop()
