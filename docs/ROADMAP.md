@@ -21,7 +21,7 @@
 - Self-Hosted.
 - Tooling.
 - Crystal and Ruby inspired syntax but with a modern refresh.
-- 3-Way Bindings to C, Crystal and Ruby.
+- Bindings to C, Crystal, Ruby, Python, and JavaScript.
 - Native provider for `eden`.
 - S-Tier Performance: 
     - Compile to Machine Code executed by the DC (**Dragonstone Compiler**)

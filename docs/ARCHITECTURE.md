@@ -83,7 +83,7 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
 - **Core compiler + VM (`src/dragonstone/core/*`)**
     - lowers IR to bytecode/targets via a dedicated frontend/IR/codegen pipeline and executes bytecode inside the VM runtime.
 - **Hybrid orchestration (`src/dragonstone/hybrid/*`)**
-    - `Runtime::Engine` plus the importer/cache that decides which backend to use per module, exports namespaces, and persists compiled units.
+    - `Runtime::Engine` plus the importer/cache that decides which backend to use per module, exports namespaces, and persists compiled units, once bootstrap/self-host is completed this will be moved into the shared front-end and the hybrid section will be for embedded dragonstone.
 - **Stdlib modules (`src/dragonstone/stdlib/modules/shared or native/*`)**
     - expose metadata that declares backend requirements so the resolver can prevent incompatible mixes up front.
 

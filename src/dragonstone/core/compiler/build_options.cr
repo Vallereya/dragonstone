@@ -12,6 +12,8 @@ module Dragonstone
                 C
                 Crystal
                 Ruby
+                Python
+                JavaScript
             end
 
             struct BuildOptions

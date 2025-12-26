@@ -12,7 +12,7 @@ module Dragonstone
     extend self
 
     EXECUTABLE_SUFFIX = {% if flag?(:windows) %} ".exe" {% else %} "" {% end %}
-    LLVM_RUNTIME_STUB = "src/dragonstone/core/compiler/targets/llvm/runtime_stub.c"
+    LLVM_RUNTIME_STUB = "src/dragonstone/core/compiler/targets/llvm/llvm_runtime.c"
 
 	    private struct CLIOptions
 	      getter typed : Bool
@@ -258,6 +258,10 @@ module Dragonstone
 	      case target
 	      when Core::Compiler::Target::Bytecode
 	        run_bytecode_artifact(program, artifact, stdout, stderr, argv)
+          when Core::Compiler::Target::JavaScript
+	        run_javascript_artifact(artifact, stdout, stderr, argv)
+          when Core::Compiler::Target::Python
+	        run_python_artifact(artifact, stdout, stderr, argv)
 	      when Core::Compiler::Target::Ruby
 	        run_ruby_artifact(artifact, stdout, stderr, argv)
 	      when Core::Compiler::Target::Crystal
@@ -288,6 +292,22 @@ module Dragonstone
     rescue e : Exception
       stderr.puts "Failed to execute bytecode artifact: #{e.message}"
       false
+    end
+
+    private def run_javascript_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
+        stderr.puts("[warning] JavaScript target execution is not implemented yet.")
+        if artifact.object_path
+            stderr.puts "JavaScript artifact was generated but cannot be executed yet."
+        end
+        false
+    end
+
+    private def run_python_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
+        stderr.puts("[warning] Python target execution is not implemented yet.")
+        if artifact.object_path
+            stderr.puts "Python artifact was generated but cannot be executed yet."
+        end
+        false
     end
 
 	    private def run_ruby_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
