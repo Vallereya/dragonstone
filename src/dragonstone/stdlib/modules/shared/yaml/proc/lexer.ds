@@ -1,0 +1,642 @@
+use "./exception"
+
+class YAMLLexer
+   def token
+        self
+    end
+
+    def type
+        @type
+    end
+
+    def string_value
+        @string_value
+    end
+
+    def int_value
+        @int_value
+    end
+
+    def float_value
+        @float_value
+    end
+
+    def line_number
+        @token_line_number
+    end
+
+    def column_number
+        @token_column_number
+    end
+
+    def line_number=(n)
+        @token_line_number = n
+    end
+
+    def column_number=(n)
+        @token_column_number = n
+    end
+
+    def initialize(@input)
+        @current_char = @input.read_char || ""
+        @peeked = nil
+        @scan_line_number = 1
+        @scan_column_number = 1
+
+        @type = :EOF
+        @string_value = ""
+        @int_value = 0
+        @float_value = 0.0
+        @token_line_number = 1
+        @token_column_number = 1
+    end
+
+    def next_token
+        skip_ignored
+
+        self.line_number = @scan_line_number
+        self.column_number = @scan_column_number
+
+        case current_char
+
+        when ""
+            @type = :EOF
+        when '\r'
+            consume_newline
+        when '\n'
+            consume_newline
+        when '['
+            next_char_set_type("[")
+        when ']'
+            next_char_set_type("]")
+        when '{'
+            next_char_set_type("{")
+        when '}'
+            next_char_set_type("}")
+        when '.'
+            next_char_set_type(".")
+        when ','
+            next_char_set_type(",")
+        when '='
+            next_char_set_type("=")
+        when '"'
+            consume_string
+        when '\''
+            consume_literal_string
+        when '+', '-'
+            sign = current_char
+            next_char
+
+            if digit?(current_char)
+                consume_number(sign)
+            else
+                unexpected_char(current_char)
+            end
+        else
+            if digit?(current_char)
+                consume_number("")
+            elsif key_part?(current_char)
+                consume_key
+            else
+                unexpected_char(current_char)
+            end
+        end
+
+        self
+    end
+
+    private def consume_newline
+        newline
+
+        if current_char == '\r' && peek_next_char == '\n'
+            next_char
+        end
+
+        next_char
+        @type = :NEWLINE
+    end
+
+    private def consume_string
+        @type = :STRING
+
+        if next_char == '\"'
+            if next_char == '\"'
+                consume_multiline_basic_string
+            else
+                @string_value = ""
+            end
+            return
+        end
+
+        consume_basic_string
+    end
+
+    private def consume_basic_string
+        result = ""
+
+        while true
+            case current_char
+            
+            when '\"'
+                next_char
+                break
+            when '\\'
+                next_char
+                result += consume_escape
+            when ""
+                raise_error("unterminated string literal")
+            when '\n'
+                raise_error("newline is not allowed in basic string")
+            else
+                result += current_char
+                next_char
+            end
+        end
+
+        @string_value = result
+    end
+
+    private def consume_multiline_basic_string
+        if next_char == '\n'
+            newline
+            next_char
+        end
+
+        result = ""
+
+        while true
+            case current_char
+            
+            when '\"'
+                if next_char == '\"'
+                    if next_char == '\"'
+                        next_char
+                        break
+                    else
+                        result += "\"\""
+                    end
+                else
+                    result += "\""
+                end
+            when '\\'
+                if next_char == '\n'
+                    newline
+                    next_char
+
+                    while current_char == ' ' || current_char == '\t'
+                        next_char
+                    end
+                else
+                    result += consume_escape
+                end
+            when '\n'
+                newline
+                result += "\n"
+                next_char
+            when ""
+                raise_error("unterminated string literal")
+            else
+                result += current_char
+                next_char
+            end
+        end
+
+        @string_value = result
+    end
+
+    private def consume_literal_string
+        @type = :STRING
+        next_char
+
+        if current_char == '\''
+            if next_char == '\''
+                consume_multiline_literal_string
+                return
+            else
+                @string_value = ""
+                return
+            end
+        else
+            consume_basic_literal_string
+        end
+    end
+
+    private def consume_basic_literal_string
+        result = ""
+        result += current_char
+
+        while true
+            nc = next_char
+            case nc
+
+            when '\''
+                next_char
+                break
+            when ""
+                raise_error("unterminated string literal")
+            else
+                result += nc
+            end
+        end
+
+        @string_value = result
+    end
+
+    private def consume_multiline_literal_string
+        if next_char == "\n"
+            newline
+            next_char
+        end
+
+        result = ""
+
+        while true
+            case current_char
+
+            when '\''
+                if next_char == '\''
+                    if next_char == '\''
+                        next_char
+                        break
+                    else
+                        result += "''"
+                    end
+                else
+                    result += "'"
+                    result += current_char
+                end
+            when '\n'
+                newline
+                result += "\n"
+                next_char
+                next
+            when ""
+                raise_error("unterminated string literal")
+            else
+                result += current_char
+            end
+
+            next_char
+        end
+
+        @string_value = result
+    end
+
+    private def consume_escape
+        result = ""
+
+        case current_char
+
+        when 'b'
+            result = "\b"
+        when 't'
+            result = "\t"
+        when 'n'
+            result = "\n"
+        when 'f'
+            result = "\f"
+        when 'r'
+            result = "\r"
+        when 'u'
+            return consume_unicode_scalar
+        when '\\', '\'', '\"'
+            result = current_char
+        else
+            raise_error("unknown escape: \\#{current_char}")
+        end
+
+        next_char
+        result
+    end
+
+    private def parse_int_string(str)
+        index = 0
+        negative = false
+
+        if index < str.length
+            ch = str[index]
+            if ch == '-'
+                negative = true
+                index += 1
+            elsif ch == '+'
+                index += 1
+            end
+        end
+
+        value = 0
+        length = str.length
+        while index < length
+            ch = str[index]
+            index += 1
+            next if ch == '_'
+            digit = char_to_digit(ch)
+            value = value * 10 + digit
+        end
+
+        if negative
+            return -value
+        end
+
+        value
+    end
+
+    private def parse_float_string(str)
+        index = 0
+        negative = false
+
+        if index < str.length
+            ch = str[index]
+            if ch == '-'
+                negative = true
+                index += 1
+            elsif ch == '+'
+                index += 1
+            end
+        end
+
+        value = 0.0
+        length = str.length
+
+        while index < length
+            ch = str[index]
+            break if ch == '.' || ch == 'e' || ch == 'E'
+            index += 1
+            next if ch == '_'
+            digit = char_to_digit(ch)
+            value = value * 10 + digit
+        end
+
+        if index < length && str[index] == '.'
+            index += 1
+            factor = 0.1
+            while index < length
+                ch = str[index]
+                break if ch == 'e' || ch == 'E'
+                index += 1
+                next if ch == '_'
+                digit = char_to_digit(ch)
+                value += digit * factor
+                factor *= 0.1
+            end
+        end
+
+        if index < length && (str[index] == 'e' || str[index] == 'E')
+            index += 1
+            exp_negative = false
+            if index < length
+                if str[index] == '-'
+                    exp_negative = true
+                    index += 1
+                elsif str[index] == '+'
+                    index += 1
+                end
+            end
+
+            exponent = 0
+            while index < length
+                ch = str[index]
+                index += 1
+                next if ch == '_'
+                digit = char_to_digit(ch)
+                exponent = exponent * 10 + digit
+            end
+
+            if exp_negative
+                exponent = -exponent
+            end
+
+            value *= pow10(exponent)
+        end
+
+        if negative
+            return -value
+        end
+
+        value
+    end
+
+    private def char_to_digit(ch)
+        case ch
+        when '0'
+            0
+        when '1'
+            1
+        when '2'
+            2
+        when '3'
+            3
+        when '4'
+            4
+        when '5'
+            5
+        when '6'
+            6
+        when '7'
+            7
+        when '8'
+            8
+        when '9'
+            9
+        else
+            raise_error("invalid digit '#{ch}'")
+        end
+    end
+
+    private def pow10(exponent)
+        abs_exp = exponent
+        if exponent < 0
+            abs_exp = -exponent
+        end
+
+        result = 1.0
+        counter = 0
+        while counter < abs_exp
+            result *= 10.0
+            counter += 1
+        end
+
+        if exponent < 0
+            return 1.0 / result
+        end
+
+        result
+    end
+
+
+    private def consume_unicode_scalar
+        value = 0
+
+        4.times do
+            nc = next_char
+            hex_val = nc.to_i(16)
+
+            if hex_val.nil?
+                raise_error("expecting hexadecimal number")
+            end
+
+            value = value * 16 + hex_val
+        end
+
+        value.chr
+    end
+
+    private def skip_ignored
+        while true
+            skipped = false
+
+            while current_char == ' ' || current_char == '\t'
+                next_char
+                skipped = true
+            end
+
+            if current_char == '#'
+                skip_comment
+                skipped = true
+            end
+
+            break unless skipped
+        end
+    end
+
+    private def skip_comment
+        if current_char == '#'
+            while true
+                nc = next_char
+                case nc
+
+                when "", '\n'
+                    break
+                end
+            end
+        end
+    end
+
+    private def consume_number(prefix)
+        num_str = prefix + current_char
+        is_float = false
+        next_char
+
+        while true
+            ch = current_char
+
+            if digit?(ch)
+                num_str += ch
+                next_char
+                next
+            end
+
+            if ch == '_'
+                next_char
+                next
+            end
+
+            if ch == '.' && !is_float && digit?(peek_next_char)
+                is_float = true
+                num_str += "."
+                next_char
+                next
+            end
+
+            if ch == 'e' || ch == 'E'
+                is_float = true
+                num_str += ch
+                next_char
+                if current_char == "+" || current_char == "-"
+                    num_str += current_char
+                    next_char
+                end
+                next
+            end
+
+            break
+        end
+
+        if is_float
+            @type = :FLOAT
+            @float_value = parse_float_string(num_str)
+        else
+            @type = :INT
+            @int_value = parse_int_string(num_str)
+        end
+    end
+
+    private def consume_key
+        result = ""
+        result += current_char
+
+        while key_part?(next_char)
+            result += current_char
+        end
+
+        @string_value = result
+        @type = :KEY
+    end
+
+    private def key_part?(char)
+        case char
+
+        when 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+            'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+            '0','1','2','3','4','5','6','7','8','9','_','-'
+            true
+        else
+            false
+        end
+    end
+
+    private def digit?(char)
+        case char
+
+        when '0','1','2','3','4','5','6','7','8','9'
+            true
+        else
+            false
+        end
+    end
+
+    private def current_char
+        @current_char
+    end
+
+    private def peek_next_char
+        if @peeked
+            return @peeked
+        end
+        
+        @peeked = @input.read_char || ""
+    end
+
+    private def next_char
+        @scan_column_number += 1
+
+        if @peeked
+            result = @peeked
+            @peeked = nil
+            @current_char = result
+            return result
+        end
+
+        @current_char = @input.read_char || ""
+    end
+
+    private def next_char_set_type(token_type)
+        @type = token_type
+        next_char
+    end
+
+    private def newline
+        @scan_line_number += 1
+        @scan_column_number = 0
+        self.line_number = @scan_line_number
+        self.column_number = @scan_column_number
+    end
+
+    private def unexpected_char(ch)
+        char = ch
+        raise_error("unexpected char '#{char}'")
+    end
+
+    private def raise_error(msg)
+        raise "#{msg} at #{@scan_line_number}:#{@scan_column_number}"
+    end
+end

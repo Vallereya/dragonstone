@@ -12,3 +12,19 @@ describe "LLVM runtime stub map order" do
         source.includes?(" -> ").should be_true
     end
 end
+
+describe "LLVM runtime stub unicode shims" do
+    it "includes unicode call_crystal handlers" do
+        source = File.read("src/dragonstone/core/compiler/targets/llvm/runtime_stub.c")
+        source.includes?("unicode_normalize").should be_true
+        source.includes?("unicode_casefold").should be_true
+        source.includes?("unicode_grapheme_count").should be_true
+        source.includes?("unicode_general_category").should be_true
+        source.includes?("unicode_compare").should be_true
+    end
+
+    it "uses utf8proc for unicode operations" do
+        source = File.read("src/dragonstone/core/compiler/targets/llvm/runtime_stub.c")
+        source.includes?("utf8proc_").should be_true
+    end
+end

@@ -4,7 +4,9 @@
 
 ]#
 
-# Example Five: Normalization/Canonicalization of Unicode.
+use "unicode"
+
+# Example One: Normalization/Canonicalization of Unicode.
 composed = "é"
 decomposed = "e\u{0301}"
 
@@ -15,13 +17,13 @@ echo Unicode.canonical_equivalent?(composed, decomposed)
 compat = "①"
 echo Unicode.normalize(compat, "NFKC")
 
-# Example Six: Unicode case mapping and folding.
+# Example Two: Unicode case mapping and folding.
 echo Unicode.upcase("straße", "NONE")
 echo Unicode.downcase("İSTANBUL", "NONE")
 echo Unicode.titlecase("hello world", "NONE")
 echo Unicode.casefold("ß") == "ss"
 
-# Example Seven: Grapheme clusters and character properties.
+# Example Three: Grapheme clusters and character properties.
 family = "👨‍👩‍👧‍👦"
 echo Unicode.grapheme_count(family)
 echo Unicode.graphemes(family)

@@ -1,0 +1,24 @@
+#[
+    JSON Standard Library for Dragonstone
+    
+    This module provides JSON parsing and serialization.
+]#
+
+use "modules/shared/json/proc/exception"
+use "modules/shared/json/proc/token"
+use "modules/shared/json/proc/lexer"
+use "modules/shared/json/proc/parser"
+use "modules/shared/json/proc/string"
+
+module JSON
+    extend self
+
+    def parse(input)
+        Parser.new(input).parse
+    end
+
+    def parse_file(path)
+        content = ffi.call("file_read", [path])
+        Parser.new(content).parse
+    end
+end

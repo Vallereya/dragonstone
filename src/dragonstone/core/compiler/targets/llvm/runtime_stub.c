@@ -9,6 +9,7 @@
 #include <setjmp.h>
 #include <math.h>
 #include "../../../../shared/runtime/abi/abi.h"
+#include "../../../../stdlib/modules/shared/unicode/proc/vendor/utf8proc.h"
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -341,6 +342,225 @@ static char *ds_strip_string(const char *src) {
     memcpy(buf, src + start, out_len);
     buf[out_len] = '\0';
     return buf;
+}
+
+static bool ds_unicode_str_eq(const char *left, const char *right) {
+    if (!left || !right) return false;
+    return strcmp(left, right) == 0;
+}
+
+static char *ds_utf8_copy_range(const char *start, int len) {
+    char *buf = (char *)ds_alloc((size_t)len + 1);
+    memcpy(buf, start, (size_t)len);
+    buf[len] = '\0';
+    return buf;
+}
+
+static char *ds_unicode_normalize(const char *value, const char *form) {
+    if (!value) return ds_strdup("");
+    const char *normalized_form = form ? form : "NFC";
+    utf8proc_uint8_t *mapped = NULL;
+    if (ds_unicode_str_eq(normalized_form, "NFD")) {
+        mapped = utf8proc_NFD((const utf8proc_uint8_t *)value);
+    } else if (ds_unicode_str_eq(normalized_form, "NFKD")) {
+        mapped = utf8proc_NFKD((const utf8proc_uint8_t *)value);
+    } else if (ds_unicode_str_eq(normalized_form, "NFKC")) {
+        mapped = utf8proc_NFKC((const utf8proc_uint8_t *)value);
+    } else {
+        mapped = utf8proc_NFC((const utf8proc_uint8_t *)value);
+    }
+    if (!mapped) return ds_strdup("");
+    return (char *)mapped;
+}
+
+static char *ds_unicode_map_case(const char *value, utf8proc_int32_t (*map_fn)(utf8proc_int32_t), bool ascii_only) {
+    if (!value) return ds_strdup("");
+    size_t len = strlen(value);
+    size_t cap = len * 4 + 1;
+    utf8proc_uint8_t *buffer = (utf8proc_uint8_t *)ds_alloc(cap);
+    size_t offset = 0;
+    size_t idx = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t codepoint = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &codepoint);
+        if (consumed <= 0) break;
+        idx += (size_t)consumed;
+
+        utf8proc_int32_t mapped = codepoint;
+        if (!ascii_only || codepoint < 128) {
+            mapped = map_fn(codepoint);
+        }
+
+        utf8proc_uint8_t tmp[4];
+        utf8proc_ssize_t wrote = utf8proc_encode_char(mapped, tmp);
+        if (wrote < 0) continue;
+        if (offset + (size_t)wrote + 1 > cap) {
+            cap = cap * 2 + (size_t)wrote + 1;
+            buffer = (utf8proc_uint8_t *)realloc(buffer, cap);
+            if (!buffer) abort();
+        }
+        memcpy(buffer + offset, tmp, (size_t)wrote);
+        offset += (size_t)wrote;
+    }
+
+    buffer[offset] = '\0';
+    return (char *)buffer;
+}
+
+static bool ds_unicode_ascii_only(const char *option) {
+    return option && strcmp(option, "ASCII") == 0;
+}
+
+static char *ds_unicode_upcase(const char *value, const char *option) {
+    return ds_unicode_map_case(value, utf8proc_toupper, ds_unicode_ascii_only(option));
+}
+
+static char *ds_unicode_downcase(const char *value, const char *option) {
+    return ds_unicode_map_case(value, utf8proc_tolower, ds_unicode_ascii_only(option));
+}
+
+static char *ds_unicode_titlecase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    bool ascii_only = ds_unicode_ascii_only(option);
+    size_t len = strlen(value);
+    size_t cap = len * 4 + 1;
+    utf8proc_uint8_t *buffer = (utf8proc_uint8_t *)ds_alloc(cap);
+    size_t offset = 0;
+    size_t idx = 0;
+    bool first = true;
+
+    while (idx < len) {
+        utf8proc_int32_t codepoint = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &codepoint);
+        if (consumed <= 0) break;
+        idx += (size_t)consumed;
+
+        utf8proc_int32_t mapped = codepoint;
+        if (!ascii_only || codepoint < 128) {
+            mapped = first ? utf8proc_totitle(codepoint) : utf8proc_tolower(codepoint);
+        }
+        first = false;
+
+        utf8proc_uint8_t tmp[4];
+        utf8proc_ssize_t wrote = utf8proc_encode_char(mapped, tmp);
+        if (wrote < 0) continue;
+        if (offset + (size_t)wrote + 1 > cap) {
+            cap = cap * 2 + (size_t)wrote + 1;
+            buffer = (utf8proc_uint8_t *)realloc(buffer, cap);
+            if (!buffer) abort();
+        }
+        memcpy(buffer + offset, tmp, (size_t)wrote);
+        offset += (size_t)wrote;
+    }
+
+    buffer[offset] = '\0';
+    return (char *)buffer;
+}
+
+static char *ds_unicode_casefold(const char *value) {
+    if (!value) return ds_strdup("");
+    utf8proc_uint8_t *mapped = NULL;
+    utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_CASEFOLD);
+    utf8proc_ssize_t rc = utf8proc_map((const utf8proc_uint8_t *)value, 0, &mapped, options);
+    if (rc < 0 || !mapped) return ds_strdup("");
+    return (char *)mapped;
+}
+
+static int64_t ds_unicode_grapheme_count(const char *value) {
+    if (!value || !value[0]) return 0;
+    size_t len = strlen(value);
+    size_t idx = 0;
+    int64_t count = 0;
+    utf8proc_int32_t prev = 0;
+    utf8proc_int32_t state = 0;
+    utf8proc_int32_t state_icb = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t curr = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &curr);
+        if (consumed <= 0) break;
+        if (count == 0) {
+            count = 1;
+        } else if (utf8proc_grapheme_break_stateful(prev, curr, &state, &state_icb)) {
+            count += 1;
+        }
+        prev = curr;
+        idx += (size_t)consumed;
+    }
+
+    return count;
+}
+
+static void *ds_unicode_graphemes(const char *value) {
+    if (!value || !value[0]) return dragonstone_runtime_array_literal(0, NULL);
+    size_t len = strlen(value);
+    size_t idx = 0;
+    utf8proc_int32_t prev = 0;
+    utf8proc_int32_t state = 0;
+    utf8proc_int32_t state_icb = 0;
+    bool has_prev = false;
+
+    int64_t *boundaries = (int64_t *)ds_alloc(sizeof(int64_t) * (len + 1));
+    int64_t count = 0;
+    boundaries[count++] = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t curr = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &curr);
+        if (consumed <= 0) break;
+        if (has_prev && utf8proc_grapheme_break_stateful(prev, curr, &state, &state_icb)) {
+            boundaries[count++] = (int64_t)idx;
+        }
+        prev = curr;
+        has_prev = true;
+        idx += (size_t)consumed;
+    }
+
+    boundaries[count++] = (int64_t)len;
+    int64_t segments = count - 1;
+    if (segments <= 0) return dragonstone_runtime_array_literal(0, NULL);
+
+    void **items = (void **)ds_alloc(sizeof(void *) * (size_t)segments);
+    for (int64_t i = 0; i < segments; i++) {
+        int64_t start = boundaries[i];
+        int64_t end = boundaries[i + 1];
+        int64_t seg_len = end - start;
+        items[i] = ds_utf8_copy_range(value + start, (int)seg_len);
+    }
+
+    return dragonstone_runtime_array_literal(segments, items);
+}
+
+static utf8proc_category_t ds_unicode_category(int64_t codepoint) {
+    if (codepoint < 0 || codepoint > 0x10FFFF) return UTF8PROC_CATEGORY_CN;
+    return utf8proc_category((utf8proc_int32_t)codepoint);
+}
+
+static bool ds_unicode_is_letter(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LL ||
+        cat == UTF8PROC_CATEGORY_LT || cat == UTF8PROC_CATEGORY_LM || cat == UTF8PROC_CATEGORY_LO;
+}
+
+static bool ds_unicode_is_number(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_ND || cat == UTF8PROC_CATEGORY_NL || cat == UTF8PROC_CATEGORY_NO;
+}
+
+static bool ds_unicode_is_mark(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_MN || cat == UTF8PROC_CATEGORY_MC || cat == UTF8PROC_CATEGORY_ME;
+}
+
+static bool ds_unicode_is_whitespace(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_ZS || cat == UTF8PROC_CATEGORY_ZL || cat == UTF8PROC_CATEGORY_ZP;
+}
+
+static bool ds_unicode_is_control(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_CC;
 }
 
 static void ds_constant_set(DSConstant **head, const char *name, void *value) {
@@ -753,7 +973,10 @@ static int64_t ds_get_ordinal(void *val, bool *is_char) {
         char *str = (char *)val;
         if (str && strlen(str) > 0) {
             *is_char = true;
-            return (int64_t)str[0];
+            utf8proc_int32_t codepoint = 0;
+            utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)str, -1, &codepoint);
+            if (consumed > 0) return (int64_t)codepoint;
+            return (int64_t)(unsigned char)str[0];
         }
     }
     *is_char = false;
@@ -880,6 +1103,116 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                         items[2] = dragonstone_runtime_box_bool(success);
                         items[3] = dragonstone_runtime_box_i64(size);
                         return dragonstone_runtime_array_literal(4, items);
+                    }
+
+                    if (strcmp(fn, "unicode_normalize") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *form = args->length >= 2 ? ds_arg_string(args->items[1]) : "NFC";
+                        return ds_unicode_normalize(value, form);
+                    }
+
+                    if (strcmp(fn, "unicode_canonical_equivalent") == 0 && args->length >= 2) {
+                        const char *left = ds_arg_string(args->items[0]);
+                        const char *right = ds_arg_string(args->items[1]);
+                        char *left_nfd = ds_unicode_normalize(left, "NFD");
+                        char *right_nfd = ds_unicode_normalize(right, "NFD");
+                        bool equal = ds_unicode_str_eq(left_nfd, right_nfd);
+                        return dragonstone_runtime_box_bool(equal);
+                    }
+
+                    if (strcmp(fn, "unicode_upcase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_upcase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_downcase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_downcase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_titlecase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_titlecase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_casefold") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        return ds_unicode_casefold(value);
+                    }
+
+                    if (strcmp(fn, "unicode_graphemes") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        return ds_unicode_graphemes(value);
+                    }
+
+                    if (strcmp(fn, "unicode_grapheme_count") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        int64_t count = ds_unicode_grapheme_count(value);
+                        return dragonstone_runtime_box_i64(count);
+                    }
+
+                    if (strcmp(fn, "unicode_general_category") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        const char *category = utf8proc_category_string((utf8proc_int32_t)codepoint);
+                        return ds_strdup(category ? category : "Cn");
+                    }
+
+                    if (strcmp(fn, "unicode_combining_class") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        const utf8proc_property_t *prop = utf8proc_get_property((utf8proc_int32_t)codepoint);
+                        int64_t combining = prop ? (int64_t)prop->combining_class : 0;
+                        return dragonstone_runtime_box_i64(combining);
+                    }
+
+                    if (strcmp(fn, "unicode_whitespace") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_whitespace(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_letter") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_letter(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_number") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_number(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_mark") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_mark(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_control") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_control(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_compare") == 0 && args->length >= 2) {
+                        const char *left = ds_arg_string(args->items[0]);
+                        const char *right = ds_arg_string(args->items[1]);
+                        const char *strength = args->length >= 3 ? ds_arg_string(args->items[2]) : "DEFAULT";
+                        const char *lhs = left ? left : "";
+                        const char *rhs = right ? right : "";
+                        if (strength && strcmp(strength, "CASEFOLD") == 0) {
+                            lhs = ds_unicode_casefold(left);
+                            rhs = ds_unicode_casefold(right);
+                        }
+                        int cmp = strcmp(lhs, rhs);
+                        if (cmp < 0) return dragonstone_runtime_box_i64(-1);
+                        if (cmp > 0) return dragonstone_runtime_box_i64(1);
+                        return dragonstone_runtime_box_i64(0);
                     }
                 }
 

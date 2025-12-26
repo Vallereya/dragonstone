@@ -432,6 +432,8 @@ module Dragonstone
       "src/dragonstone/shared/runtime/abi/platform/lib_c/lib_c.c",
     ]
 
+    UTF8PROC_RUNTIME_SOURCE = "src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c"
+
     private def link_llvm_binary(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : String?
       ir_path = artifact.object_path
       return nil unless ir_path && File.exists?(ir_path)
@@ -443,7 +445,7 @@ module Dragonstone
     end
 
     private def compile_runtime_stub(output_dir : String, stdout : IO, stderr : IO) : Array(String)?
-      sources = [LLVM_RUNTIME_STUB] + ABI_RUNTIME_SOURCES
+      sources = [LLVM_RUNTIME_STUB] + ABI_RUNTIME_SOURCES + [UTF8PROC_RUNTIME_SOURCE]
       objects = [] of String
 
       sources.each do |source|

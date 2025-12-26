@@ -1,0 +1,3 @@
+name: json
+entry: module.ds
+requires: shared

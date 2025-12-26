@@ -23,8 +23,10 @@ bootstrap/
 src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt
+
 src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc_data.c
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
 
 # Ignore any Output/Build Cache from testing.
