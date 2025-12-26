@@ -805,6 +805,77 @@ module Dragonstone
             end
         end
 
+        def parse_memory_annotation(tokens : Array(Token)) : MemoryAnnotation
+            annotation = MemoryAnnotation.new
+            i = 0
+
+            while i < tokens.size
+                case tokens[i].value
+
+                when "Garbage"
+                    i += 1
+                    mode = parse_garbage_mode(tokens, pointerof(i))
+                    annotation.garbage = mode.mode
+                    annotation.area_name = mode.area_name
+                when "Ownership"
+                    i += 1
+                    annotation.ownership = parse_ownership_mode(tokens, pointerof(i))
+                when "&&"
+                    annotation.operator = MemoryOperator::And
+                when "||"
+                    annotation.operator = MemoryOperator::Or
+                end
+                
+                i += 1
+            end
+            
+            annotation
+        end
+
+        private def parse_garbage_mode(tokens, i : Pointer(Int32)) : NamedTuple(mode: GarbageMode, area_name: String?)
+
+            # Handle: enable, disable, area, area: "name"
+            case tokens[i.value].value
+
+            when "enable"
+                i.value += 1
+                {mode: GarbageMode::Enable, area_name: nil}
+            when "disable"
+                i.value += 1
+                {mode: GarbageMode::Disable, area_name: nil}
+            when "area"
+                i.value += 1
+                area_name = nil
+
+                if tokens[i.value]?.try(&.value) == ":"
+                    i.value += 1
+                    area_name = tokens[i.value].value.strip('"')
+                    i.value += 1
+                end
+
+                {mode: GarbageMode::Area, area_name: area_name}
+            else
+                raise "Unknown Garbage mode: #{tokens[i.value].value}"
+            end
+        end
+
+        private def parse_ownership_mode(tokens, i : Pointer(Int32)) : OwnershipMode
+            case tokens[i.value].value
+
+            when "unique"
+                i.value += 1
+                OwnershipMode::Unique
+            when "shared"
+                i.value += 1
+                OwnershipMode::Shared
+            when "borrowed"
+                i.value += 1
+                OwnershipMode::Borrowed
+            else
+                raise "Unknown Ownership mode: #{tokens[i.value].value}"
+            end
+        end
+
         private def parse_parameter_list(required : Bool = false) : Array(AST::TypedParameter)
             parameters = [] of AST::TypedParameter
             unless current_token.type == :LPAREN
