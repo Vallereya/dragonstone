@@ -101,6 +101,7 @@ module Dragonstone
               case_compare: String,
               yield_missing_block: String,
               display_value: String,
+              inspect_value: String,
               interpolated_string: String,
               raise: String,
               range_literal: String,
@@ -125,6 +126,11 @@ module Dragonstone
               ivar_set: String,
               argv_get: String,
               argv_set: String,
+              stdout_get: String,
+              stderr_get: String,
+              stdin_get: String,
+              argc_get: String,
+              argf_get: String,
               root_self: String,
               singleton_define: String,
               define_class: String,
@@ -221,6 +227,7 @@ module Dragonstone
                 case_compare: "dragonstone_runtime_case_compare",
                 yield_missing_block: "dragonstone_runtime_yield_missing_block",
                 display_value: "dragonstone_runtime_value_display",
+                inspect_value: "dragonstone_runtime_value_inspect",
                 interpolated_string: "dragonstone_runtime_interpolated_string",
                 raise: "dragonstone_runtime_raise",
                 range_literal: "dragonstone_runtime_range_literal",
@@ -245,6 +252,11 @@ module Dragonstone
                 ivar_set: "dragonstone_runtime_ivar_set",
                 argv_get: "dragonstone_runtime_argv",
                 argv_set: "dragonstone_runtime_set_argv",
+                stdout_get: "dragonstone_runtime_stdout",
+                stderr_get: "dragonstone_runtime_stderr",
+                stdin_get: "dragonstone_runtime_stdin",
+                argc_get: "dragonstone_runtime_argc",
+                argf_get: "dragonstone_runtime_argf",
                 root_self: "dragonstone_runtime_root_self",
                 singleton_define: "dragonstone_runtime_define_singleton_method",
                 define_class: "dragonstone_runtime_define_class",
@@ -535,7 +547,7 @@ module Dragonstone
                 end
               when AST::AccessorMacro
                 if current = @struct_stack.last?
-                  if node.kind == :property
+                  if node.kind == :property || node.kind == :getter
                     fields = struct_fields_for(current)
                     indices = struct_field_map_for(current)
                     node.entries.each do |entry|
@@ -958,6 +970,11 @@ module Dragonstone
               io << "declare double @#{@runtime[:unbox_float]}(i8*)\n"
               io << "declare void @#{@runtime[:argv_set]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:argv_get]}()\n"
+              io << "declare i8* @#{@runtime[:stdout_get]}()\n"
+              io << "declare i8* @#{@runtime[:stderr_get]}()\n"
+              io << "declare i8* @#{@runtime[:stdin_get]}()\n"
+              io << "declare i8* @#{@runtime[:argc_get]}()\n"
+              io << "declare i8* @#{@runtime[:argf_get]}()\n"
               io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
               io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -975,6 +992,7 @@ module Dragonstone
               io << "declare i1 @#{@runtime[:case_compare]}(i8*, i8*)\n"
               io << "declare void @#{@runtime[:yield_missing_block]}()\n"
               io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
+              io << "declare i8* @#{@runtime[:inspect_value]}(i8*)\n"
               io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
               io << "declare void @#{@runtime[:debug_accum]}(i8*, i8*)\n"
               io << "declare void @#{@runtime[:debug_flush]}()\n"
@@ -1166,6 +1184,11 @@ module Dragonstone
 	              when AST::Literal,
 	                   AST::Variable,
 	                   AST::ArgvExpression,
+	                   AST::ArgcExpression,
+	                   AST::ArgfExpression,
+	                   AST::StdoutExpression,
+	                   AST::StderrExpression,
+	                   AST::StdinExpression,
 	                   AST::BinaryOp,
 	                   AST::UnaryOp,
 	                   AST::MethodCall,
@@ -1418,6 +1441,24 @@ module Dragonstone
               when AST::RetryStatement
                 generate_retry_statement(ctx, stmt)
               when AST::AliasDefinition
+                if stmt.type_expression.is_a?(AST::SimpleTypeExpression)
+                  segments = stmt.type_expression.as(AST::SimpleTypeExpression).name.split("::")
+                  resolved = emit_constant_lookup(ctx, segments)
+                  cond = ctx.fresh("alias_present")
+                  define_label = ctx.fresh_label("alias_define")
+                  merge_label = ctx.fresh_label("alias_merge")
+
+                  ctx.io << "  %#{cond} = icmp ne i8* #{resolved[:ref]}, null\n"
+                  ctx.io << "  br i1 %#{cond}, label %#{define_label}, label %#{merge_label}\n"
+                  ctx.io << "#{define_label}:\n"
+                  name_ptr = materialize_string_pointer(ctx, qualify_name(stmt.name))
+                  runtime_call(ctx, "i8*", @runtime[:constant_define], [
+                    {type: "i8*", ref: name_ptr},
+                    {type: "i8*", ref: resolved[:ref]},
+                  ])
+                  ctx.io << "  br label %#{merge_label}\n"
+                  ctx.io << "#{merge_label}:\n"
+                end
                 false
               when AST::AccessorMacro
                 generate_accessor_macro(ctx, stmt)
@@ -1636,6 +1677,16 @@ module Dragonstone
                 generate_variable_reference(ctx, node.name)
               when AST::ArgvExpression
                 runtime_call(ctx, "i8*", @runtime[:argv_get], [] of CallArg)
+              when AST::ArgcExpression
+                runtime_call(ctx, "i8*", @runtime[:argc_get], [] of CallArg)
+              when AST::ArgfExpression
+                runtime_call(ctx, "i8*", @runtime[:argf_get], [] of CallArg)
+              when AST::StdoutExpression
+                runtime_call(ctx, "i8*", @runtime[:stdout_get], [] of CallArg)
+              when AST::StderrExpression
+                runtime_call(ctx, "i8*", @runtime[:stderr_get], [] of CallArg)
+              when AST::StdinExpression
+                runtime_call(ctx, "i8*", @runtime[:stdin_get], [] of CallArg)
               when AST::BinaryOp
                 case node.operator
                 when :"&&", :"and"
@@ -2169,7 +2220,7 @@ module Dragonstone
               unless node.rescue_clauses.empty?
                 body = [AST::BeginExpression.new(node.body, node.rescue_clauses, location: node.location)] of AST::Node
               end
-              generate_block_literal_impl(ctx, node.typed_parameters, body)
+              generate_block_literal_impl(ctx, node.typed_parameters, body, capture: false)
             end
 
             private def generate_attribute_assignment(ctx : FunctionContext, node : AST::AttributeAssignment) : ValueRef
@@ -2184,10 +2235,10 @@ module Dragonstone
               end
             end
 
-            private def generate_block_literal_impl(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node)) : ValueRef
+            private def generate_block_literal_impl(ctx : FunctionContext, params : Array(AST::TypedParameter), body : Array(AST::Node), capture : Bool = true) : ValueRef
               fn_name = unique_block_symbol
               fn_type = "i8*"
-              captures = collect_block_captures(ctx, params, body)
+              captures = capture ? collect_block_captures(ctx, params, body) : [] of BlockCaptureInfo
               env_pointer = captures.empty? ? value_ref("i8*", "null", constant: true) : build_block_environment(ctx, captures)
 
               param_specs = params.map_with_index do |param, index|
@@ -2609,6 +2660,11 @@ module Dragonstone
 	              when AST::Literal,
 	                   AST::Variable,
 	                   AST::ArgvExpression,
+	                   AST::ArgcExpression,
+	                   AST::ArgfExpression,
+	                   AST::StdoutExpression,
+	                   AST::StderrExpression,
+	                   AST::StdinExpression,
 	                   AST::BinaryOp,
 	                   AST::MethodCall,
 	                   AST::UnaryOp,
@@ -3765,7 +3821,7 @@ module Dragonstone
             private def emit_echo(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
               case value[:type]
               when "i8*"
-                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                func = inspect ? @runtime[:inspect_value] : @runtime[:to_string]
                 display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
                 ctx.io << "  call i32 @puts(i8* #{display[:ref]})\n"
               when "i32", "i64"
@@ -3773,6 +3829,11 @@ module Dragonstone
               when "double"
                 format_ptr = materialize_string_pointer(ctx, "%g\n")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "float"
+                format_ptr = materialize_string_pointer(ctx, "%g\n")
+                reg = ctx.fresh("fpext")
+                ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double %#{reg})\n"
               when "i1"
                 true_ptr = materialize_string_pointer(ctx, "true")
                 false_ptr = materialize_string_pointer(ctx, "false")
@@ -3787,7 +3848,7 @@ module Dragonstone
             private def emit_eecho(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
               case value[:type]
               when "i8*"
-                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                func = inspect ? @runtime[:inspect_value] : @runtime[:to_string]
                 display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
                 format_ptr = materialize_string_pointer(ctx, "%s")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{display[:ref]})\n"
@@ -3798,6 +3859,11 @@ module Dragonstone
               when "double"
                 format_ptr = materialize_string_pointer(ctx, "%g")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double #{value[:ref]})\n"
+              when "float"
+                format_ptr = materialize_string_pointer(ctx, "%g")
+                reg = ctx.fresh("fpext")
+                ctx.io << "  %#{reg} = fpext float #{value[:ref]} to double\n"
+                ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, double %#{reg})\n"
               when "i1"
                 true_ptr = materialize_string_pointer(ctx, "true")
                 false_ptr = materialize_string_pointer(ctx, "false")
@@ -3855,6 +3921,8 @@ module Dragonstone
                 coerce_integer(ctx, value, 64)
               when "i1"
                 coerce_boolean_exact(ctx, value)
+              when "float"
+                ensure_float(ctx, value)
               when "double"
                 ensure_double(ctx, value)
               else
@@ -4034,6 +4102,37 @@ module Dragonstone
               end
             end
 
+            private def ensure_float(ctx : FunctionContext, value : ValueRef) : ValueRef
+              case value[:type]
+              when "float"
+                value
+              when "double"
+                reg = ctx.fresh("fptrunc")
+                ctx.io << "  %#{reg} = fptrunc double #{value[:ref]} to float\n"
+                value_ref("float", "%#{reg}")
+              when "i8*"
+                double_value = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: value[:ref]}])
+                reg = ctx.fresh("fptrunc")
+                ctx.io << "  %#{reg} = fptrunc double #{double_value[:ref]} to float\n"
+                value_ref("float", "%#{reg}")
+              else
+                if integer_type?(value[:type])
+                  reg = ctx.fresh("sitofp")
+                  ctx.io << "  %#{reg} = sitofp #{value[:type]} #{value[:ref]} to float\n"
+                  value_ref("float", "%#{reg}")
+                elsif value[:type].starts_with?("%") && value[:type].ends_with?("*")
+                  cast = ctx.fresh("anycast")
+                  ctx.io << "  %#{cast} = bitcast #{value[:type]} #{value[:ref]} to i8*\n"
+                  double_value = runtime_call(ctx, "double", @runtime[:unbox_float], [{type: "i8*", ref: "%#{cast}"}])
+                  reg = ctx.fresh("fptrunc")
+                  ctx.io << "  %#{reg} = fptrunc double #{double_value[:ref]} to float\n"
+                  value_ref("float", "%#{reg}")
+                else
+                  raise "Cannot treat #{value[:type]} as floating-point"
+                end
+              end
+            end
+
             private def emit_float_op(ctx : FunctionContext, operator : Symbol, lhs : ValueRef, rhs : ValueRef) : ValueRef
               lhs = ensure_double(ctx, lhs)
               rhs = ensure_double(ctx, rhs)
@@ -4109,11 +4208,11 @@ module Dragonstone
               when AST::SimpleTypeExpression
                 name = type_expr.name
                 case name
-                when "Int32", "int"              then "i32"
-                when "Int64"                     then "i64"
+                when "Int32", "int", "int32"     then "i32"
+                when "Int64", "int64"            then "i64"
                 when "Bool", "bool"              then "i1"
-                when "Float32"                   then "float"
-                when "Float64", "Float", "float" then "double"
+                when "Float32", "float32"        then "float"
+                when "Float64", "Float", "float", "float64" then "double"
                 when "String", "str"             then "i8*"
                 when "Char", "char"              then "i8*"
                 when "para", "Para"              then "i8*" # Treat para types as block handles
@@ -4143,7 +4242,7 @@ module Dragonstone
                 field_type = llvm_type_of(type_expr)
                 field_type == "void" ? pointer_type_for("%DSValue") : field_type
               else
-                pointer_type_for("%DSValue")
+                "i8*"
               end
             end
 
@@ -4499,14 +4598,14 @@ module Dragonstone
               fields.each_with_index do |target_type_expr, index|
                 if index < args.size
                   arg = args[index]
-                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                   coerced = ensure_value_type(ctx, arg, target_type)
                   reg = ctx.fresh("structinit")
                   base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
                   ctx.io << "  %#{reg} = insertvalue #{struct_type} #{base}, #{coerced[:type]} #{coerced[:ref]}, #{index}\n"
                   current_ref = "%#{reg}"
                 else
-                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                  target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                   zero = zero_value(target_type)
                   reg = ctx.fresh("structinit")
                   base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
@@ -4520,7 +4619,7 @@ module Dragonstone
               end
               args.each_with_index do |arg, index|
                 target_type_expr = fields[index]
-                target_type = target_type_expr ? llvm_type_of(target_type_expr) : pointer_type_for("%DSValue")
+                target_type = target_type_expr ? llvm_type_of(target_type_expr) : "i8*"
                 coerced = ensure_value_type(ctx, arg, target_type)
                 reg = ctx.fresh("structinit")
                 base = current_ref == "zeroinitializer" ? "zeroinitializer" : current_ref
@@ -4560,7 +4659,7 @@ module Dragonstone
               raise "Struct field #{method_name} expects no arguments" unless args.empty?
               fields = @struct_layouts[struct_name]? || raise "Unknown struct layout #{struct_name}"
               field_type_expr = fields[index]?
-              field_type = field_type_expr ? llvm_type_of(field_type_expr) : pointer_type_for("%DSValue")
+              field_type = field_type_expr ? llvm_type_of(field_type_expr) : "i8*"
               reg = ctx.fresh("field")
               struct_type = receiver[:type]
               ctx.io << "  %#{reg} = extractvalue #{struct_type} #{receiver[:ref]}, #{index}\n"

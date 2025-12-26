@@ -66,6 +66,17 @@ $resourceSearchRoots = @(
     (Join-Path $scriptRoot 'resources')
 )
 
+$abiSourceDir = Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi'
+$abiSources = @(
+    (Join-Path $abiSourceDir 'abi.c'),
+    (Join-Path $abiSourceDir 'std/std.c'),
+    (Join-Path $abiSourceDir 'std/io/io.c'),
+    (Join-Path $abiSourceDir 'std/file/file.c'),
+    (Join-Path $abiSourceDir 'std/path/path.c'),
+    (Join-Path $abiSourceDir 'platform/platform.c'),
+    (Join-Path $abiSourceDir 'platform/lib_c/lib_c.c')
+)
+
 foreach ($root in $resourceSearchRoots) {
     if (-not $root) { continue }
     $candidate = Join-Path $root 'dragonstone.rc'
@@ -293,6 +304,99 @@ function CompileDragonstoneResource {
     }
 }
 
+function Get-CCompiler {
+    $candidates = @('clang', 'gcc', 'cc')
+    foreach ($name in $candidates) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($command) {
+            return $command.Path
+        }
+    }
+    return $null
+}
+
+function Get-ArchiveTool {
+    $candidates = @('llvm-lib', 'lib')
+    foreach ($name in $candidates) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($command) {
+            return $command.Path
+        }
+    }
+    return $null
+}
+
+function Build-DragonstoneAbi {
+    param([string] $OutputDir)
+
+    $compiler = Get-CCompiler
+    if (-not $compiler) {
+        throw 'ERROR: C compiler not found (needed to build ABI).'
+    }
+
+    $archiver = Get-ArchiveTool
+    if (-not $archiver) {
+        throw 'ERROR: Archive tool not found (needed to build ABI .lib).'
+    }
+
+    if (-not (Test-Path -Path $OutputDir)) {
+        New-Item -ItemType Directory -Path $OutputDir | Out-Null
+    }
+
+    $objects = @()
+
+    foreach ($src in $abiSources) {
+        if (-not (Test-Path -Path $src -PathType Leaf)) {
+            continue
+        }
+
+        $relative = $src.Substring($abiSourceDir.Length).TrimStart('\', '/')
+        $objName = ($relative -replace '[\\/]', '_') -replace '\.c$', '.obj'
+        $objPath = Join-Path $OutputDir $objName
+
+        $needsBuild = -not (Test-Path -Path $objPath -PathType Leaf)
+        if (-not $needsBuild) {
+            $srcTime = (Get-Item $src).LastWriteTimeUtc
+            $objTime = (Get-Item $objPath).LastWriteTimeUtc
+            if ($srcTime -gt $objTime) {
+                $needsBuild = $true
+            }
+        }
+
+        if ($needsBuild) {
+            & $compiler '-std=c11' '-O2' '-c' $src '-o' $objPath
+            if ($LASTEXITCODE -ne 0) {
+                throw "ERROR: Failed to compile ABI source: $src"
+            }
+        }
+
+        $objects += $objPath
+    }
+
+    $libPath = Join-Path $buildDir 'dragonstone_abi.lib'
+    $needsArchive = -not (Test-Path -Path $libPath -PathType Leaf)
+
+    if (-not $needsArchive) {
+        foreach ($obj in $objects) {
+            $objTime = (Get-Item $obj).LastWriteTimeUtc
+            $libTime = (Get-Item $libPath).LastWriteTimeUtc
+            if ($objTime -gt $libTime) {
+                $needsArchive = $true
+                break
+            }
+        }
+    }
+
+    if ($needsArchive) {
+        & $archiver "/OUT:$libPath" @objects
+        if ($LASTEXITCODE -ne 0) {
+            throw "ERROR: Failed to archive ABI library at $libPath"
+        }
+    }
+
+    return $libPath
+}
+
 function EnsureDragonstoneExecutable {
     param([switch] $Force)
 
@@ -332,6 +436,17 @@ function EnsureDragonstoneExecutable {
 
     $envFlagSet = $false
     $resourceLinkArg = $null
+    $abiLibPath = $null
+
+    try {
+        $abiOutputDir = Join-Path $buildDir 'abi'
+        $abiLibPath = Build-DragonstoneAbi -OutputDir $abiOutputDir
+    } catch {
+        if ($Force) {
+            throw
+        }
+        Write-Warning $_.Exception.Message
+    }
 
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
@@ -346,8 +461,17 @@ function EnsureDragonstoneExecutable {
     }
 
     try {
-        if ($resourceLinkArg -and $script:crystal) {
-            $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $resourceLinkArg)
+        $linkFlags = @()
+        if ($resourceLinkArg) {
+            $linkFlags += $resourceLinkArg
+        }
+        if ($abiLibPath) {
+            $linkFlags += "/LIBPATH:$buildDir"
+        }
+
+        if ($linkFlags.Count -gt 0 -and $script:crystal) {
+            $linkFlagsArg = ($linkFlags | ForEach-Object { $_ -replace '\\','/' }) -join ' '
+            $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $linkFlagsArg)
             # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
             & $script:crystal.Path @buildArgs
         # } elseif ($script:shards) {

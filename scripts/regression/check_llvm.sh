@@ -41,6 +41,7 @@ run ./examples/math/particle_system.ds
 run ./examples/collections/arrays.ds
 run ./examples/collections/map.ds
 run ./examples/collections/struct.ds
+run ./examples/collections/record.ds
 run ./examples/collections/tuple.ds
 run ./examples/collections/enum.ds
 run ./examples/collections/range.ds

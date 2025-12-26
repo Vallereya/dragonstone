@@ -24,6 +24,10 @@ module Dragonstone
         getter output : String
         getter argv : Array(String)
         getter argv_value : Array(RuntimeValue)
+        getter builtin_stdout : BuiltinStream
+        getter builtin_stderr : BuiltinStream
+        getter builtin_stdin : BuiltinStdin
+        getter builtin_argf : BuiltinArgf
         @type_scopes : Array(TypeScope)
         @typing_context : Typing::Context?
         @descriptor_cache : Typing::DescriptorCache
@@ -60,6 +64,10 @@ module Dragonstone
                 -> { ::GC.enable }
             )
             set_variable("gc", Runtime::GC::Host.new(@gc_manager))
+            @builtin_stdout = BuiltinStream.new(BuiltinStream::Kind::Stdout)
+            @builtin_stderr = BuiltinStream.new(BuiltinStream::Kind::Stderr)
+            @builtin_stdin = BuiltinStdin.new
+            @builtin_argf = BuiltinArgf.new
         end
 
         def typing_enabled? : Bool

@@ -55,6 +55,32 @@ describe "Native evaluator" do
         interpreter.output.should eq("Hello")
     end
 
+    it "formats floats without trailing noise" do
+        args = [] of AST::Node
+        args << AST::Literal.new(5.0_f64)
+        call = AST::MethodCall.new("echo", args)
+        statements = [] of AST::Node
+        statements << call
+        interpreter = evaluate_statements(statements)
+        interpreter.output.should eq("5\n")
+    end
+
+    it "coerces float32 annotations during assignment" do
+        value = 3.14159265358_f64
+        expected = sprintf("%.15g", value.to_f32.to_f64)
+        assign = AST::Assignment.new(
+            "pi",
+            AST::Literal.new(value),
+            type_annotation: AST::SimpleTypeExpression.new("float32")
+        )
+        call = AST::MethodCall.new("echo", [AST::Variable.new("pi")] of AST::Node)
+        statements = [] of AST::Node
+        statements << assign
+        statements << call
+        interpreter = evaluate_statements(statements)
+        interpreter.output.should eq("#{expected}\n")
+    end
+
     it "supports ee! for inline debug accumulation" do
         first = AST::DebugEcho.new(AST::Literal.new("Test Four..."), true)
         second = AST::DebugEcho.new(AST::Literal.new("done!"), true)

@@ -5,15 +5,25 @@ module Dragonstone
             getter body : NodeArray
             getter superclass : String?
             getter annotations : Array(Annotation)
+            getter visibility : Symbol
             @abstract : Bool
 
-            def initialize(name : String, body : NodeArray, superclass : String? = nil, is_abstract : Bool = false, annotations : Array(Annotation) = [] of Annotation, location : Location? = nil)
+            def initialize(
+                name : String,
+                body : NodeArray,
+                superclass : String? = nil,
+                is_abstract : Bool = false,
+                annotations : Array(Annotation) = [] of Annotation,
+                visibility : Symbol = :public,
+                location : Location? = nil
+            )
                 super(location: location)
                 @name = name
                 @body = body
                 @superclass = superclass
                 @abstract = is_abstract
                 @annotations = annotations
+                @visibility = visibility
             end
 
             def accept(visitor)
@@ -29,7 +39,8 @@ module Dragonstone
             end
 
             def to_source : String
-                header = abstract? ? "abstract class #{name}" : "class #{name}"
+                prefix = visibility == :public ? "" : "#{visibility} "
+                header = abstract? ? "#{prefix}abstract class #{name}" : "#{prefix}class #{name}"
                 header += " < #{superclass}" if superclass
                 body_source = body.map(&.to_source).join("; ")
                 if body_source.empty?

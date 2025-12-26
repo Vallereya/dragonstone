@@ -13,8 +13,8 @@
     jsdelivr.
 ]#
 
-use "test_use"
-use { divide } from "raise"
+use "./test_use"
+use { divide } from "./raise"
 
 use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
 use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"

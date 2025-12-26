@@ -1,0 +1,13 @@
+#[
+    JSON Standard Library for Dragonstone
+    
+    This module provides JSON parsing and serialization.
+]#
+
+use "modules/shared/json/proc/**"
+
+module JSON
+    extend self
+
+
+end

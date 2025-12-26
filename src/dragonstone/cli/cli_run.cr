@@ -17,6 +17,12 @@ module Dragonstone
             while idx < args.size
                 arg = args[idx]
 
+                if filename
+                    script_argv << arg
+                    idx += 1
+                    next
+                end
+
                 if arg == "--typed"
                     typed = true
 
@@ -40,11 +46,8 @@ module Dragonstone
                     stderr.puts "Unknown option: #{arg}"
                     return 1
 
-                elsif filename.nil?
-                    filename = arg
-
                 else
-                    script_argv << arg
+                    filename = arg
                 end
 
                 idx += 1
@@ -62,8 +65,9 @@ module Dragonstone
 
         def run_file(filename : String, stdout : IO, stderr : IO, typed : Bool = false, backend : BackendMode? = nil, argv : Array(String) = [] of String) : Int32
             begin
-                result = Dragonstone.run_file(filename, argv, log_to_stdout: false, typed: typed, backend: backend)
-                stdout.puts result.output
+                interactive = STDIN.tty? && stdout.object_id == STDOUT.object_id
+                result = Dragonstone.run_file(filename, argv, log_to_stdout: interactive, typed: typed, backend: backend)
+                stdout.puts result.output unless interactive
                 return 0
             rescue e : Dragonstone::Error
                 stderr.puts "ERROR: #{e.message}"

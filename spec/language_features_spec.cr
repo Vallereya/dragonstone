@@ -90,9 +90,183 @@ DS
         end
     end
 
+    it "allows visibility modifiers on bindings" do
+        source = <<-DS
+private con C = 1
+protected var x = 2
+public let y = 3
+public fix z = 4
+echo C
+echo x
+if true
+    echo y
+    echo z
+end
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "1\n2\n3\n4\n"
+    end
+
     it "supports Array#empty? in the native backend" do
         result = Dragonstone.run("echo argv.empty?\n", argv: ["one"])
         result.output.should eq "false\n"
+    end
+
+    it "exposes builtin IO streams in the native backend" do
+        source = <<-DS
+stdout.echo "Hello"
+stderr.echo "World"
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "Hello\nWorld\n"
+    end
+
+    it "exposes argc in the native backend" do
+        result = Dragonstone.run("echo argc\n", argv: ["one", "two"])
+        result.output.should eq "2\n"
+    end
+
+    it "supports argf.read in the native backend" do
+        tmp_dir = File.join(Dir.current, "tmp")
+        Dir.mkdir_p(tmp_dir)
+        path = File.join(tmp_dir, "argf_native.txt")
+        File.write(path, "ARGF_NATIVE")
+
+        result = Dragonstone.run("stdout.echo argf.read\n", argv: [path])
+        result.output.should eq "ARGF_NATIVE\n"
+    end
+
+    it "supports record declarations" do
+        source = <<-DS
+record Point
+    x
+    y
+end
+
+alpha = Point.new(1, 2)
+echo alpha.x
+echo alpha.y
+DS
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Native).output.should eq "1\n2\n"
+        Dragonstone.run(source, backend: Dragonstone::BackendMode::Core).output.should eq "1\n2\n"
+    end
+
+    it "supports typed record declarations" do
+        source = <<-DS
+#! typed
+record Person
+    name: str
+    age: int
+end
+
+bob = Person.new("Bob", 30)
+echo bob.age
+DS
+        Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Native).output.should eq "30\n"
+        Dragonstone.run(source, typed: true, backend: Dragonstone::BackendMode::Core).output.should eq "30\n"
+    end
+
+    it "imports modules without executing top-level statements" do
+        tmp_dir = File.join(Dir.current, "tmp", "use_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            lib_path = File.join(tmp_dir, "lib.ds")
+            File.write(lib_path, "echo \"SIDE_EFFECT\"\ncon MAGIC = 42\n")
+
+            entry = File.join(tmp_dir, "entry.ds")
+            File.write(entry, "use \"./lib\"\necho MAGIC\n")
+
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "42\n"
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "42\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
+    it "supports use globs for directories" do
+        tmp_dir = File.join(Dir.current, "tmp", "use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            mods_dir = File.join(tmp_dir, "mods")
+            FileUtils.mkdir_p(mods_dir)
+            File.write(File.join(mods_dir, "a.ds"), "con A = 1\n")
+            FileUtils.mkdir_p(File.join(mods_dir, "sub"))
+            File.write(File.join(mods_dir, "sub", "b.ds"), "con B = 2\n")
+
+            entry_star = File.join(tmp_dir, "entry_star.ds")
+            File.write(entry_star, "use \"./mods/*\"\necho A\necho B\n")
+            expect_raises(Dragonstone::NameError) do
+                Dragonstone.run_file(entry_star, backend: Dragonstone::BackendMode::Native)
+            end
+
+            entry_globstar = File.join(tmp_dir, "entry_globstar.ds")
+            File.write(entry_globstar, "use \"./mods/**\"\necho A\necho B\n")
+            Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Native).output.should eq "1\n2\n"
+            Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Core).output.should eq "1\n2\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
+    it "supports use globs inside stdlib modules" do
+        tmp_dir = File.join(Dir.current, "tmp", "stdlib_use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(tmp_dir)
+        begin
+            entry = File.join(tmp_dir, "entry.ds")
+            File.write(entry, "use \"unicode\"\necho UnicodeVersion\n")
+
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "17.0.0\n"
+            Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "17.0.0\n"
+        ensure
+            FileUtils.rm_rf(tmp_dir)
+        end
+    end
+
+    it "allows fun literals to see globals in the native backend" do
+        source = <<-DS
+x = 10
+f = fun() do
+    x
+end
+echo f.call()
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "10\n"
+    end
+
+    it "does not capture locals in fun literals in the native backend" do
+        source = <<-DS
+def maker
+    x = 1
+    fun() do
+        x
+    end
+end
+
+f = maker()
+echo f.call()
+DS
+        expect_raises(Dragonstone::NameError) do
+            Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        end
+    end
+
+    it "allows aliasing constant paths" do
+        source = <<-DS
+module Outer
+    class Inner
+        def greet
+            "hi"
+        end
+    end
+end
+
+alias AliasInner = Outer::Inner
+obj = AliasInner.new
+echo obj.greet
+DS
+        result = Dragonstone.run(source)
+        result.output.should eq "hi\n"
     end
 
     it "creates and uses para literals" do
@@ -236,6 +410,36 @@ echo num >> 1
 DS
         result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
         result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
+    end
+
+    it "supports stdout << output in the native backend" do
+        source = <<-DS
+stdout << "Hello"
+stdout << " "
+stdout << "World"
+stdout << "\\n"
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Native)
+        result.output.should eq "Hello World\n"
+    end
+
+    it "parses stdin >> var as assignment" do
+        source = "stdin >> name\n"
+        tokens = Dragonstone::Lexer.new(source).tokenize
+        ast = Dragonstone::Parser.new(tokens).parse
+
+        stmt = ast.statements.first
+        stmt.should be_a(Dragonstone::AST::Assignment)
+
+        assign = stmt.as(Dragonstone::AST::Assignment)
+        assign.name.should eq "name"
+        assign.operator.should be_nil
+
+        value = assign.value
+        value.should be_a(Dragonstone::AST::MethodCall)
+        call = value.as(Dragonstone::AST::MethodCall)
+        call.name.should eq "read"
+        call.receiver.should be_a(Dragonstone::AST::StdinExpression)
     end
 
     it "raises when super is used outside a method in the native backend" do

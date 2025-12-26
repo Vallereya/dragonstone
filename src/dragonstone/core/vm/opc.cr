@@ -102,5 +102,11 @@ module Dragonstone
         INVOKE_SUPER    = 98    # [INVOKE_SUPER, argc]                                      -> invoke superclass method of current callable
         INVOKE_SUPER_BLOCK = 99 # [INVOKE_SUPER_BLOCK, argc]                                -> invoke superclass method with explicit block
         POW             = 100   # POW                                                       -> pop rhs, pop lhs, push lhs ** rhs
+        LOAD_STDOUT     = 103   # LOAD_STDOUT                                               -> push builtin stdout stream
+        LOAD_STDERR     = 104   # LOAD_STDERR                                               -> push builtin stderr stream
+        LOAD_STDIN      = 105   # LOAD_STDIN                                                -> push builtin stdin stream
+        LOAD_ARGC       = 106   # LOAD_ARGC                                                 -> push argc integer
+        LOAD_ARGF       = 107   # LOAD_ARGF                                                 -> push builtin argf stream
+        MAKE_PARA       = 108   # [MAKE_PARA, signature_const, chunk_const]                 -> push capturing para literal
     end
 end

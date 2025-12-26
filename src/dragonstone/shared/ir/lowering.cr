@@ -44,6 +44,16 @@ module Dragonstone
                             true
                         when AST::ArgvExpression
                             true
+                        when AST::ArgcExpression
+                            true
+                        when AST::ArgfExpression
+                            true
+                        when AST::StdoutExpression
+                            true
+                        when AST::StderrExpression
+                            true
+                        when AST::StdinExpression
+                            true
                         when AST::Assignment
                             node_supported?(node.value)
                         when AST::AliasDefinition

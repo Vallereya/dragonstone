@@ -61,5 +61,13 @@ describe Dragonstone::IR do
                 parse_program("argv = 1")
             end
         end
+
+        it "rejects assignment to builtin IO keywords" do
+            %w[stdout stderr stdin argc argf].each do |name|
+                expect_raises(Dragonstone::ParserError) do
+                    parse_program("#{name} = 1")
+                end
+            end
+        end
     end
 end

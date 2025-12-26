@@ -63,8 +63,26 @@ module Dragonstone
         end
     end
 
+    class BuiltinStream
+        enum Kind
+            Stdout
+            Stderr
+        end
+
+        getter kind : Kind
+
+        def initialize(@kind : Kind)
+        end
+    end
+
+    class BuiltinStdin
+    end
+
+    class BuiltinArgf
+    end
+
     alias RangeValue = Range(Int64, Int64) | Range(Char, Char)
-    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue | MapValue | ::Dragonstone::Runtime::GC::Area(RuntimeValue) | ::Dragonstone::Runtime::GC::Host
+    alias RuntimeValue = Nil | Bool | Int32 | Int64 | Float32 | Float64 | String | Char | SymbolValue | Array(RuntimeValue) | TupleValue | NamedTupleValue | DragonModule | DragonClass | DragonInstance | Function | RangeValue | FFIModule | DragonEnumMember | RaisedException | BagConstructor | BagValue | MapValue | BuiltinStream | BuiltinStdin | BuiltinArgf | ::Dragonstone::Runtime::GC::Area(RuntimeValue) | ::Dragonstone::Runtime::GC::Host
 
     class TupleValue
         getter elements : Array(RuntimeValue)
@@ -286,6 +304,12 @@ module Dragonstone
             end
         end
 
+        def each_constant
+            @constants.each do |name, value|
+                yield name, value
+            end
+        end
+
         def constant?(name : String) : Bool
             @constants.has_key?(name)
         end
@@ -296,6 +320,25 @@ module Dragonstone
 
         def fetch_constant(name : String) : RuntimeValue
             @constants[name]
+        end
+
+        def merge_from!(other : DragonModule)
+            other.each_method do |name, method|
+                define_method(name, method.dup_with_owner(self))
+            end
+
+            other.each_constant do |name, value|
+                if constant?(name)
+                    existing = fetch_constant(name)
+                    if existing.is_a?(DragonModule) && value.is_a?(DragonModule)
+                        existing.as(DragonModule).merge_from!(value.as(DragonModule))
+                    else
+                        define_constant(name, value)
+                    end
+                else
+                    define_constant(name, value)
+                end
+            end
         end
     end
 

@@ -1,0 +1,60 @@
+#[
+
+    Colorize Module
+
+]#
+
+#[
+
+    Use this module to add color and style to
+    your terminal output.
+
+    <color> - The main class for colorizing text.
+    <on_color> - Methods for background colors.
+
+    <foreground_rgb> - Methods for custom foreground RGB colors.
+    <background_rgb> - Methods for custom background RGB colors.
+
+    <foreground_256> - Methods for 256-color foregrounds.
+    <background_256> - Methods for 256-color backgrounds.
+
+    <to_display> - Method to get the colorized string for display.
+
+    Colors:
+        <black>
+        <red>
+        <green>
+        <yellow>
+        <blue>
+        <magenta> 
+        <cyan>
+        <white>
+
+    Decorations:
+        <bold> - Makes text bold.
+        <dim> - Makes text dim.
+        <italic> - Italicizes the text.
+        <underline> - Underlines the text.
+        <blink> - Makes text blink.
+        <reverse> - Reverses foreground and background colors.
+        <hidden> - Hides the text.
+        <strikethrough> - Strikes through the text.
+
+]#
+
+use "colorize"
+
+# Basic Foreground Colors.
+echo Color.new("This is Red").red.to_display
+echo Color.new("This is Green").green.to_display
+
+# Text Decorations (Bold, Underline).
+echo Color.new("Underlined Warning").yellow.underline.to_display
+echo Color.new("Bold and Blue").blue.bold.to_display
+
+# Background Colors.
+echo Color.new(" Black Text on Yellow Background ").black.on_yellow.to_display
+
+# Custom RGB Colors (TrueColor).
+echo Color.new("Custom Pink (RGB)").foreground_rgb(255, 100, 200).to_display
+echo Color.new("Dragonstone!").foreground_rgb(84, 6, 213).to_display

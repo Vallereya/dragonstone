@@ -10,9 +10,39 @@ rescue File::NotFoundError
     false
 end
 
+private module LLVMIntegration
+    @@available : Bool? = nil
+
+    def self.available? : Bool
+        cached = @@available
+        return cached unless cached.nil?
+
+        @@available = begin
+            unless clang_available?
+                false
+            else
+                dir = File.join("dev", "build", "spec", "llvm_probe_#{Random::Secure.hex(8)}")
+                FileUtils.mkdir_p(dir)
+                begin
+                    source = File.join(dir, "probe.ds")
+                    File.write(source, "echo \"probe\"")
+
+                    stdout = IO::Memory.new
+                    stderr = IO::Memory.new
+                    status = Dragonstone::CLIBuild.build_command(["--target", "llvm", "--output", dir, source], stdout, stderr)
+                    binary = File.join(dir, "dragonstone_llvm#{Dragonstone::CLIBuild::EXECUTABLE_SUFFIX}")
+                    status == 0 && File.exists?(binary)
+                ensure
+                    FileUtils.rm_rf(dir)
+                end
+            end
+        end
+    end
+end
+
 describe Dragonstone::CLIBuild do
     it "links LLVM artifacts into an executable when clang is available" do
-        pending!("clang is not available; skipping LLVM linking integration test") unless clang_available?
+        pending!("LLVM toolchain not available; skipping LLVM linking integration test") unless LLVMIntegration.available?
 
         dir = File.join("dev", "build", "spec", "cli_llvm_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
@@ -32,7 +62,7 @@ describe Dragonstone::CLIBuild do
     end
 
     it "executes user-defined iterator methods that yield when clang is available" do
-        pending!("clang is not available; skipping LLVM iterator integration test") unless clang_available?
+        pending!("LLVM toolchain not available; skipping LLVM iterator integration test") unless LLVMIntegration.available?
 
         dir = File.join("dev", "build", "spec", "cli_llvm_iterator_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
@@ -73,7 +103,7 @@ DS
     end
 
     it "executes super calls when clang is available" do
-        pending!("clang is not available; skipping LLVM super integration test") unless clang_available?
+        pending!("LLVM toolchain not available; skipping LLVM super integration test") unless LLVMIntegration.available?
 
         dir = File.join("dev", "build", "spec", "cli_llvm_super_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
@@ -107,7 +137,7 @@ DS
     end
 
     it "executes overloaded operators when clang is available" do
-        pending!("clang is not available; skipping LLVM operator overloading integration test") unless clang_available?
+        pending!("LLVM toolchain not available; skipping LLVM operator overloading integration test") unless LLVMIntegration.available?
 
         dir = File.join("dev", "build", "spec", "cli_llvm_overloading_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
@@ -208,7 +238,7 @@ DS
     end
 
     it "executes boxed arithmetic inside loops when clang is available" do
-        pending!("clang is not available; skipping LLVM loop arithmetic integration test") unless clang_available?
+        pending!("LLVM toolchain not available; skipping LLVM loop arithmetic integration test") unless LLVMIntegration.available?
 
         dir = File.join("dev", "build", "spec", "cli_llvm_loop_arithmetic_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
@@ -236,6 +266,34 @@ DS
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
             stdout.to_s.should eq("15\n")
+        ensure
+            FileUtils.rm_rf(dir)
+        end
+    end
+
+    it "executes record declarations when clang is available" do
+        pending!("LLVM toolchain not available; skipping LLVM record integration test") unless LLVMIntegration.available?
+
+        dir = File.join("dev", "build", "spec", "cli_llvm_record_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(dir)
+        begin
+            source = File.join(dir, "record.ds")
+            File.write(source, <<-DS)
+record Point
+    x
+    y
+end
+
+alpha = Point.new(1, 2)
+echo alpha.x
+echo alpha.y
+DS
+
+            stdout = IO::Memory.new
+            stderr = IO::Memory.new
+            Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
+            stderr.to_s.should_not contain("ERROR:")
+            stdout.to_s.should eq("1\n2\n")
         ensure
             FileUtils.rm_rf(dir)
         end

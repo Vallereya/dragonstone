@@ -13,11 +13,21 @@ NUL
 
 # Ignore Dev Build Files, Directories, and Notes.
 dev/
-!dev/DEV_README.md
+!dev/README.md
 
 # Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
 bootstrap/
-!bootstrap/BOOTSTRAP_README.md
+!bootstrap/README.md
+
+# Unicode Data Files.
+src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
+!src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt
+!src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt
+
+src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc_data.c
+!src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
 
 # Ignore any Output/Build Cache from testing.
 cache
@@ -28,6 +38,7 @@ tmp
 tmp/
 .tmp
 .tmp/
+.crystal-cache
 
 # Ignore any IDE folders.
 .vscode

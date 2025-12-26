@@ -6,14 +6,24 @@ module Dragonstone
             getter value_name : String?
             getter value_type : TypeExpression?
             getter annotations : Array(Annotation)
+            getter visibility : Symbol
 
-            def initialize(name : String, members : Array(EnumMember), value_name : String? = nil, value_type : TypeExpression? = nil, annotations : Array(Annotation) = [] of Annotation, location : Location? = nil)
+            def initialize(
+                name : String,
+                members : Array(EnumMember),
+                value_name : String? = nil,
+                value_type : TypeExpression? = nil,
+                annotations : Array(Annotation) = [] of Annotation,
+                visibility : Symbol = :public,
+                location : Location? = nil
+            )
                 super(location: location)
                 @name = name
                 @members = members
                 @value_name = value_name
                 @value_type = value_type
                 @annotations = annotations
+                @visibility = visibility
             end
 
             def accept(visitor)
@@ -21,6 +31,7 @@ module Dragonstone
             end
 
            def to_source(io : IO)
+                io << "#{visibility} " unless visibility == :public
                 io << "enum " << name
                 if vn = value_name
                     io << "(" << vn

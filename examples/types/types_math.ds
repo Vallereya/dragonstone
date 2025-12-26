@@ -1,0 +1,16 @@
+a: float32 = 3.14159265358
+b: float64 = 3.14159265
+c: float = 3.141592653589793
+
+echo a
+echo b
+echo c
+
+
+x: int32 = 100
+y: int64 = 1000000000000
+z: int = 100000
+
+echo x
+echo y
+echo z

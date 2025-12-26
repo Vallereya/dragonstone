@@ -422,23 +422,48 @@ module Dragonstone
       "#{target.to_s.downcase} target"
     end
 
+    ABI_RUNTIME_SOURCES = [
+      "src/dragonstone/shared/runtime/abi/abi.c",
+      "src/dragonstone/shared/runtime/abi/std/std.c",
+      "src/dragonstone/shared/runtime/abi/std/io/io.c",
+      "src/dragonstone/shared/runtime/abi/std/file/file.c",
+      "src/dragonstone/shared/runtime/abi/std/path/path.c",
+      "src/dragonstone/shared/runtime/abi/platform/platform.c",
+      "src/dragonstone/shared/runtime/abi/platform/lib_c/lib_c.c",
+    ]
+
+    UTF8PROC_RUNTIME_SOURCE = "src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c"
+
     private def link_llvm_binary(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : String?
       ir_path = artifact.object_path
       return nil unless ir_path && File.exists?(ir_path)
-      runtime_obj = File.join(File.dirname(ir_path), "runtime_stub.o")
-      return nil unless compile_runtime_stub(runtime_obj, stdout, stderr)
+      runtime_objs = compile_runtime_stub(File.dirname(ir_path), stdout, stderr)
+      return nil unless runtime_objs
       binary_path = llvm_binary_path(ir_path)
-      return nil unless link_with_clang(ir_path, runtime_obj, binary_path, stdout, stderr)
+      return nil unless link_with_clang(ir_path, runtime_objs, binary_path, stdout, stderr)
       binary_path
     end
 
-    private def compile_runtime_stub(output_path : String, stdout : IO, stderr : IO) : Bool
-      args = ["-std=c11", "-c", LLVM_RUNTIME_STUB, "-o", output_path]
-      run_clang(args, stdout, stderr)
+    private def compile_runtime_stub(output_dir : String, stdout : IO, stderr : IO) : Array(String)?
+      sources = [LLVM_RUNTIME_STUB] + ABI_RUNTIME_SOURCES + [UTF8PROC_RUNTIME_SOURCE]
+      objects = [] of String
+
+      sources.each do |source|
+        basename = File.basename(source, ".c")
+        object_path = File.join(output_dir, "#{basename}.o")
+        args = ["-std=c11", "-c", source, "-o", object_path]
+        if source == UTF8PROC_RUNTIME_SOURCE
+          args << "-DUTF8PROC_STATIC"
+        end
+        return nil unless run_clang(args, stdout, stderr)
+        objects << object_path
+      end
+
+      objects
     end
 
-    private def link_with_clang(ir_path : String, runtime_obj : String, binary_path : String, stdout : IO, stderr : IO) : Bool
-      args = ["-Wno-override-module", ir_path, runtime_obj, "-o", binary_path]
+    private def link_with_clang(ir_path : String, runtime_objs : Array(String), binary_path : String, stdout : IO, stderr : IO) : Bool
+      args = ["-Wno-override-module", ir_path] + runtime_objs + ["-o", binary_path]
       {% if flag?(:linux) %}
         args << "-lm"
       {% end %}

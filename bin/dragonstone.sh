@@ -19,6 +19,16 @@ SOURCE_ENTRY="$PROJECT_ROOT/bin/dragonstone"
 
 VERSION_H="$PROJECT_ROOT/src/dragonstone/core/runtime/include/dragonstone/core/version.h"
 RESOURCE_OBJ="$SCRIPT_ROOT/resources/dragonstone.o"
+ABI_SRC_DIR="$PROJECT_ROOT/src/dragonstone/shared/runtime/abi"
+ABI_SOURCES=(
+  "$ABI_SRC_DIR/abi.c"
+  "$ABI_SRC_DIR/std/std.c"
+  "$ABI_SRC_DIR/std/io/io.c"
+  "$ABI_SRC_DIR/std/file/file.c"
+  "$ABI_SRC_DIR/std/path/path.c"
+  "$ABI_SRC_DIR/platform/platform.c"
+  "$ABI_SRC_DIR/platform/lib_c/lib_c.c"
+)
 
 mkdir -p "$BUILD_DIR"
 
@@ -71,7 +81,65 @@ needs_rebuild() {
   if [[ -d "$PROJECT_ROOT/src" ]] && find "$PROJECT_ROOT/src" -type f -newer "$EXE_PATH" -print -quit | grep -q .; then
     return 0
   fi
+  if [[ -d "$ABI_SRC_DIR" ]] && find "$ABI_SRC_DIR" -type f \( -name '*.c' -o -name '*.h' \) -newer "$EXE_PATH" -print -quit | grep -q .; then
+    return 0
+  fi
   return 1
+}
+
+pick_cc() {
+  local candidate
+  for candidate in clang gcc cc; do
+    if have "$candidate"; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+build_abi_objects() {
+  local cc
+  cc="$(pick_cc)" || die "C compiler not found (needed to build ABI)."
+  local ar_tool
+  if have ar; then
+    ar_tool="ar"
+  elif have llvm-ar; then
+    ar_tool="llvm-ar"
+  else
+    die "Archive tool not found (needed to build ABI library)."
+  fi
+  local obj_dir="$BUILD_DIR/abi"
+  mkdir -p "$obj_dir"
+  local objs=()
+  local src rel obj
+  for src in "${ABI_SOURCES[@]}"; do
+    [[ -f "$src" ]] || continue
+    rel="${src#$ABI_SRC_DIR/}"
+    obj="$obj_dir/${rel//\//_}"
+    obj="${obj%.c}.o"
+    if [[ ! -f "$obj" || "$src" -nt "$obj" ]]; then
+      "$cc" -std=c11 -O2 -c "$src" -o "$obj"
+    fi
+    objs+=("$obj")
+  done
+  local lib_path="$BUILD_DIR/libdragonstone_abi.a"
+  local rebuild_lib="false"
+  if [[ ! -f "$lib_path" ]]; then
+    rebuild_lib="true"
+  else
+    local obj
+    for obj in "${objs[@]}"; do
+      if [[ "$obj" -nt "$lib_path" ]]; then
+        rebuild_lib="true"
+        break
+      fi
+    done
+  fi
+  if [[ "$rebuild_lib" == "true" ]]; then
+    "$ar_tool" rcs "$lib_path" "${objs[@]}"
+  fi
+  printf '%s\n' "$lib_path"
 }
 
 build_dragonstone() {
@@ -86,7 +154,20 @@ build_dragonstone() {
 
   mkdir -p "$BUILD_DIR"
   echo "Building Dragonstone....."
-  crystal build "$SOURCE_ENTRY" -o "$EXE_PATH" --release
+  local abi_lib
+  abi_lib="$(build_abi_objects)"
+  local link_flags=()
+  if [[ -n "$abi_lib" ]]; then
+    link_flags+=("-L$BUILD_DIR")
+  fi
+  if [[ -f "$RESOURCE_OBJ" ]]; then
+    link_flags+=("$RESOURCE_OBJ")
+  fi
+  if [[ ${#link_flags[@]} -gt 0 ]]; then
+    crystal build "$SOURCE_ENTRY" -o "$EXE_PATH" --release --link-flags "${link_flags[*]}"
+  else
+    crystal build "$SOURCE_ENTRY" -o "$EXE_PATH" --release
+  fi
   echo "Dragonstone has successfully built!"
 }
 

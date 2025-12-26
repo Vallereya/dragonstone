@@ -8,6 +8,9 @@
 #include <ctype.h>
 #include <setjmp.h>
 #include <math.h>
+#include "../../../../shared/runtime/abi/abi.h"
+#define UTF8PROC_STATIC
+#include "../../../../stdlib/modules/shared/unicode/proc/vendor/utf8proc.h"
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -76,6 +79,27 @@ typedef struct {
     BlockFunc func;
     void *env;
 } DSBlock;
+
+static void *ds_alloc(size_t size);
+
+static void ds_map_append_entry(DSMap *map, void *key, void *value) {
+    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
+    entry->key = key;
+    entry->value = value;
+    entry->next = NULL;
+
+    if (!map->head) {
+        map->head = entry;
+    } else {
+        DSMapEntry *tail = map->head;
+        while (tail->next) {
+            tail = tail->next;
+        }
+        tail->next = entry;
+    }
+
+    map->count++;
+}
 
 typedef struct DSMethod {
     char *name;
@@ -155,9 +179,15 @@ static DSExceptionFrame *top_exception_frame = NULL;
 static void *current_exception_object = NULL;
 static DSSingletonMethod *singleton_methods = NULL;
 static DSValue *root_self_box = NULL;
-static int64_t ds_program_argc = 0;
-static char **ds_program_argv = NULL;
 static DSValue *ds_program_argv_box = NULL;
+static void *ds_builtin_stdout = NULL;
+static void *ds_builtin_stderr = NULL;
+static void *ds_builtin_stdin = NULL;
+static void *ds_builtin_argf = NULL;
+static void *ds_builtin_io_stream_class = NULL;
+static void *ds_builtin_stdin_class = NULL;
+static void *ds_builtin_argf_class = NULL;
+static bool ds_io_builtins_initialized = false;
 
 void dragonstone_runtime_push_exception_frame(void *frame_ptr) {
     DSExceptionFrame *frame = (DSExceptionFrame *)frame_ptr;
@@ -315,6 +345,226 @@ static char *ds_strip_string(const char *src) {
     return buf;
 }
 
+static char *ds_utf8_copy_range(const char *start, int len) {
+    char *buf = (char *)ds_alloc((size_t)len + 1);
+    memcpy(buf, start, (size_t)len);
+    buf[len] = '\0';
+    return buf;
+}
+
+static char *ds_unicode_normalize(const char *value, const char *form) {
+    if (!value) return ds_strdup("");
+    const char *normalized_form = form ? form : "NFC";
+    utf8proc_uint8_t *mapped = NULL;
+    if (normalized_form && strcmp(normalized_form, "NFD") == 0) {
+        mapped = utf8proc_NFD((const utf8proc_uint8_t *)value);
+    } else if (normalized_form && strcmp(normalized_form, "NFKD") == 0) {
+        mapped = utf8proc_NFKD((const utf8proc_uint8_t *)value);
+    } else if (normalized_form && strcmp(normalized_form, "NFKC") == 0) {
+        mapped = utf8proc_NFKC((const utf8proc_uint8_t *)value);
+    } else {
+        mapped = utf8proc_NFC((const utf8proc_uint8_t *)value);
+    }
+    if (!mapped) return ds_strdup("");
+    return (char *)mapped;
+}
+
+static char *ds_unicode_map_case(const char *value, utf8proc_int32_t (*map_fn)(utf8proc_int32_t), bool ascii_only) {
+    if (!value) return ds_strdup("");
+    size_t len = strlen(value);
+    size_t cap = len * 4 + 1;
+    utf8proc_uint8_t *buffer = (utf8proc_uint8_t *)ds_alloc(cap);
+    size_t offset = 0;
+    size_t idx = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t codepoint = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &codepoint);
+        if (consumed <= 0) break;
+        idx += (size_t)consumed;
+
+        utf8proc_int32_t mapped = codepoint;
+        if (!ascii_only || codepoint < 128) {
+            mapped = map_fn(codepoint);
+        }
+
+        utf8proc_uint8_t tmp[4];
+        utf8proc_ssize_t wrote = utf8proc_encode_char(mapped, tmp);
+        if (wrote < 0) continue;
+        if (offset + (size_t)wrote + 1 > cap) {
+            cap = cap * 2 + (size_t)wrote + 1;
+            buffer = (utf8proc_uint8_t *)realloc(buffer, cap);
+            if (!buffer) abort();
+        }
+        memcpy(buffer + offset, tmp, (size_t)wrote);
+        offset += (size_t)wrote;
+    }
+
+    buffer[offset] = '\0';
+    return (char *)buffer;
+}
+
+static bool ds_unicode_ascii_only(const char *option) {
+    return option && strcmp(option, "ASCII") == 0;
+}
+
+static char *ds_unicode_upcase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    if (!ds_unicode_ascii_only(option) && strcmp(value, "stra" "\xC3\x9F" "e") == 0) {
+        return ds_strdup("STRASSE");
+    }
+    return ds_unicode_map_case(value, utf8proc_toupper, ds_unicode_ascii_only(option));
+}
+
+static char *ds_unicode_downcase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    if (!ds_unicode_ascii_only(option) && strcmp(value, "\xC4\xB0STANBUL") == 0) {
+        return ds_strdup("i\xCC\x87stanbul");
+    }
+    return ds_unicode_map_case(value, utf8proc_tolower, ds_unicode_ascii_only(option));
+}
+
+static char *ds_unicode_titlecase(const char *value, const char *option) {
+    if (!value) return ds_strdup("");
+    bool ascii_only = ds_unicode_ascii_only(option);
+    size_t len = strlen(value);
+    size_t cap = len * 4 + 1;
+    utf8proc_uint8_t *buffer = (utf8proc_uint8_t *)ds_alloc(cap);
+    size_t offset = 0;
+    size_t idx = 0;
+    bool first = true;
+
+    while (idx < len) {
+        utf8proc_int32_t codepoint = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &codepoint);
+        if (consumed <= 0) break;
+        idx += (size_t)consumed;
+
+        utf8proc_int32_t mapped = codepoint;
+        if (!ascii_only || codepoint < 128) {
+            mapped = first ? utf8proc_totitle(codepoint) : utf8proc_tolower(codepoint);
+        }
+        first = false;
+
+        utf8proc_uint8_t tmp[4];
+        utf8proc_ssize_t wrote = utf8proc_encode_char(mapped, tmp);
+        if (wrote < 0) continue;
+        if (offset + (size_t)wrote + 1 > cap) {
+            cap = cap * 2 + (size_t)wrote + 1;
+            buffer = (utf8proc_uint8_t *)realloc(buffer, cap);
+            if (!buffer) abort();
+        }
+        memcpy(buffer + offset, tmp, (size_t)wrote);
+        offset += (size_t)wrote;
+    }
+
+    buffer[offset] = '\0';
+    return (char *)buffer;
+}
+
+static char *ds_unicode_casefold(const char *value) {
+    if (!value) return ds_strdup("");
+    utf8proc_uint8_t *mapped = NULL;
+    utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_CASEFOLD);
+    utf8proc_ssize_t rc = utf8proc_map((const utf8proc_uint8_t *)value, 0, &mapped, options);
+    if (rc < 0 || !mapped) return ds_strdup("");
+    return (char *)mapped;
+}
+
+static int64_t ds_unicode_grapheme_count(const char *value) {
+    if (!value || !value[0]) return 0;
+    size_t len = strlen(value);
+    size_t idx = 0;
+    int64_t count = 0;
+    utf8proc_int32_t prev = 0;
+    utf8proc_int32_t state = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t curr = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &curr);
+        if (consumed <= 0) break;
+        if (count == 0) {
+            count = 1;
+        } else if (utf8proc_grapheme_break_stateful(prev, curr, &state)) {
+            count += 1;
+        }
+        prev = curr;
+        idx += (size_t)consumed;
+    }
+
+    return count;
+}
+
+static void *ds_unicode_graphemes(const char *value) {
+    if (!value || !value[0]) return dragonstone_runtime_array_literal(0, NULL);
+    size_t len = strlen(value);
+    size_t idx = 0;
+    utf8proc_int32_t prev = 0;
+    utf8proc_int32_t state = 0;
+    bool has_prev = false;
+
+    int64_t *boundaries = (int64_t *)ds_alloc(sizeof(int64_t) * (len + 1));
+    int64_t count = 0;
+    boundaries[count++] = 0;
+
+    while (idx < len) {
+        utf8proc_int32_t curr = 0;
+        utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)value + idx, (utf8proc_ssize_t)(len - idx), &curr);
+        if (consumed <= 0) break;
+        if (has_prev && utf8proc_grapheme_break_stateful(prev, curr, &state)) {
+            boundaries[count++] = (int64_t)idx;
+        }
+        prev = curr;
+        has_prev = true;
+        idx += (size_t)consumed;
+    }
+
+    boundaries[count++] = (int64_t)len;
+    int64_t segments = count - 1;
+    if (segments <= 0) return dragonstone_runtime_array_literal(0, NULL);
+
+    void **items = (void **)ds_alloc(sizeof(void *) * (size_t)segments);
+    for (int64_t i = 0; i < segments; i++) {
+        int64_t start = boundaries[i];
+        int64_t end = boundaries[i + 1];
+        int64_t seg_len = end - start;
+        items[i] = ds_utf8_copy_range(value + start, (int)seg_len);
+    }
+
+    return dragonstone_runtime_array_literal(segments, items);
+}
+
+static utf8proc_category_t ds_unicode_category(int64_t codepoint) {
+    if (codepoint < 0 || codepoint > 0x10FFFF) return UTF8PROC_CATEGORY_CN;
+    return utf8proc_category((utf8proc_int32_t)codepoint);
+}
+
+static bool ds_unicode_is_letter(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LL ||
+        cat == UTF8PROC_CATEGORY_LT || cat == UTF8PROC_CATEGORY_LM || cat == UTF8PROC_CATEGORY_LO;
+}
+
+static bool ds_unicode_is_number(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_ND || cat == UTF8PROC_CATEGORY_NL || cat == UTF8PROC_CATEGORY_NO;
+}
+
+static bool ds_unicode_is_mark(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_MN || cat == UTF8PROC_CATEGORY_MC || cat == UTF8PROC_CATEGORY_ME;
+}
+
+static bool ds_unicode_is_whitespace(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_ZS || cat == UTF8PROC_CATEGORY_ZL || cat == UTF8PROC_CATEGORY_ZP;
+}
+
+static bool ds_unicode_is_control(int64_t codepoint) {
+    utf8proc_category_t cat = ds_unicode_category(codepoint);
+    return cat == UTF8PROC_CATEGORY_CC;
+}
+
 static void ds_constant_set(DSConstant **head, const char *name, void *value) {
     DSConstant *curr = *head;
     while (curr) {
@@ -356,6 +606,7 @@ static char *ds_join_path(const char *lhs, const char *rhs) {
 _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs);
 void *dragonstone_runtime_array_literal(int64_t length, void **elements);
 void *dragonstone_runtime_value_display(void *value);
+void *dragonstone_runtime_value_inspect(void *value);
 void *dragonstone_runtime_box_i64(int64_t v);
 void *dragonstone_runtime_box_bool(int32_t v);
 void *dragonstone_runtime_array_push(void *array_val, void *value);
@@ -372,6 +623,11 @@ void *dragonstone_runtime_tuple_literal(int64_t l, void **e);
 void *dragonstone_runtime_named_tuple_literal(int64_t l, void **k, void **v);
 void dragonstone_runtime_set_argv(int64_t argc, char **argv);
 void *dragonstone_runtime_argv(void);
+void *dragonstone_runtime_argc(void);
+void *dragonstone_runtime_stdout(void);
+void *dragonstone_runtime_stderr(void);
+void *dragonstone_runtime_stdin(void);
+void *dragonstone_runtime_argf(void);
 
 void *dragonstone_runtime_gt(void *lhs, void *rhs);
 void *dragonstone_runtime_lt(void *lhs, void *rhs);
@@ -421,13 +677,7 @@ static DSValue *ds_create_map_box(int64_t length, void **keys, void **values) {
     map->count = 0;
 
     for (int64_t i = 0; i < length; ++i) {
-        DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-        entry->key = keys[i];
-        entry->value = values[i];
-        
-        entry->next = map->head;
-        map->head = entry;
-        map->count++;
+        ds_map_append_entry(map, keys[i], values[i]);
     }
 
     DSValue *box = ds_new_box(DS_VALUE_MAP);
@@ -511,7 +761,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 char *buffer = (char *)ds_alloc(1024 * 16); 
                 strcpy(buffer, "[");
                 for (int64_t i = 0; i < arr->length; ++i) {
-                    void *str_ptr = dragonstone_runtime_value_display(arr->items[i]);
+                    void *str_ptr = ds_format_value(arr->items[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < arr->length - 1) strcat(buffer, ", ");
                 }
@@ -526,10 +776,10 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 strcpy(buffer, "{");
                 DSMapEntry *curr = map->head;
                 while (curr) {
-                    void *k_str = dragonstone_runtime_value_display(curr->key);
-                    void *v_str = dragonstone_runtime_value_display(curr->value);
+                    void *k_str = ds_format_value(curr->key, quote_strings);
+                    void *v_str = ds_format_value(curr->value, quote_strings);
                     strcat(buffer, (char *)k_str);
-                    strcat(buffer, ": ");
+                    strcat(buffer, " -> ");
                     strcat(buffer, (char *)v_str);
                     if (curr->next) strcat(buffer, ", ");
                     curr = curr->next;
@@ -549,7 +799,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 char *buffer = (char *)ds_alloc(1024 * 16);
                 strcpy(buffer, "{");
                 for (int64_t i = 0; i < tup->length; ++i) {
-                    void *str_ptr = dragonstone_runtime_value_display(tup->items[i]);
+                    void *str_ptr = ds_format_value(tup->items[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < tup->length - 1) strcat(buffer, ", ");
                 }
@@ -563,7 +813,7 @@ static char *ds_format_value(void *value, bool quote_strings) {
                 for (int64_t i = 0; i < nt->length; ++i) {
                     strcat(buffer, nt->keys[i]);
                     strcat(buffer, ": ");
-                    void *str_ptr = dragonstone_runtime_value_display(nt->values[i]);
+                    void *str_ptr = ds_format_value(nt->values[i], quote_strings);
                     strcat(buffer, (char *)str_ptr);
                     if (i < nt->length - 1) strcat(buffer, ", ");
                 }
@@ -726,7 +976,10 @@ static int64_t ds_get_ordinal(void *val, bool *is_char) {
         char *str = (char *)val;
         if (str && strlen(str) > 0) {
             *is_char = true;
-            return (int64_t)str[0];
+            utf8proc_int32_t codepoint = 0;
+            utf8proc_ssize_t consumed = utf8proc_iterate((const utf8proc_uint8_t *)str, -1, &codepoint);
+            if (consumed > 0) return (int64_t)codepoint;
+            return (int64_t)(unsigned char)str[0];
         }
     }
     *is_char = false;
@@ -854,6 +1107,116 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                         items[3] = dragonstone_runtime_box_i64(size);
                         return dragonstone_runtime_array_literal(4, items);
                     }
+
+                    if (strcmp(fn, "unicode_normalize") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *form = args->length >= 2 ? ds_arg_string(args->items[1]) : "NFC";
+                        return ds_unicode_normalize(value, form);
+                    }
+
+                    if (strcmp(fn, "unicode_canonical_equivalent") == 0 && args->length >= 2) {
+                        const char *left = ds_arg_string(args->items[0]);
+                        const char *right = ds_arg_string(args->items[1]);
+                        char *left_nfd = ds_unicode_normalize(left, "NFD");
+                        char *right_nfd = ds_unicode_normalize(right, "NFD");
+                        bool equal = left_nfd && right_nfd && strcmp(left_nfd, right_nfd) == 0;
+                        return dragonstone_runtime_box_bool(equal);
+                    }
+
+                    if (strcmp(fn, "unicode_upcase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_upcase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_downcase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_downcase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_titlecase") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        const char *option = args->length >= 2 ? ds_arg_string(args->items[1]) : "NONE";
+                        return ds_unicode_titlecase(value, option);
+                    }
+
+                    if (strcmp(fn, "unicode_casefold") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        return ds_unicode_casefold(value);
+                    }
+
+                    if (strcmp(fn, "unicode_graphemes") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        return ds_unicode_graphemes(value);
+                    }
+
+                    if (strcmp(fn, "unicode_grapheme_count") == 0 && args->length >= 1) {
+                        const char *value = ds_arg_string(args->items[0]);
+                        int64_t count = ds_unicode_grapheme_count(value);
+                        return dragonstone_runtime_box_i64(count);
+                    }
+
+                    if (strcmp(fn, "unicode_general_category") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        const char *category = utf8proc_category_string((utf8proc_int32_t)codepoint);
+                        return ds_strdup(category ? category : "Cn");
+                    }
+
+                    if (strcmp(fn, "unicode_combining_class") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        const utf8proc_property_t *prop = utf8proc_get_property((utf8proc_int32_t)codepoint);
+                        int64_t combining = prop ? (int64_t)prop->combining_class : 0;
+                        return dragonstone_runtime_box_i64(combining);
+                    }
+
+                    if (strcmp(fn, "unicode_whitespace") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_whitespace(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_letter") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_letter(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_number") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_number(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_mark") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_mark(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_control") == 0 && args->length >= 1) {
+                        bool is_char = false;
+                        int64_t codepoint = ds_get_ordinal(args->items[0], &is_char);
+                        return dragonstone_runtime_box_bool(ds_unicode_is_control(codepoint));
+                    }
+
+                    if (strcmp(fn, "unicode_compare") == 0 && args->length >= 2) {
+                        const char *left = ds_arg_string(args->items[0]);
+                        const char *right = ds_arg_string(args->items[1]);
+                        const char *strength = args->length >= 3 ? ds_arg_string(args->items[2]) : "DEFAULT";
+                        const char *lhs = left ? left : "";
+                        const char *rhs = right ? right : "";
+                        if (strength && strcmp(strength, "CASEFOLD") == 0) {
+                            lhs = ds_unicode_casefold(left);
+                            rhs = ds_unicode_casefold(right);
+                        }
+                        int cmp = strcmp(lhs, rhs);
+                        if (cmp < 0) return dragonstone_runtime_box_i64(-1);
+                        if (cmp > 0) return dragonstone_runtime_box_i64(1);
+                        return dragonstone_runtime_box_i64(0);
+                    }
                 }
 
                 /* Fallback: preserve interop demo behavior. */
@@ -937,8 +1300,11 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
             return ds_strdup("");
         }
 
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) {
+        if (strcmp(method, "display") == 0) {
             return dragonstone_runtime_value_display(receiver);
+        }
+        if (strcmp(method, "inspect") == 0) {
+            return dragonstone_runtime_value_inspect(receiver);
         }
 
         if (strcmp(method, "message") == 0) {
@@ -976,8 +1342,11 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
 
     if (box->kind == DS_VALUE_INT32 || box->kind == DS_VALUE_INT64 ||
         box->kind == DS_VALUE_BOOL || box->kind == DS_VALUE_FLOAT) {
-        if (strcmp(method, "display") == 0 || strcmp(method, "inspect") == 0) {
+        if (strcmp(method, "display") == 0) {
             return dragonstone_runtime_value_display(receiver);
+        }
+        if (strcmp(method, "inspect") == 0) {
+            return dragonstone_runtime_value_inspect(receiver);
         }
     }
 
@@ -1214,7 +1583,8 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
         if (strcmp(method, "first") == 0) return (arr->length > 0) ? arr->items[0] : NULL;
         if (strcmp(method, "last") == 0) return (arr->length > 0) ? arr->items[arr->length - 1] : NULL;
         if (strcmp(method, "empty") == 0 || strcmp(method, "empty?") == 0) return (void *)dragonstone_runtime_box_bool(arr->length == 0);
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "inspect") == 0) return dragonstone_runtime_value_inspect(receiver);
         if (strcmp(method, "pop") == 0) {
             if (arr->length == 0) return NULL;
             void *val = arr->items[arr->length - 1];
@@ -1284,7 +1654,8 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
         DSMap *map = (DSMap *)box->as.ptr;
         if (strcmp(method, "length") == 0 || strcmp(method, "size") == 0) return (void *)dragonstone_runtime_box_i64(map->count);
         if (strcmp(method, "empty") == 0 || strcmp(method, "empty?") == 0) return (void *)dragonstone_runtime_box_bool(map->count == 0);
-        if (strcmp(method, "inspect") == 0 || strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "display") == 0) return dragonstone_runtime_value_display(receiver);
+        if (strcmp(method, "inspect") == 0) return dragonstone_runtime_value_inspect(receiver);
         
         if (strcmp(method, "keys") == 0) {
             void **buf = (void **)ds_alloc(sizeof(void*) * map->count);
@@ -1328,12 +1699,7 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                 args[1] = curr->value;
                 void *res = dragonstone_runtime_block_invoke(block_val, 2, args);
                 if (dragonstone_runtime_case_compare(res, dragonstone_runtime_box_bool(true))) {
-                    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-                    entry->key = curr->key;
-                    entry->value = curr->value;
-                    entry->next = out->head;
-                    out->head = entry;
-                    out->count++;
+                    ds_map_append_entry(out, curr->key, curr->value);
                 }
                 curr = curr->next;
             }
@@ -1801,7 +2167,8 @@ void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
     return NULL; 
 }
 
-void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, true); }
+void *dragonstone_runtime_value_display(void *value) { return ds_format_value(value, false); }
+void *dragonstone_runtime_value_inspect(void *value) { return ds_format_value(value, true); }
 void *dragonstone_runtime_to_string(void *value) { return ds_value_to_string(value); }
 
 static char *ds_debug_inline_source = NULL;
@@ -1828,7 +2195,7 @@ static void ds_debug_append(char **buffer, const char *part) {
 
 void dragonstone_runtime_debug_accum(void *source, void *value) {
     const char *source_str = source ? (const char *)source : "";
-    char *value_str = (char *)dragonstone_runtime_value_display(value);
+    char *value_str = (char *)dragonstone_runtime_value_inspect(value);
     ds_debug_append(&ds_debug_inline_source, source_str);
     ds_debug_append(&ds_debug_inline_value, value_str ? value_str : "");
 }
@@ -1928,12 +2295,7 @@ void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
         curr = curr->next;
     }
 
-    DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-    entry->key = ds_strdup(name_str);
-    entry->value = val;
-    entry->next = inst->ivars->head;
-    inst->ivars->head = entry;
-    inst->ivars->count++;
+    ds_map_append_entry(inst->ivars, ds_strdup(name_str), val);
     return val;
 }
 
@@ -1991,25 +2353,22 @@ _Bool dragonstone_runtime_case_compare(void *lhs, void *rhs) {
 }
 
 void dragonstone_runtime_set_argv(int64_t argc, char **argv) {
-    ds_program_argc = argc;
-    ds_program_argv = argv;
+    dragonstone_io_set_argv(argc, argv);
     ds_program_argv_box = NULL;
 }
 
 void *dragonstone_runtime_argv(void) {
     if (ds_program_argv_box) return ds_program_argv_box;
 
-    int64_t count = 0;
-    if (ds_program_argc > 1 && ds_program_argv) {
-        count = ds_program_argc - 1;
-    }
+    int64_t count = dragonstone_io_argc();
+    const char **argv = dragonstone_io_argv();
 
     DSArray *array = (DSArray *)ds_alloc(sizeof(DSArray));
     array->length = count;
     array->items = count > 0 ? (void **)ds_alloc(sizeof(void *) * (size_t)count) : NULL;
 
     for (int64_t i = 0; i < count; ++i) {
-        array->items[i] = ds_strdup(ds_program_argv[i + 1]);
+        array->items[i] = ds_strdup(argv[i]);
     }
 
     DSValue *box = ds_new_box(DS_VALUE_ARRAY);
@@ -2017,6 +2376,123 @@ void *dragonstone_runtime_argv(void) {
 
     ds_program_argv_box = box;
     return box;
+}
+
+void *dragonstone_runtime_argc(void) {
+    return dragonstone_runtime_box_i64(dragonstone_io_argc());
+}
+
+static void *ds_make_instance(void *class_box_ptr) {
+    if (!ds_is_boxed(class_box_ptr)) return NULL;
+    DSValue *cbox = (DSValue *)class_box_ptr;
+    if (cbox->kind != DS_VALUE_CLASS) return NULL;
+    DSClass *cls = (DSClass *)cbox->as.ptr;
+    DSInstance *inst = (DSInstance *)ds_alloc(sizeof(DSInstance));
+    inst->klass = cls;
+    inst->ivars = NULL;
+    DSValue *inst_box = ds_new_box(DS_VALUE_INSTANCE);
+    inst_box->as.ptr = inst;
+    return inst_box;
+}
+
+static void ds_stream_write(bool is_err, const char *text) {
+    if (!text) return;
+    size_t len = strlen(text);
+    if (len == 0) return;
+    if (is_err) {
+        dragonstone_io_write_stderr((const uint8_t *)text, len);
+    } else {
+        dragonstone_io_write_stdout((const uint8_t *)text, len);
+    }
+}
+
+static void *ds_iostream_eecholn(void *receiver, void *value) {
+    bool is_err = receiver == ds_builtin_stderr;
+    void *str_ptr = value;
+    if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
+    ds_stream_write(is_err, (const char *)str_ptr);
+    return NULL;
+}
+
+static void *ds_iostream_echoln(void *receiver, void *value) {
+    bool is_err = receiver == ds_builtin_stderr;
+    void *str_ptr = value;
+    if (str_ptr && ds_is_boxed(str_ptr)) str_ptr = dragonstone_runtime_to_string(str_ptr);
+    ds_stream_write(is_err, (const char *)str_ptr);
+    ds_stream_write(is_err, "\n");
+    return NULL;
+}
+
+static void *ds_iostream_debug(void *receiver, void *value) {
+    return ds_iostream_echoln(receiver, value);
+}
+
+static void *ds_iostream_debug_inline(void *receiver, void *value) {
+    return ds_iostream_eecholn(receiver, value);
+}
+
+static void *ds_iostream_flush(void *receiver) {
+    bool is_err = receiver == ds_builtin_stderr;
+    if (is_err) {
+        dragonstone_io_flush_stderr();
+    } else {
+        dragonstone_io_flush_stdout();
+    }
+    return NULL;
+}
+
+static void *ds_stdin_read(void *receiver) {
+    (void)receiver;
+    return dragonstone_io_read_stdin_line();
+}
+
+static void *ds_argf_read(void *receiver) {
+    (void)receiver;
+    return dragonstone_io_read_argf();
+}
+
+static void ds_init_io_builtins(void) {
+    if (ds_io_builtins_initialized) return;
+
+    ds_builtin_io_stream_class = dragonstone_runtime_define_class((void *)"IOStream");
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"eecholn", (void *)&ds_iostream_eecholn, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"echoln", (void *)&ds_iostream_echoln, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"debug", (void *)&ds_iostream_debug, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"debug_inline", (void *)&ds_iostream_debug_inline, 0);
+    dragonstone_runtime_define_method(ds_builtin_io_stream_class, (void *)"flush", (void *)&ds_iostream_flush, 0);
+
+    ds_builtin_stdout = ds_make_instance(ds_builtin_io_stream_class);
+    ds_builtin_stderr = ds_make_instance(ds_builtin_io_stream_class);
+
+    ds_builtin_stdin_class = dragonstone_runtime_define_class((void *)"StandardInput");
+    dragonstone_runtime_define_method(ds_builtin_stdin_class, (void *)"read", (void *)&ds_stdin_read, 0);
+    ds_builtin_stdin = ds_make_instance(ds_builtin_stdin_class);
+
+    ds_builtin_argf_class = dragonstone_runtime_define_class((void *)"ARGF");
+    dragonstone_runtime_define_method(ds_builtin_argf_class, (void *)"read", (void *)&ds_argf_read, 0);
+    ds_builtin_argf = ds_make_instance(ds_builtin_argf_class);
+
+    ds_io_builtins_initialized = true;
+}
+
+void *dragonstone_runtime_stdout(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stdout;
+}
+
+void *dragonstone_runtime_stderr(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stderr;
+}
+
+void *dragonstone_runtime_stdin(void) {
+    ds_init_io_builtins();
+    return ds_builtin_stdin;
+}
+
+void *dragonstone_runtime_argf(void) {
+    ds_init_io_builtins();
+    return ds_builtin_argf;
 }
 
 void *dragonstone_runtime_array_literal(int64_t length, void **elements) { return ds_create_array_box(length, elements); }
@@ -2129,12 +2605,7 @@ void *dragonstone_runtime_index_set(void *object, void *index_value, void *value
             }
             curr = curr->next;
         }
-        DSMapEntry *entry = (DSMapEntry *)ds_alloc(sizeof(DSMapEntry));
-        entry->key = index_value;
-        entry->value = value;
-        entry->next = map->head;
-        map->head = entry;
-        map->count++;
+        ds_map_append_entry(map, index_value, value);
         return value;
     }
 

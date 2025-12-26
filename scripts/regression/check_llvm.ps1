@@ -41,6 +41,7 @@ $files = @(
     ".\examples\collections\arrays.ds",
     ".\examples\collections\map.ds",
     ".\examples\collections\struct.ds",
+    ".\examples\collections\record.ds",
     ".\examples\collections\tuple.ds",
     ".\examples\collections\enum.ds",
     ".\examples\collections\range.ds",

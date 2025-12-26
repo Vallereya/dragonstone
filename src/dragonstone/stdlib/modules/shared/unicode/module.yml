@@ -1,0 +1,3 @@
+name: unicode
+entry: module.ds
+requires: shared

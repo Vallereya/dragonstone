@@ -1,0 +1,276 @@
+#[
+    `Colorize` Module is for colorizing text output in the terminal. It
+    adds ANSI escape codes to strings to change their color and style when 
+    printed to a terminal that supports ANSI codes.
+
+    This is inspired by similar libraries, `Colorize` and `Paint` gems in
+    Ruby, `rainbow` in Node.js, `Colorize` stdlib from Crystal, and 
+    `colorama` in Python, among others, and adapted for Dragonstone.
+]#
+
+use "strings_build"
+use "file_utilities"
+
+module Colorize
+    extend self
+
+    # Module-level state for enabling/disabling colors.
+    # Defaults to checking basic ENV vars via FFI
+    def enabled? -> bool
+        #! Forcibly enable for now until we have FFI support.
+        return true
+
+        # Simple check: if NO_COLOR is set, disable. 
+        # Ideally this checks TTY, but we use ENV for now.
+        #! COMMENTED OUT FOR NOW - NEED FFI SUPPORT
+        # no_color = ffi.call_crystal("ENV.[]?", ["NO_COLOR"])
+        # term = ffi.call_crystal("ENV.[]?", ["TERM"])
+        
+        # if no_color != nil && no_color != ""
+        #     return false
+        # end
+        
+        # if term == "dumb"
+        #     return false
+        # end
+
+        # true
+    end
+
+    # Helper to start a colorize chain on an empty string.
+    def with_color -> Object
+        Object.new("")
+    end
+
+    # RGB Color Wrapper.
+    class ColorRGB
+        def initialize(r: int, g: int, b: int)
+            @r = r
+            @g = g
+            @b = b
+        end
+
+        def foreground -> str
+            "38;2;" + @r + ";" + @g + ";" + @b
+        end
+
+        def background -> str
+            "48;2;" + @r + ";" + @g + ";" + @b
+        end
+    end
+
+    # 256-Color Wrapper.
+    class Color256
+        def initialize(val: int)
+            @val = val
+        end
+
+        def foreground -> str
+            "38;5;" + @val
+        end
+
+        def background -> str
+            "48;5;" + @val
+        end
+    end
+
+    # Main wrapper class that holds color state.
+    class Object
+        con COLOR_DEFAULT = 39
+        con COLOR_BLACK   = 30
+        con COLOR_RED     = 31
+        con COLOR_GREEN   = 32
+        con COLOR_YELLOW  = 33
+        con COLOR_BLUE    = 34
+        con COLOR_MAGENTA = 35
+        con COLOR_CYAN    = 36
+        con COLOR_WHITE   = 97
+
+        def initialize(obj: any)
+            @object = obj
+            @foreground = "39"
+            @background = "49"
+            @modes = [] as int
+        end
+
+        # FOREGROUND COLORS
+        def black
+            @foreground = "30"
+            self
+        end
+
+        def red
+            @foreground = "31"
+            self
+        end
+
+        def green
+            @foreground = "32"
+            self
+        end
+
+        def yellow
+            @foreground = "33"
+            self
+        end
+
+        def blue
+            @foreground = "34"
+            self
+        end
+
+        def magenta
+            @foreground = "35"
+            self
+        end
+
+        def cyan
+            @foreground = "36"
+            self
+        end
+
+        def white
+            @foreground = "97"
+            self
+        end
+
+        def default
+            @foreground = "39"
+            self
+        end
+
+        # BACKGROUND COLORS
+        def on_black
+            @background = "40"
+            self
+        end
+
+        def on_red
+            @background = "41"
+            self
+        end
+
+        def on_green
+            @background = "42"
+            self
+        end
+
+        def on_yellow
+            @background = "43"
+            self
+        end
+
+        def on_blue
+            @background = "44"
+            self
+        end
+
+        def on_magenta
+            @background = "45"
+            self
+        end
+
+        def on_cyan
+            @background = "46"
+            self
+        end
+        
+        def on_white
+            @background = "107"
+            self
+        end
+
+        # ADVANCED COLORS
+        def foreground_rgb(r: int, g: int, b: int)
+            @foreground = Colorize::ColorRGB.new(r, g, b).foreground
+            self
+        end
+
+        def background_rgb(r: int, g: int, b: int)
+            @background = Colorize::ColorRGB.new(r, g, b).background
+            self
+        end
+
+        def foreground_256(val: int)
+            @foreground = Colorize::Color256.new(val).foreground
+            self
+        end
+
+        def background_256(val: int)
+            @background = Colorize::Color256.new(val).background
+            self
+        end
+
+        # DECORATIONS
+        def bold
+            add_mode(1)
+        end
+
+        def dim
+            add_mode(2)
+        end
+
+        def italic
+            add_mode(3)
+        end
+
+        def underline
+            add_mode(4)
+        end
+
+        def blink
+            add_mode(5)
+        end
+
+        def reverse
+            add_mode(7)
+        end
+
+        def hidden
+            add_mode(8)
+        end
+
+        def strikethrough
+            add_mode(9)
+        end
+
+        private def add_mode(m: int)
+            @modes.push(m)
+            self
+        end
+
+        # OUTPUT
+        def to_display -> str
+            if !Colorize.enabled?
+                return "" + @object
+            end
+
+            # Build the string step-by-step to avoid interpreter issues.
+            
+            # Start.
+            res = "\x1b[" 
+            
+            # Add Colors.
+            res = res + @foreground
+            res = res + ";"
+            res = res + @background
+
+            # Add Modes (manual loop).
+            i = 0
+            len = @modes.length()
+            while i < len
+                val = @modes[i]
+                res = res + ";" + val
+                i = i + 1
+            end
+
+            # Finish setup and add content.
+            res = res + "m"
+            res = res + @object
+            
+            # Reset.
+            res = res + "\x1b[0m"
+            return res
+        end
+    end
+end

@@ -1,0 +1,13 @@
+#[
+    YAML Standard Library for Dragonstone
+    
+    This module provides YAML parsing and serialization.
+]#
+
+use "modules/shared/yaml/proc/**"
+
+module YAML
+    extend self
+
+
+end

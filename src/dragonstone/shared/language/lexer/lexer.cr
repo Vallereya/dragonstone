@@ -1,11 +1,10 @@
 # ---------------------------------
 # ------------- Lexer -------------
 # ---------------------------------
-require "unicode"
-require "string/grapheme"
 require "../resolver/encoding"
 require "../diagnostics/errors"
 require "../../runtime/symbol"
+require "./xid"
 
 module Dragonstone
     alias TokenValue = Nil | Bool | Int64 | Float64 | String | Char | SymbolValue | Array(Tuple(Symbol, String))
@@ -50,6 +49,11 @@ module Dragonstone
             eecho
             puts 
             argv
+            argc
+            argf
+            stdin
+            stdout
+            stderr
             if 
             else 
             elsif 
@@ -62,8 +66,11 @@ module Dragonstone
             fun 
             function
             abstract
+            abs
             module 
+            mod
             class 
+            cls
             return 
             true 
             false 
@@ -88,6 +95,7 @@ module Dragonstone
             use
             from
             as
+            public
             private
             protected
             getter
@@ -96,6 +104,7 @@ module Dragonstone
             property
             enum
             struct
+            record
             alias
             extend
             with
@@ -580,6 +589,11 @@ module Dragonstone
                     when "echo", "puts" then :ECHO
                     when "eecho" then :EECHO
                     when "argv" then :ARGV
+                    when "argc" then :ARGC
+                    when "argf" then :ARGF
+                    when "stdin" then :STDIN
+                    when "stdout" then :STDOUT
+                    when "stderr" then :STDERR
                     when "if" then :IF
                     when "else" then :ELSE
                     when "elsif", "elseif" then :ELSIF
@@ -588,9 +602,9 @@ module Dragonstone
                     when "do" then :DO
                     when "def", "define" then :DEF
                     when "fun", "function" then :FUN
-                    when "abstract" then :ABSTRACT
-                    when "module" then :MODULE
-                    when "class" then :CLASS
+                    when "abstract", "abs" then :ABSTRACT
+                    when "module", "mod" then :MODULE
+                    when "class", "cls" then :CLASS
                     when "return" then :RETURN
                     when "typeof" then :TYPEOF
                     when "con" then :CON
@@ -612,6 +626,7 @@ module Dragonstone
                     when "use" then :USE
                     when "from" then :FROM
                     when "as" then :AS
+                    when "public" then :PUBLIC
                     when "private" then :PRIVATE
                     when "protected" then :PROTECTED
                     when "getter" then :GETTER
@@ -620,6 +635,7 @@ module Dragonstone
                     when "property" then :PROPERTY
                     when "enum" then :ENUM
                     when "struct" then :STRUCT
+                    when "record" then :RECORD
                     when "alias" then :ALIAS
                     when "extend" then :EXTEND
                     when "with" then :WITH
@@ -768,25 +784,25 @@ module Dragonstone
         end
 
         private def identifier_start?(char : Char) : Bool
-            char.ascii_letter? || char == '_' || unicode_identifier_start?(char)
+            char == '_' || char.ascii_letter? || UnicodeXID.xid_start?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def identifier_part?(char : Char) : Bool
-            char.ascii_letter? || char.ascii_number? || char == '_' || unicode_identifier_part?(char)
+            char == '_' || char.ascii_letter? || char.ascii_number? || UnicodeXID.xid_continue?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def unicode_identifier_start?(char : Char) : Bool
             return false if char.ascii?
-            Unicode.letter?(char) || emoji_identifier_char?(char)
+            UnicodeXID.xid_start?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def unicode_identifier_part?(char : Char) : Bool
             return false if char.ascii?
-            Unicode.letter?(char) || Unicode.number?(char) || char.mark? || emoji_identifier_char?(char)
+            UnicodeXID.xid_continue?(char.ord) || UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def emoji_identifier_char?(char : Char) : Bool
-            String::Grapheme::Property.from(char).extended_pictographic?
+            UnicodeXID.extended_pictographic?(char.ord)
         end
 
         private def read_escape_sequence(_literal : Symbol, start_line : Int32, start_col : Int32) : Char
@@ -805,6 +821,9 @@ module Dragonstone
             when 'b'
                 advance
                 '\b'
+            when 'e'
+                advance
+                '\e'
             when 'f'
                 advance
                 '\f'

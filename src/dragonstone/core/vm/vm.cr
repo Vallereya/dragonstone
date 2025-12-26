@@ -35,6 +35,7 @@ module Dragonstone
             property signature : Bytecode::FunctionSignature?
             property callable_name : String?
             property method_owner : Bytecode::ClassValue?
+            property para_env : Hash(String, Bytecode::Value)?
             property gc_flags : ::Dragonstone::Runtime::GC::Flags
 
             def initialize(
@@ -45,6 +46,7 @@ module Dragonstone
                 signature : Bytecode::FunctionSignature? = nil,
                 callable_name : String? = nil,
                 method_owner : Bytecode::ClassValue? = nil,
+                para_env : Hash(String, Bytecode::Value)? = nil,
                 gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
             )
                 @ip = 0
@@ -60,6 +62,7 @@ module Dragonstone
                 @signature = signature
                 @callable_name = callable_name
                 @method_owner = method_owner
+                @para_env = para_env
                 @gc_flags = gc_flags
             end
         end
@@ -76,6 +79,15 @@ module Dragonstone
 
         private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
             @type_aliases[name] = expr
+            return unless expr.is_a?(AST::SimpleTypeExpression)
+
+            begin
+                segments = expr.as(AST::SimpleTypeExpression).name.split("::").map { |part| part.as(Bytecode::Value) }
+                value = resolve_constant_path(segments)
+                define_constant_in_current(name, value)
+            rescue
+                # Keep alias type-only if RHS isn't a resolvable constant path.
+            end
         end
 
         private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
@@ -84,6 +96,112 @@ module Dragonstone
             unless type_matches?(value, type_expr, Set(String).new)
                 raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}")
             end
+        end
+
+        private def coerce_value_for_type(type_expr : AST::TypeExpression, value : Bytecode::Value, context : String) : Bytecode::Value
+            return value unless type_expr.is_a?(AST::SimpleTypeExpression)
+
+            name = type_expr.as(AST::SimpleTypeExpression).name.downcase
+            explicit_width = name == "int32" || name == "int64" || name == "float32" || name == "float64"
+            return value unless @typing_enabled || explicit_width
+            case name
+            when "int32"
+                coerce_int32(value, context)
+            when "int64", "int", "integer"
+                coerce_int64(value, context)
+            when "float32"
+                coerce_float32(value, context)
+            when "float64", "float"
+                coerce_float64(value, context)
+            else
+                value
+            end
+        end
+
+        private def coerce_int32(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Int32
+                value
+            when Int64
+                ensure_int32_range(value, context)
+                value.to_i32
+            when Float32
+                coerce_float_to_int32(value.to_f64, context)
+            when Float64
+                coerce_float_to_int32(value, context)
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_int64(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Int64
+                value
+            when Int32
+                value.to_i64
+            when Float32
+                coerce_float_to_int64(value.to_f64, context)
+            when Float64
+                coerce_float_to_int64(value, context)
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_float32(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Float32
+                value
+            when Float64
+                value.to_f32
+            when Int32
+                value.to_f32
+            when Int64
+                value.to_f32
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float32, got #{describe_value(value)}")
+            end
+        end
+
+        private def coerce_float64(value : Bytecode::Value, context : String) : Bytecode::Value
+            case value
+            when Float64
+                value
+            when Float32
+                value.to_f64
+            when Int32
+                value.to_f64
+            when Int64
+                value.to_f64
+            else
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float64, got #{describe_value(value)}")
+            end
+        end
+
+        private def ensure_int32_range(value : Int64, context : String) : Nil
+            return if value >= Int32::MIN && value <= Int32::MAX
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+        end
+
+        private def coerce_float_to_int32(value : Float64, context : String) : Bytecode::Value
+            if value.nan? || value.infinite?
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+            end
+            int_value = value.to_i64
+            ensure_int32_range(int_value, context)
+            int_value.to_i32
+        rescue OverflowError
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+        end
+
+        private def coerce_float_to_int64(value : Float64, context : String) : Bytecode::Value
+            if value.nan? || value.infinite?
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
+            end
+            value.to_i64
+        rescue OverflowError
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
         end
 
         private def type_matches?(value : Bytecode::Value, expr : AST::TypeExpression, seen_aliases : Set(String)) : Bool
@@ -105,11 +223,19 @@ module Dragonstone
             case name.downcase
             when "int"
                 value.is_a?(Int32) || value.is_a?(Int64)
+            when "int32"
+                value.is_a?(Int32)
+            when "int64"
+                value.is_a?(Int64)
             when "str", "string"
                 value.is_a?(String)
             when "bool"
                 value.is_a?(Bool)
             when "float"
+                value.is_a?(Float32) || value.is_a?(Float64)
+            when "float32"
+                value.is_a?(Float32)
+            when "float64"
                 value.is_a?(Float64)
             when "char"
                 value.is_a?(Char)
@@ -141,10 +267,11 @@ module Dragonstone
                 return true unless element_type
                 value.elements.all? { |element| type_matches?(element, element_type, seen_aliases) }
             when "para"
-                return false unless value.is_a?(Bytecode::FunctionValue)
+                return false unless value.is_a?(Bytecode::FunctionValue) || value.is_a?(Bytecode::ParaValue)
                 param_types = expr.arguments[0...-1]
                 return true if param_types.empty?
-                value.signature.parameters.size == param_types.size
+                signature = value.is_a?(Bytecode::FunctionValue) ? value.signature : value.as(Bytecode::ParaValue).signature
+                signature.parameters.size == param_types.size
             else
                 false
             end
@@ -811,6 +938,15 @@ module Dragonstone
 
         private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
             @type_aliases[name] = expr
+            return unless expr.is_a?(AST::SimpleTypeExpression)
+
+            begin
+                segments = expr.as(AST::SimpleTypeExpression).name.split("::").map { |part| part.as(Bytecode::Value) }
+                value = resolve_constant_path(segments)
+                define_constant_in_current(name, value)
+            rescue
+                # Keep alias type-only if RHS isn't a resolvable constant path.
+            end
         end
 
         private def enforce_type(type_expr : AST::TypeExpression?, value : Bytecode::Value, context : String) : Nil
@@ -840,11 +976,19 @@ module Dragonstone
             case name.downcase
             when "int"
                 value.is_a?(Int32) || value.is_a?(Int64)
+            when "int32"
+                value.is_a?(Int32)
+            when "int64"
+                value.is_a?(Int64)
             when "str", "string"
                 value.is_a?(String)
             when "bool"
                 value.is_a?(Bool)
             when "float"
+                value.is_a?(Float32) || value.is_a?(Float64)
+            when "float32"
+                value.is_a?(Float32)
+            when "float64"
                 value.is_a?(Float64)
             when "char"
                 value.is_a?(Char)
@@ -909,6 +1053,10 @@ module Dragonstone
         @singleton_methods : Hash(UInt64, Hash(String, Bytecode::FunctionValue))
         @pending_self : Bytecode::Value?
         @argv_value : Array(Bytecode::Value)
+        @builtin_stdout : Bytecode::BuiltinStream
+        @builtin_stderr : Bytecode::BuiltinStream
+        @builtin_stdin : Bytecode::BuiltinStdin
+        @builtin_argf : Bytecode::BuiltinArgf
 
         def initialize(
             @bytecode : CompiledCode,
@@ -943,6 +1091,10 @@ module Dragonstone
             @singleton_methods = {} of UInt64 => Hash(String, Bytecode::FunctionValue)
             @pending_self = nil
             @argv_value = argv.map { |arg| arg.as(Bytecode::Value) }
+            @builtin_stdout = Bytecode::BuiltinStream.new(Bytecode::BuiltinStream::Kind::Stdout)
+            @builtin_stderr = Bytecode::BuiltinStream.new(Bytecode::BuiltinStream::Kind::Stderr)
+            @builtin_stdin = Bytecode::BuiltinStdin.new
+            @builtin_argf = Bytecode::BuiltinArgf.new
             @gc_manager = ::Dragonstone::Runtime::GC::Manager(Bytecode::Value).new(
                 ->(value : Bytecode::Value) : Bytecode::Value { ::Dragonstone::Runtime::GC.deep_copy_bytecode(value) }
             )
@@ -1043,6 +1195,16 @@ module Dragonstone
                     push(resolve_variable(name_idx, name))
                 when OPC::LOAD_ARGV
                     push(@argv_value)
+                when OPC::LOAD_STDOUT
+                    push(@builtin_stdout)
+                when OPC::LOAD_STDERR
+                    push(@builtin_stderr)
+                when OPC::LOAD_STDIN
+                    push(@builtin_stdin)
+                when OPC::LOAD_ARGC
+                    push(@argv_value.size.to_i64)
+                when OPC::LOAD_ARGF
+                    push(@builtin_argf)
                 when OPC::LOAD_CONST_PATH
                     const_idx = fetch_byte
                     segments = current_code.consts[const_idx].as(Array(Bytecode::Value))
@@ -1379,6 +1541,25 @@ module Dragonstone
                     signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
                     push(Bytecode::BlockValue.new(signature, code))
+                when OPC::MAKE_PARA
+                    signature_idx = fetch_byte
+                    code_idx = fetch_byte
+                    signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
+                    code = current_code.consts[code_idx].as(CompiledCode)
+                    env = {} of String => Bytecode::Value
+                    frame = current_frame
+                    if locals = frame.locals
+                        if defined = frame.locals_defined
+                            defined.each_with_index do |is_defined, idx|
+                                next unless is_defined
+                                name = current_code.names[idx]
+                                next if name == "self"
+                                slot = locals[idx]?
+                                env[name] = slot.nil? ? nil : slot
+                            end
+                        end
+                    end
+                    push(Bytecode::ParaValue.new(signature, code, env))
                 when OPC::YIELD
                     argc = fetch_byte
                     args = pop_values(argc)
@@ -1416,8 +1597,9 @@ module Dragonstone
                     type_idx = fetch_byte
                     value = pop
                     type_expr = current_code.consts[type_idx].as(AST::TypeExpression)
-                    enforce_type(type_expr, value, "assignment")
-                    push(value)
+                    coerced = coerce_value_for_type(type_expr, value, "assignment")
+                    enforce_type(type_expr, coerced, "assignment")
+                    push(coerced)
                 when OPC::RET
                     result = handle_return
                     return result if target_depth && @frames.size == target_depth
@@ -1483,6 +1665,12 @@ module Dragonstone
                         slot = locals[name_idx]?
                         return slot.nil? ? nil : slot
                     end
+                end
+            end
+
+            if env = frame.para_env
+                if env.has_key?(name)
+                    return env[name]
                 end
             end
 
@@ -1653,6 +1841,13 @@ module Dragonstone
             end
 
             frame = current_frame
+            if env = frame.para_env
+                if env.has_key?(name)
+                    env[name] = value
+                    frame.para_env = env
+                    return
+                end
+            end
             locals = frame.locals
             defined = frame.locals_defined
 
@@ -1855,9 +2050,10 @@ module Dragonstone
             signature : Bytecode::FunctionSignature? = nil,
             callable_name : String? = nil,
             method_owner : Bytecode::ClassValue? = nil,
+            para_env : Hash(String, Bytecode::Value)? = nil,
             gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
         ) : Frame
-            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, gc_flags)
+            frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, para_env, gc_flags)
             @frames << frame
             frame
         end
@@ -1870,9 +2066,11 @@ module Dragonstone
             callable_name : String? = nil,
             self_value : Bytecode::Value? = nil,
             locals_source : Frame? = nil,
-            method_owner : Bytecode::ClassValue? = nil
+            method_owner : Bytecode::ClassValue? = nil,
+            *,
+            para_env : Hash(String, Bytecode::Value)? = nil
         ) : Frame
-            frame = push_frame(code, true, block_value, signature, callable_name, method_owner, signature.gc_flags)
+            frame = push_frame(code, true, block_value, signature, callable_name, method_owner, para_env, signature.gc_flags)
             enter_gc_context(frame.gc_flags)
             if ENV["DS_DEBUG_STACK_ENTRY"]?
                 STDERR.puts "ENTER #{callable_name || "<lambda>"} stack_base=#{frame.stack_base} stack=#{@stack.inspect}"
@@ -2015,6 +2213,7 @@ module Dragonstone
 
                 when Int32 then a + b
                 when Int64 then a + b
+                when Float32 then a + b
                 when Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
@@ -2023,7 +2222,7 @@ module Dragonstone
             when Int64
                 case b
 
-                when Int32, Int64, Float64 then a + b
+                when Int32, Int64, Float32, Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
 
@@ -2031,7 +2230,15 @@ module Dragonstone
             when Float64
                 case b
 
-                when Int32, Int64, Float64 then a + b
+                when Int32, Int64, Float32, Float64 then a + b
+
+                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+
+                end
+            when Float32
+                case b
+
+                when Int32, Int64, Float32, Float64 then a + b
 
                 else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
 
@@ -2058,7 +2265,13 @@ module Dragonstone
                 lhs % rhs
             when Float64
                 rhs = case b
-                    when Int32, Int64, Float64 then b.to_f64
+                    when Int32, Int64, Float32, Float64 then b.to_f64
+                    else raise "Type error"
+                end
+                a % rhs
+            when Float32
+                rhs = case b
+                    when Int32, Int64, Float32, Float64 then b.to_f64
                     else raise "Type error"
                 end
                 a % rhs
@@ -2073,11 +2286,11 @@ module Dragonstone
             overload = invoke_operator_overload(a, "//", b)
             return overload unless overload.nil?
 
-            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
+            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
             numeric_op(a, b) do |x, y|
-                if x.is_a?(Float64) || y.is_a?(Float64)
+                if x.is_a?(Float32) || x.is_a?(Float64) || y.is_a?(Float32) || y.is_a?(Float64)
                     (x.to_f64 / y.to_f64).floor
                 else
                     x.to_i64 // y.to_i64
@@ -2106,6 +2319,14 @@ module Dragonstone
         private def shift_left(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
             overload = invoke_operator_overload(a, "<<", b)
             return overload unless overload.nil?
+
+            if a.is_a?(Bytecode::BuiltinStream)
+                text = display_value(b)
+                @stdout_io << text
+                print text if @log_to_stdout
+                return a
+            end
+
             integer_op(a, b) { |x, y| x << y }
         end
 
@@ -2151,7 +2372,7 @@ module Dragonstone
         private def div(a, b)
             overload = invoke_operator_overload(a, "/", b)
             return overload unless overload.nil?
-            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
+            if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
                 raise VMException.new("divided by 0")
             end
             numeric_op(a, b) { |x, y| x / y }
@@ -2160,10 +2381,10 @@ module Dragonstone
         private def numeric_op(a, b, &block)
             case a
 
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 case b
 
-                when Int32, Int64, Float64
+                when Int32, Int64, Float32, Float64
                     yield a, b
 
                 else
@@ -2203,10 +2424,10 @@ module Dragonstone
         private def numeric_compare(a, b, &block)
             case a
 
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 case b
 
-                when Int32, Int64, Float64
+                when Int32, Int64, Float32, Float64
                     yield a, b
 
                 else
@@ -2230,7 +2451,7 @@ module Dragonstone
             end
 
             case a
-            when Int32, Int64, Float64
+            when Int32, Int64, Float32, Float64
                 numeric_spaceship(a, b)
             when String
                 string_spaceship(a, b)
@@ -2248,6 +2469,7 @@ module Dragonstone
                 base = a.to_i64
                 exp = case b
                     when Int32, Int64 then b.to_i64
+                    when Float32 then b.to_i64
                     when Float64 then b.to_i64
                     else
                         raise "Type error"
@@ -2265,9 +2487,19 @@ module Dragonstone
                     factor *= factor
                 end
                 result
+            when Float32
+                exponent = case b
+                    when Int32, Int64 then b.to_f64
+                    when Float32 then b.to_f64
+                    when Float64 then b
+                    else
+                        raise "Type error"
+                    end
+                a.to_f64 ** exponent
             when Float64
                 exponent = case b
                     when Int32, Int64 then b.to_f64
+                    when Float32 then b.to_f64
                     when Float64 then b
                     else
                         raise "Type error"
@@ -2279,7 +2511,7 @@ module Dragonstone
         end
 
         private def numeric_spaceship(a, b) : Int64
-            unless b.is_a?(Int32) || b.is_a?(Int64) || b.is_a?(Float64)
+            unless b.is_a?(Int32) || b.is_a?(Int64) || b.is_a?(Float32) || b.is_a?(Float64)
                 raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
             end
             l = a.is_a?(Float64) ? a : a.to_f64
@@ -2302,6 +2534,8 @@ module Dragonstone
                 value
             when Int32
                 value.to_i64
+            when Float32
+                value.to_f64
             when Float64
                 value
             else
@@ -2374,8 +2608,12 @@ module Dragonstone
             case value
             when Nil
                 ""
-            when Bool, Int32, Int64, Float64
+            when Bool, Int32, Int64
                 value.to_s
+            when Float32
+                format_float(value.to_f64)
+            when Float64
+                format_float(value)
             when String
                 value
             when Char
@@ -2416,6 +2654,8 @@ module Dragonstone
                 value.name
             when Bytecode::FunctionValue
                 "#<Function #{value.name}>"
+            when Bytecode::ParaValue
+                "#<Para>"
             when Bytecode::BlockValue
                 "#<Block>"
             when FFIModule
@@ -2431,8 +2671,12 @@ module Dragonstone
                 "nil"
             when String
                 value.inspect
-            when Bool, Int32, Int64, Float64
+            when Bool, Int32, Int64
                 value.to_s
+            when Float32
+                format_float(value.to_f64)
+            when Float64
+                format_float(value)
             when Char
                 value.inspect
             when SymbolValue
@@ -2471,6 +2715,8 @@ module Dragonstone
                 value.name
             when Bytecode::FunctionValue
                 "#<Function #{value.name}>"
+            when Bytecode::ParaValue
+                "#<Para>"
             when Bytecode::BlockValue
                 "#<Block>"
             when FFIModule
@@ -2479,13 +2725,17 @@ module Dragonstone
                 value.to_s
             end
         end
+
+        private def format_float(value : Float64) : String
+            sprintf("%.15g", value)
+        end
         
         private def type_of(value : Bytecode::Value) : String
             case value
             when Nil then "Nil"
             when Bool then "Boolean"
             when Int32, Int64 then "Integer"
-            when Float64 then "Float"
+            when Float32, Float64 then "Float"
             when String then "String"
             when Array then "Array"
             when Bytecode::MapValue then "Map"
@@ -2502,6 +2752,7 @@ module Dragonstone
             when Range(Int64, Int64) then "Range"
             when Range(Char, Char) then "Range"
             when Bytecode::FunctionValue then "Function"
+            when Bytecode::ParaValue then "Para"
             when Bytecode::BlockValue then "Block"
             when FFIModule then "FFIModule"
             when ::Dragonstone::Runtime::GC::Area(Bytecode::Value) then "Area"
@@ -2557,6 +2808,8 @@ module Dragonstone
             when Int32
                 index
             when Int64
+                index.to_i
+            when Float32
                 index.to_i
             when Float64
                 index.to_i
@@ -2620,6 +2873,68 @@ module Dragonstone
             end
 
             case receiver
+
+            when Bytecode::BuiltinStream
+                raise ArgumentError.new("BuiltinStream##{method} does not accept a block") if block_value
+
+                case method
+                when "echoln"
+                    line = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
+                    emit_output(line)
+                    nil
+                when "eecholn"
+                    text = args.map { |arg| arg.nil? ? "" : stringify(arg) }.join(" ")
+                    flush_debug_inline
+                    emit_output_inline(text)
+                    nil
+                when "debug"
+                    raise ArgumentError.new("BuiltinStream#debug expects 1 argument, got #{args.size}") unless args.size == 1
+                    flush_debug_inline
+                    emit_output(args[0].nil? ? "" : stringify(args[0]))
+                    args[0]
+                when "debug_inline"
+                    raise ArgumentError.new("BuiltinStream#debug_inline expects 1 argument, got #{args.size}") unless args.size == 1
+                    flush_debug_inline
+                    emit_output_inline(args[0].nil? ? "" : stringify(args[0]))
+                    args[0]
+                when "flush"
+                    raise ArgumentError.new("BuiltinStream#flush expects 0 arguments, got #{args.size}") unless args.empty?
+                    nil
+                else
+                    raise "Unknown method #{method} on BuiltinStream"
+                end
+
+            when Bytecode::BuiltinStdin
+                raise ArgumentError.new("BuiltinStdin##{method} does not accept a block") if block_value
+                case method
+                when "read"
+                    raise ArgumentError.new("BuiltinStdin#read expects 0 arguments, got #{args.size}") unless args.empty?
+                    (STDIN.gets || "").chomp
+                else
+                    raise "Unknown method #{method} on BuiltinStdin"
+                end
+
+            when Bytecode::BuiltinArgf
+                raise ArgumentError.new("BuiltinArgf##{method} does not accept a block") if block_value
+                case method
+                when "read"
+                    raise ArgumentError.new("BuiltinArgf#read expects 0 arguments, got #{args.size}") unless args.empty?
+                    if @argv_value.empty?
+                        STDIN.gets_to_end
+                    else
+                        String.build do |io|
+                            @argv_value.each do |path|
+                                unless path.is_a?(String)
+                                    raise "ARGF expects argv entries to be strings"
+                                end
+                                io << File.read(path)
+                            end
+                        end
+                    end
+                else
+                    raise "Unknown method #{method} on BuiltinArgf"
+                end
 
             when String
                 case method
@@ -2764,9 +3079,25 @@ module Dragonstone
                     ensure_arity(signature, args.size, "<block>")
                     depth_before = @frames.size
                     push_callable_frame(receiver.code, signature, args, nil, "<block>")
-                    execute_with_frame_cleanup(depth_before)
+                    result = execute_with_frame_cleanup(depth_before)
+                    pop
+                    result
                 else
                     raise "Unknown method '#{method}' on Block"
+                end
+            when Bytecode::ParaValue
+                case method
+                when "call"
+                    raise ArgumentError.new("Para##{method} does not accept a block") if block_value
+                    signature = receiver.signature
+                    ensure_arity(signature, args.size, "<para>")
+                    depth_before = @frames.size
+                    push_callable_frame(receiver.code, signature, args, nil, "<para>", para_env: receiver.env)
+                    result = execute_with_frame_cleanup(depth_before)
+                    pop
+                    result
+                else
+                    raise "Unknown method '#{method}' on Para"
                 end
             when Bytecode::FunctionValue
                 call_function_method(receiver, method, args, block_value)
@@ -2875,7 +3206,9 @@ module Dragonstone
                 ensure_arity(signature, args.size, function.name)
                 depth_before = @frames.size
                 push_callable_frame(function.code, signature, args, nil, function.name)
-                execute_with_frame_cleanup(depth_before)
+                result = execute_with_frame_cleanup(depth_before)
+                pop
+                result
             else
                 raise "Unknown method '#{method}' for Function"
             end
@@ -2888,7 +3221,7 @@ module Dragonstone
         private def from_ffi_value(value : Dragonstone::FFI::InteropValue) : Bytecode::Value
             case value
 
-            when Nil, Bool, Int32, Int64, Float64, String, Char
+            when Nil, Bool, Int32, Int64, Float32, Float64, String, Char
                 value
 
             when Array
@@ -2904,6 +3237,9 @@ module Dragonstone
 
         private def call_ffi_method(method : String, args : Array(Bytecode::Value)) : Bytecode::Value
             case method
+
+            when "call"
+                call_ffi_native(args)
 
             when "call_ruby"
                 call_ffi_ruby(args)
@@ -2983,6 +3319,29 @@ module Dragonstone
 
             ruby_args = method_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
             result = Dragonstone::FFI.call_ruby(method_name, ruby_args)
+
+            from_ffi_value(result)
+        end
+
+        # FFI: Call native (ABI-backed) functions.
+        private def call_ffi_native(args : Array(Bytecode::Value)) : Bytecode::Value
+            unless args.size >= 2
+                raise "ffi.call requires at least 2 arguments: func_name, [args]"
+            end
+
+            func_name = args[0]
+            func_args = args[1]
+
+            unless func_name.is_a?(String)
+                raise "First argument to ffi.call must be a string"
+            end
+
+            unless func_args.is_a?(Array)
+                raise "Second argument to ffi.call must be an array"
+            end
+
+            native_args = func_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
+            result = Dragonstone::FFI.call(func_name, native_args)
 
             from_ffi_value(result)
         end

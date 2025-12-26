@@ -1,24 +1,28 @@
 #[ 
+    
     Unicode Example
+
 ]#
 
 #[
+
     Example of a various unicode
     passed as a string and with
-    args/params. It's grabbing
-    the unicode from stdlib from 
-    Crystal temporarily until I 
-    create my own, or might just 
-    keep the ffi for it; Undecided. 
+    args/params.
+
 ]#
 
+use "unicode"
+
+# Example One: Using Unicode Characters in Strings.
 message = "❤️"
 echo message
 
+# Example Two: Using Unicode Characters as Variable Names.
 ❤️ = "あ"
 echo ❤️
 
-
+# Example Three: Using Unicode Characters in Class and Method Names.
 class 🔥
     あ = true
   
@@ -31,6 +35,7 @@ end
 
 🔥.道
 
+# Example Four: Using Unicode Characters in Function Names and Parameters.
 def Saudação(اسم, อายุ)
     echo "Hello, #{اسم}! You are #{อายุ}."
 end

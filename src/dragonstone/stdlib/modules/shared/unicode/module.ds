@@ -1,0 +1,135 @@
+#[
+    `unicode` module for Dragonstone Standard Library.
+
+    Creates data and procedural generators for Unicode characters and strings.
+]#
+
+use "./proc/unicode_version.ds"
+use "./proc/data.ds"
+
+module Unicode
+    extend self
+
+    enum CaseOptions
+        None
+        ASCII
+        Turkic
+        Fold
+    end
+
+    enum NormalizationForms
+        NFC
+        NFD
+        NFKC
+        NFKD
+    end
+
+    enum QuickCheckOptions
+        Yes
+        No
+        Maybe
+    end
+
+    enum CollationStrength
+        Default
+        CaseFold
+    end
+
+    private def range_in?(ranges, codepoint: int): bool
+        left = 0
+        right = ranges.length - 1
+
+        while left <= right
+            mid = (left + right) // 2
+            range = ranges[mid]
+            low = range[0]
+            high = range[1]
+
+            if codepoint < low
+                right = mid - 1
+            elsif codepoint > high
+                left = mid + 1
+            else
+                return true
+            end
+        end
+
+        return false
+    end
+
+    def xid_start?(codepoint: int): bool
+        return range_in?(XID_START_RANGES, codepoint: codepoint)
+    end
+
+    def xid_continue?(codepoint: int): bool
+        return range_in?(XID_CONTINUE_RANGES, codepoint: codepoint)
+    end
+
+    def extended_pictographic?(codepoint: int): bool
+        return range_in?(EXTENDED_PICTOGRAPHIC_RANGES, codepoint: codepoint)
+    end
+
+    def normalize(value: str, form: str = "NFC"): str
+        return ffi.call_crystal("unicode_normalize", [value, form])
+    end
+
+    def canonical_equivalent?(left: str, right: str): bool
+        return ffi.call_crystal("unicode_canonical_equivalent", [left, right])
+    end
+
+    def upcase(value: str, option: str = "NONE"): str
+        return ffi.call_crystal("unicode_upcase", [value, option])
+    end
+
+    def downcase(value: str, option: str = "NONE"): str
+        return ffi.call_crystal("unicode_downcase", [value, option])
+    end
+
+    def titlecase(value: str, option: str = "NONE"): str
+        return ffi.call_crystal("unicode_titlecase", [value, option])
+    end
+
+    def casefold(value: str): str
+        return ffi.call_crystal("unicode_casefold", [value])
+    end
+
+    def graphemes(value: str): arr(str)
+        return ffi.call_crystal("unicode_graphemes", [value])
+    end
+
+    def grapheme_count(value: str): int
+        return ffi.call_crystal("unicode_grapheme_count", [value])
+    end
+
+    def general_category(codepoint: int): str
+        return ffi.call_crystal("unicode_general_category", [codepoint])
+    end
+
+    def combining_class(codepoint: int): int
+        return ffi.call_crystal("unicode_combining_class", [codepoint])
+    end
+
+    def whitespace?(codepoint: int): bool
+        return ffi.call_crystal("unicode_whitespace", [codepoint])
+    end
+
+    def letter?(codepoint: int): bool
+        return ffi.call_crystal("unicode_letter", [codepoint])
+    end
+
+    def number?(codepoint: int): bool
+        return ffi.call_crystal("unicode_number", [codepoint])
+    end
+
+    def mark?(codepoint: int): bool
+        return ffi.call_crystal("unicode_mark", [codepoint])
+    end
+
+    def control?(codepoint: int): bool
+        return ffi.call_crystal("unicode_control", [codepoint])
+    end
+
+    def compare(left: str, right: str, strength: str = "DEFAULT"): int
+        return ffi.call_crystal("unicode_compare", [left, right, strength])
+    end
+end

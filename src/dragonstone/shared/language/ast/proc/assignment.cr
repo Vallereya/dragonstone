@@ -5,13 +5,22 @@ module Dragonstone
             getter value : Node
             getter operator : Symbol?
             getter type_annotation : TypeExpression?
+            getter visibility : Symbol
 
-            def initialize(name : String, value : Node, operator : Symbol? = nil, type_annotation : TypeExpression? = nil, location : Location? = nil)
+            def initialize(
+                name : String,
+                value : Node,
+                operator : Symbol? = nil,
+                type_annotation : TypeExpression? = nil,
+                visibility : Symbol = :public,
+                location : Location? = nil
+            )
                 super(location: location)
                 @name = name
                 @value = value
                 @operator = operator
                 @type_annotation = type_annotation
+                @visibility = visibility
             end
 
             def accept(visitor)
@@ -28,7 +37,8 @@ module Dragonstone
                 if operator
                     "#{lhs} #{operator} = #{value.to_source}"
                 else
-                    "#{lhs} = #{value.to_source}"
+                    prefix = visibility == :public ? "" : "#{visibility} "
+                    "#{prefix}#{lhs} = #{value.to_source}"
                 end
             end
 

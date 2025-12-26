@@ -78,6 +78,9 @@ module Dragonstone
             when Float64
                 index.to_i32
 
+            when Float32
+                index.to_i32
+
             else
                 runtime_error(TypeError, "Index must be a number", node)
 
@@ -102,6 +105,8 @@ module Dragonstone
             when Int32
                 value.to_i64
             when Float64
+                value.to_i64
+            when Float32
                 value.to_i64
             else
                 runtime_error(TypeError, "Enum values must be numeric", node)
@@ -310,6 +315,16 @@ module Dragonstone
         private def bitwise_values(left, operator : Symbol, right, node : AST::Node)
             overload = invoke_operator_overload(left, operator, right, node)
             return overload unless overload.nil?
+
+            if left.is_a?(BuiltinStream)
+                case operator
+                when :<<
+                    append_output_inline(display_value(right))
+                    return left
+                when :>>
+                    runtime_error(TypeError, "Unsupported operands for >>", node)
+                end
+            end
 
             lint = to_int(left, node)
             rint = to_int(right, node)
@@ -674,6 +689,80 @@ module Dragonstone
                 end
                 call_gc_dispatch(receiver, node.name, args, block_value, node)
 
+            when BuiltinStream
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+
+                case node.name
+                when "echoln"
+                    append_output(args.map { |v| display_value(v) }.join(" "))
+                    nil
+                when "eecholn"
+                    append_output_inline(args.map { |v| display_value(v) }.join(" "))
+                    nil
+                when "debug"
+                    if args.size != 1
+                        runtime_error(InterpreterError, "debug expects 1 argument, got #{args.size}", node)
+                    end
+                    append_output(display_value(args[0]))
+                    args[0]
+                when "debug_inline"
+                    if args.size != 1
+                        runtime_error(InterpreterError, "debug_inline expects 1 argument, got #{args.size}", node)
+                    end
+                    append_output_inline(display_value(args[0]))
+                    args[0]
+                when "flush"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "flush expects 0 arguments, got #{args.size}", node)
+                    end
+                    nil
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for builtin stream", node)
+                end
+
+            when BuiltinStdin
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+                case node.name
+                when "read"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "read expects 0 arguments, got #{args.size}", node)
+                    end
+                    line = STDIN.gets
+                    (line || "").chomp
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for stdin", node)
+                end
+
+            when BuiltinArgf
+                if block_value
+                    runtime_error(InterpreterError, "#{node.name} does not accept a block", node)
+                end
+                case node.name
+                when "read"
+                    if args.size != 0
+                        runtime_error(InterpreterError, "read expects 0 arguments, got #{args.size}", node)
+                    end
+                    if argv.empty?
+                        STDIN.gets_to_end
+                    else
+                        String.build do |io|
+                            argv.each do |path|
+                                begin
+                                    io << File.read(path)
+                                rescue e
+                                    runtime_error(InterpreterError, "Failed to read '#{path}': #{e.message}", node)
+                                end
+                            end
+                        end
+                    end
+                else
+                    runtime_error(NameError, "Unknown method '#{node.name}' for argf", node)
+                end
+
             when DragonEnum
                 case node.name
                 when "new"
@@ -852,6 +941,8 @@ module Dragonstone
                 nil
             when Float64
                 nil
+            when Float32
+                nil
             when Char
                 nil
             when SymbolValue
@@ -929,6 +1020,9 @@ module Dragonstone
 
         private def call_ffi_dispatch(method : String, args : Array(RuntimeValue), node : AST::MethodCall) : RuntimeValue
             case method
+
+            when "call"
+                ffi_call_native(args, node)
 
             when "call_ruby"
                 ffi_call_ruby(args, node)
@@ -1009,6 +1103,27 @@ module Dragonstone
             from_ffi_value(result)
         end
 
+        private def ffi_call_native(args : Array(RuntimeValue), node : AST::MethodCall) : RuntimeValue
+            unless args.size >= 2
+                runtime_error(InterpreterError, "ffi.call requires at least 2 arguments: func_name, [args]", node)
+            end
+
+            func_name = args[0]
+            func_args = args[1]
+
+            unless func_name.is_a?(String)
+                runtime_error(TypeError, "First argument to ffi.call must be a string", node)
+            end
+
+            unless func_args.is_a?(Array(RuntimeValue))
+                runtime_error(TypeError, "Second argument to ffi.call must be an array", node)
+            end
+
+            native_args = func_args.as(Array(RuntimeValue)).map { |arg| Dragonstone::FFI.normalize(arg) }
+            result = Dragonstone::FFI.call(func_name, native_args)
+            from_ffi_value(result)
+        end
+
         private def ffi_call_crystal(args : Array(RuntimeValue), node : AST::MethodCall) : RuntimeValue
             unless args.size >= 2
                 runtime_error(InterpreterError, "ffi.call_crystal requires at least 2 arguments: func_name, [args]", node)
@@ -1054,7 +1169,7 @@ module Dragonstone
         private def from_ffi_value(value : Dragonstone::FFI::InteropValue) : RuntimeValue
             case value
 
-            when Nil, Bool, Int32, Int64, Float64, String, Char
+            when Nil, Bool, Int32, Int64, Float32, Float64, String, Char
                 value
 
             when Array

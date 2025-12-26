@@ -40,6 +40,30 @@ module Dragonstone
         end
 
         def import_constant(name : String, value : RuntimeValue)
+            existing_binding = @global_scope[name]?
+
+            if existing_binding.is_a?(ConstantBinding)
+                existing_value = existing_binding.value
+
+                if existing_value.is_a?(DragonModule) && value.is_a?(DragonModule)
+                    if existing_value.is_a?(DragonClass) != value.is_a?(DragonClass)
+                        raise "Constant #{name} already defined as #{describe_runtime_value(existing_value)}, cannot redefine as #{describe_runtime_value(value)}"
+                    end
+
+                    if existing_value.is_a?(DragonClass) && value.is_a?(DragonClass)
+                        existing_class = existing_value.as(DragonClass)
+                        incoming_class = value.as(DragonClass)
+                        if existing_class.superclass && incoming_class.superclass && existing_class.superclass != incoming_class.superclass
+                            raise "Class #{name} already defined with different superclass"
+                        end
+                        existing_class.mark_abstract! if incoming_class.abstract?
+                    end
+
+                    existing_value.as(DragonModule).merge_from!(value.as(DragonModule))
+                    return
+                end
+            end
+
             @global_scope[name] = ConstantBinding.new(value)
         end
 

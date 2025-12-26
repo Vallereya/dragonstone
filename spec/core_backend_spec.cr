@@ -91,6 +91,17 @@ DS
         result.output.should eq "8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n"
     end
 
+    it "supports stdout << output in the core backend" do
+        source = <<-DS
+stdout << "Hello"
+stdout << " "
+stdout << "World"
+stdout << "\\n"
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "Hello World\n"
+    end
+
     it "supports super calls in class methods" do
         source = <<-DS
 class Person
@@ -239,6 +250,33 @@ echo square.call(6)
 DS
         result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
         result.output.should eq "Hello, Jalyn!\n36\n"
+    end
+
+    it "captures lexical variables in para literals" do
+        source = <<-DS
+def make_adder(x)
+    adder = ->(y) { x + y }
+    adder
+end
+
+add5 = make_adder(5)
+echo add5.call(3)
+
+def make_counter
+    x = 0
+    counter = -> {
+        x += 1
+        x
+    }
+    counter
+end
+
+counter = make_counter()
+echo counter.call()
+echo counter.call()
+DS
+        result = Dragonstone.run(source, backend: Dragonstone::BackendMode::Core)
+        result.output.should eq "8\n1\n2\n"
     end
 
     it "supports tuple and named tuple literals" do

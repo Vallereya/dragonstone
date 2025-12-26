@@ -272,7 +272,7 @@ module Dragonstone
 
         private def normalize_runtime_value(value, node : AST::Node) : RuntimeValue
             case value
-            when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException, TupleValue, NamedTupleValue, BagConstructor, BagValue
+            when Nil, Bool, Int32, Int64, Float32, Float64, String, Char, SymbolValue, Range(Int64, Int64), Range(Char, Char), DragonModule, DragonClass, DragonInstance, DragonEnumMember, Function, FFIModule, RaisedException, TupleValue, NamedTupleValue, BagConstructor, BagValue
                 value
             when Array(RuntimeValue)
                 value

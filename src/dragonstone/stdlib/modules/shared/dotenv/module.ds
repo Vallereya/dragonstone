@@ -1,0 +1,230 @@
+#[
+    `dotenv` module for loading .env files into environment variables.
+]#
+
+use "file_utilities"
+use "strings_build"
+
+module DOTENV
+    extend self
+
+    # Loads the .env file and sets environment variables.
+    def load(path: str = ".env", set_env: bool = true, override_env: bool = true) -> Hash(str, str)
+        hash = {} as str -> str
+
+        begin
+            content = File.read(path)
+            hash = parse(content)
+
+            if set_env
+                apply_env(hash, override_env)
+            end
+        rescue
+            # Return empty hash if file is missing/unreadable.
+        end
+
+        hash
+    end
+
+    def parse(content: str) -> Hash(str, str)
+        Parser.new(content).parse
+    end
+
+    private def apply_env(hash: Hash(str, str), override_env: bool)
+        hash.each do |key, value|
+
+            # Check existing ENV via FFI (assuming ENV object isn't native yet).
+            current_val = ffi.call_crystal("ENV.[]?", [key])
+            
+            if current_val == nil || override_env
+                ffi.call_crystal("ENV.[]=", [key, value])
+            end
+        end
+    end
+
+    class Parser
+        def initialize(content: str)
+            @content = content
+            @length = content.length
+            @index = 0
+            @result = {} as str -> str
+        end
+
+        def parse -> Hash(str, str)
+            while @index < @length
+                parse_line
+            end
+            @result
+        end
+
+        private def parse_line
+            skip_whitespace
+
+            # Handle comments and empty lines.
+            if current_char == '#' || current_char == '\n' || at_end?
+                consume_rest_of_line
+                return
+            end
+
+            # Support 'export' prefix common in .env files.
+            if match_keyword("export")
+                skip_whitespace
+            end
+
+            key = consume_key
+            
+            # If we don't find an equals sign, skip the line.
+            if current_char != '='
+                 consume_rest_of_line
+                 return
+            end
+
+            # Skip '='
+            advance
+
+            value = consume_value
+            @result[key] = value
+            
+            consume_rest_of_line
+        end
+
+        private def consume_key
+            start = @index
+            
+            # Key ends at '=', space, or comment start
+            while !at_end? && current_char != '=' && current_char != ' ' && current_char != '#'
+                advance
+            end
+            
+            # Use native .slice to extract key.
+            key_len = @index - start
+            @content.slice(start, key_len)
+        end
+
+        private def consume_value
+            skip_whitespace
+
+            if current_char == '"'
+                consume_double_quoted_value
+            elsif current_char == '\''
+                consume_single_quoted_value
+            else
+                consume_unquoted_value
+            end
+        end
+
+        private def consume_double_quoted_value
+
+            # Skip opening "
+            advance
+            
+            # Use Builder for efficient string construction.
+            strings.build do |sb|
+                while !at_end?
+                    char = current_char
+                    if char == '"'
+
+                        # Skip closing "
+                        advance
+
+                        break
+                    elsif char == '\\' && peek_next == '"'
+                        sb.append("\"")
+                        advance
+                    elsif char == '\\' && peek_next == 'n'
+                        sb.append("\n")
+                        advance
+                    elsif char == '\\' && peek_next == '\\'
+                        sb.append("\\")
+                        advance
+                    else
+                        sb.append_char(char)
+                        advance
+                    end
+                end
+            end
+        end
+
+        private def consume_single_quoted_value
+            advance # Skip opening '
+            start = @index
+            while !at_end? && current_char != '\''
+                advance
+            end
+            
+            len = @index - start
+            val = @content.slice(start, len)
+            
+            advance # Skip closing '
+            val
+        end
+
+        private def consume_unquoted_value
+            start = @index
+
+            # Unquoted values go until newline or comment.
+            while !at_end? && current_char != '\n' && current_char != '#'
+                advance
+            end
+
+            len = @index - start
+            raw_val = @content.slice(start, len)
+            
+            # Use .strip to clean up surrounding whitespace.
+            raw_val.strip
+        end
+
+        private def match_keyword(keyword: str) -> bool
+            len = keyword.length
+
+            if @index + len <= @length
+
+                # Use .slice for comparison.
+                sub = @content.slice(@index, len)
+
+                if sub == keyword
+                    @index = @index + len
+                    return true
+                end
+            end
+            false
+        end
+
+        private def skip_whitespace
+            while !at_end? && (current_char == ' ' || current_char == '\t')
+                advance
+            end
+        end
+
+        private def consume_rest_of_line
+            while !at_end? && current_char != '\n'
+                advance
+            end
+            if !at_end? && current_char == '\n'
+                advance
+            end
+        end
+
+        private def current_char
+            if at_end?
+                return ""
+            end
+            @content[@index]
+        end
+
+        private def peek_next
+            if @index + 1 >= @length
+                return ""
+            end
+            @content[@index + 1]
+        end
+
+        private def advance
+            @index = @index + 1
+        end
+
+        private def at_end?
+            @index >= @length
+        end
+    end
+end
