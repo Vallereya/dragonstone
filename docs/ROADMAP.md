@@ -194,10 +194,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Three)            Alpha Refactor.
-+ Added an I/O stdlib, might be temp and move directly to language.
++ Removed an I/O stdlib, move directly to language.
 + Fixed build pipeline, so all `shards build`'s go to the same place. 
-+ Added Levenshtein stdlib.
-+ Updated def and fun to support optional define or function depending on preference. 
++ Added Levenshtein stdlib, Colorize, and Unicode.
++ Updated mod, def, fun, cls, and abs to support optional module, define, function, class, and abstract depending on preference. 
 ```
 
 ---
@@ -224,8 +224,8 @@
 - 
 - 
 - 
-- Add dev more commands/flags.
-- Fix `--backend` flags.
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Three
