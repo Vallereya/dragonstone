@@ -28,3 +28,15 @@ describe "LLVM runtime stub unicode shims" do
         source.includes?("utf8proc_").should be_true
     end
 end
+
+describe "LLVM backend inspect formatting" do
+    it "declares an inspect runtime hook" do
+        source = File.read("src/dragonstone/core/compiler/targets/llvm/backend.cr")
+        source.includes?("inspect_value: \"dragonstone_runtime_value_inspect\"").should be_true
+    end
+
+    it "uses inspect for debug echo output" do
+        source = File.read("src/dragonstone/core/compiler/targets/llvm/backend.cr")
+        source.includes?("func = inspect ? @runtime[:inspect_value] : @runtime[:to_string]").should be_true
+    end
+end

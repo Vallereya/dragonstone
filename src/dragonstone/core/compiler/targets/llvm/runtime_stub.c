@@ -345,11 +345,6 @@ static char *ds_strip_string(const char *src) {
     return buf;
 }
 
-static bool ds_unicode_str_eq(const char *left, const char *right) {
-    if (!left || !right) return false;
-    return strcmp(left, right) == 0;
-}
-
 static char *ds_utf8_copy_range(const char *start, int len) {
     char *buf = (char *)ds_alloc((size_t)len + 1);
     memcpy(buf, start, (size_t)len);
@@ -361,11 +356,11 @@ static char *ds_unicode_normalize(const char *value, const char *form) {
     if (!value) return ds_strdup("");
     const char *normalized_form = form ? form : "NFC";
     utf8proc_uint8_t *mapped = NULL;
-    if (ds_unicode_str_eq(normalized_form, "NFD")) {
+    if (normalized_form && strcmp(normalized_form, "NFD") == 0) {
         mapped = utf8proc_NFD((const utf8proc_uint8_t *)value);
-    } else if (ds_unicode_str_eq(normalized_form, "NFKD")) {
+    } else if (normalized_form && strcmp(normalized_form, "NFKD") == 0) {
         mapped = utf8proc_NFKD((const utf8proc_uint8_t *)value);
-    } else if (ds_unicode_str_eq(normalized_form, "NFKC")) {
+    } else if (normalized_form && strcmp(normalized_form, "NFKC") == 0) {
         mapped = utf8proc_NFKC((const utf8proc_uint8_t *)value);
     } else {
         mapped = utf8proc_NFC((const utf8proc_uint8_t *)value);
@@ -415,7 +410,7 @@ static bool ds_unicode_ascii_only(const char *option) {
 
 static char *ds_unicode_upcase(const char *value, const char *option) {
     if (!value) return ds_strdup("");
-    if (!ds_unicode_ascii_only(option) && ds_unicode_str_eq(value, "stra" "\xC3\x9F" "e")) {
+    if (!ds_unicode_ascii_only(option) && strcmp(value, "stra" "\xC3\x9F" "e") == 0) {
         return ds_strdup("STRASSE");
     }
     return ds_unicode_map_case(value, utf8proc_toupper, ds_unicode_ascii_only(option));
@@ -423,7 +418,7 @@ static char *ds_unicode_upcase(const char *value, const char *option) {
 
 static char *ds_unicode_downcase(const char *value, const char *option) {
     if (!value) return ds_strdup("");
-    if (!ds_unicode_ascii_only(option) && ds_unicode_str_eq(value, "\xC4\xB0STANBUL")) {
+    if (!ds_unicode_ascii_only(option) && strcmp(value, "\xC4\xB0STANBUL") == 0) {
         return ds_strdup("i\xCC\x87stanbul");
     }
     return ds_unicode_map_case(value, utf8proc_tolower, ds_unicode_ascii_only(option));
@@ -1124,7 +1119,7 @@ void *dragonstone_runtime_method_invoke(void *receiver, void *method_name_ptr, i
                         const char *right = ds_arg_string(args->items[1]);
                         char *left_nfd = ds_unicode_normalize(left, "NFD");
                         char *right_nfd = ds_unicode_normalize(right, "NFD");
-                        bool equal = ds_unicode_str_eq(left_nfd, right_nfd);
+                        bool equal = left_nfd && right_nfd && strcmp(left_nfd, right_nfd) == 0;
                         return dragonstone_runtime_box_bool(equal);
                     }
 
@@ -2200,7 +2195,7 @@ static void ds_debug_append(char **buffer, const char *part) {
 
 void dragonstone_runtime_debug_accum(void *source, void *value) {
     const char *source_str = source ? (const char *)source : "";
-    char *value_str = (char *)dragonstone_runtime_value_display(value);
+    char *value_str = (char *)dragonstone_runtime_value_inspect(value);
     ds_debug_append(&ds_debug_inline_source, source_str);
     ds_debug_append(&ds_debug_inline_value, value_str ? value_str : "");
 }

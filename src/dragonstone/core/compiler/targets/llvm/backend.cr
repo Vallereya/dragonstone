@@ -101,6 +101,7 @@ module Dragonstone
               case_compare: String,
               yield_missing_block: String,
               display_value: String,
+              inspect_value: String,
               interpolated_string: String,
               raise: String,
               range_literal: String,
@@ -226,6 +227,7 @@ module Dragonstone
                 case_compare: "dragonstone_runtime_case_compare",
                 yield_missing_block: "dragonstone_runtime_yield_missing_block",
                 display_value: "dragonstone_runtime_value_display",
+                inspect_value: "dragonstone_runtime_value_inspect",
                 interpolated_string: "dragonstone_runtime_interpolated_string",
                 raise: "dragonstone_runtime_raise",
                 range_literal: "dragonstone_runtime_range_literal",
@@ -990,6 +992,7 @@ module Dragonstone
               io << "declare i1 @#{@runtime[:case_compare]}(i8*, i8*)\n"
               io << "declare void @#{@runtime[:yield_missing_block]}()\n"
               io << "declare i8* @#{@runtime[:display_value]}(i8*)\n"
+              io << "declare i8* @#{@runtime[:inspect_value]}(i8*)\n"
               io << "declare i8* @#{@runtime[:to_string]}(i8*)\n"
               io << "declare void @#{@runtime[:debug_accum]}(i8*, i8*)\n"
               io << "declare void @#{@runtime[:debug_flush]}()\n"
@@ -3818,7 +3821,7 @@ module Dragonstone
             private def emit_echo(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
               case value[:type]
               when "i8*"
-                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                func = inspect ? @runtime[:inspect_value] : @runtime[:to_string]
                 display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
                 ctx.io << "  call i32 @puts(i8* #{display[:ref]})\n"
               when "i32", "i64"
@@ -3845,7 +3848,7 @@ module Dragonstone
             private def emit_eecho(ctx : FunctionContext, value : ValueRef, inspect : Bool = false)
               case value[:type]
               when "i8*"
-                func = inspect ? @runtime[:display_value] : @runtime[:to_string]
+                func = inspect ? @runtime[:inspect_value] : @runtime[:to_string]
                 display = runtime_call(ctx, "i8*", func, [{type: "i8*", ref: value[:ref]}])
                 format_ptr = materialize_string_pointer(ctx, "%s")
                 ctx.io << "  call i32 (i8*, ...) @printf(i8* #{format_ptr}, i8* #{display[:ref]})\n"
