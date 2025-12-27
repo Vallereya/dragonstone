@@ -900,7 +900,7 @@ module Dragonstone
               intern_string("true")
               intern_string("false")
               intern_string("nil")
-              intern_string("Division by zero")
+              intern_string("Cannot divide by zero")
               @runtime_literals_preregistered = true
             end
 
@@ -3412,7 +3412,7 @@ module Dragonstone
                   ctx.io << "  br i1 %#{is_zero}, label %#{zero_label}, label %#{cont_label}\n"
 
                   ctx.io << "#{zero_label}:\n"
-                  msg_ptr = materialize_string_pointer(ctx, "Division by zero")
+                  msg_ptr = materialize_string_pointer(ctx, "Cannot divide by zero")
                   ctx.io << "  call void @#{@runtime[:raise]}(i8* #{msg_ptr})\n"
                   ctx.io << "  unreachable\n"
 

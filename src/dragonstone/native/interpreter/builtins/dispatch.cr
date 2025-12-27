@@ -264,7 +264,7 @@ module Dragonstone
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
-                runtime_error(InterpreterError, "divided by 0", node)
+                runtime_error(InterpreterError, "Cannot divide by zero", node)
             end
 
             numeric_divide(lnum, rnum)
@@ -277,7 +277,7 @@ module Dragonstone
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
-                runtime_error(InterpreterError, "divided by 0", node)
+                runtime_error(InterpreterError, "Cannot divide by zero", node)
             end
 
             if lnum.is_a?(Float64) || rnum.is_a?(Float64)
@@ -554,7 +554,7 @@ module Dragonstone
             lnum, rnum = numeric_pair(left, right, node)
 
             if rnum == 0 || rnum == 0.0
-                runtime_error(InterpreterError, "divided by 0", node)
+                runtime_error(InterpreterError, "Cannot divide by zero", node)
 
             end
 

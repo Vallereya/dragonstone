@@ -2290,7 +2290,7 @@ module Dragonstone
             return overload unless overload.nil?
 
             if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
-                raise VMException.new("divided by 0")
+                raise VMException.new("Cannot divide by zero")
             end
             numeric_op(a, b) do |x, y|
                 if x.is_a?(Float32) || x.is_a?(Float64) || y.is_a?(Float32) || y.is_a?(Float64)
@@ -2376,7 +2376,7 @@ module Dragonstone
             overload = invoke_operator_overload(a, "/", b)
             return overload unless overload.nil?
             if (a.is_a?(Int32) || a.is_a?(Int64) || a.is_a?(Float32) || a.is_a?(Float64)) && (b == 0 || b == 0.0)
-                raise VMException.new("divided by 0")
+                raise VMException.new("Cannot divide by zero")
             end
             numeric_op(a, b) { |x, y| x / y }
         end
