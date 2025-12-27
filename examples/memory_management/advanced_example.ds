@@ -1,0 +1,10 @@
+#[
+
+    Example: Using both Garbage Collection and Ownership/Borrow Checker.
+
+    For this example, we will combine both memory management techniques,
+    as well as type checks for added safety.
+
+]#
+
+

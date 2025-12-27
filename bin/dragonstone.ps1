@@ -1,9 +1,10 @@
 <#
     .NOTES
         Command Usage:
-            Rebuild: `dragonstone.ps1 --rebuild`
-            Clean: `dragonstone.ps1 --clean`
-            Clean and Rebuild: `dragonstone.ps1 --clean-rebuild`
+            Rebuild:            `dragonstone.ps1 --rebuild`
+            Clean:              `dragonstone.ps1 --clean`
+            Clean and Rebuild:  `dragonstone.ps1 --clean-rebuild`
+            Verbose build:      `dragonstone.ps1 <flag> --verbose`
 
     .SYNOPSIS
         PowerShell launcher script for Dragonstone.
@@ -14,22 +15,16 @@
         variables related to Dragonstone.
 
     .EXAMPLE
-        dragonstone.bat --rebuild
+        `dragonstone.ps1 --rebuild`
+        `dragonstone.ps1 --clean`
+        `dragonstone.ps1 --clean-rebuild`
 
         or
 
         dragonstone.ps1 --rebuild
-
-        This rebuilds the Dragonstone executable with resources.
-
-    .EXAMPLE
-        dragonstone.bat --clean
-
-        or
-
         dragonstone.ps1 --clean
-
-        This removes all build artifacts.
+        dragonstone.ps1 --clean-rebuild
+        
 #>
 
 param(
@@ -43,6 +38,17 @@ $ErrorActionPreference = 'Stop'
 if ($null -eq $DragonstoneArgs) {
     [string[]]$DragonstoneArgs = @()
 }
+
+$script:verboseBuild = $false
+$normalizedArgs = @()
+foreach ($arg in $DragonstoneArgs) {
+    if ($arg -eq '--verbose') {
+        $script:verboseBuild = $true
+        continue
+    }
+    $normalizedArgs += $arg
+}
+$DragonstoneArgs = $normalizedArgs
 
 $scriptPath   = $PSCommandPath
 $scriptRoot   = Split-Path -Parent $scriptPath
@@ -73,6 +79,8 @@ $abiSources = @(
     (Join-Path $abiSourceDir 'std/io/io.c'),
     (Join-Path $abiSourceDir 'std/file/file.c'),
     (Join-Path $abiSourceDir 'std/path/path.c'),
+    (Join-Path $abiSourceDir 'std/value/value.c'),
+    (Join-Path $abiSourceDir 'std/gc/gc.c'),
     (Join-Path $abiSourceDir 'platform/platform.c'),
     (Join-Path $abiSourceDir 'platform/lib_c/lib_c.c')
 )
@@ -133,6 +141,8 @@ function Show-DragonstoneEnv {
     }
 }
 
+# Cleans up Dragonstone build artifacts, including the build directory,
+# compiled resource files, and the version header file.
 function Clean-DragonstoneArtifacts {
     Write-Host "Cleaning build..........."
     
@@ -148,9 +158,34 @@ function Clean-DragonstoneArtifacts {
             Description = 'dragonstone.o'
         },
         @{
+            Path = (Join-Path $scriptRoot 'resources/dragonstone.res')
+            Type = 'File'
+            Description = 'dragonstone.res'
+        },
+        @{
             Path = (Join-Path $projectRoot 'src/dragonstone/core/runtime/include/dragonstone/core/version.h')
             Type = 'File'
             Description = 'version.h'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord')
+            Type = 'Directory'
+            Description = 'GC vendor/cord junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra')
+            Type = 'Directory'
+            Description = 'GC vendor/extra junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include')
+            Type = 'Directory'
+            Description = 'GC vendor/include junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops')
+            Type = 'Directory'
+            Description = 'GC vendor/libatomic_ops stub'
         }
     )
     
@@ -230,8 +265,7 @@ function CompileDragonstoneResource {
     }
 
     $tool = $null
-    # $toolNames = @('llvm-rc', 'x86_64-w64-mingw32-windres', 'windres')
-    $toolNames = @('windres', 'x86_64-w64-mingw32-windres', 'llvm-rc')
+    $toolNames = @('llvm-rc', 'x86_64-w64-mingw32-windres', 'windres')
 
     foreach ($name in $toolNames) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
@@ -245,8 +279,6 @@ function CompileDragonstoneResource {
         Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the resource.'
         return $null
     }
-
-    # Write-Host "Found resource compiler: $($tool.Name)"
 
     $extension = '.res'
 
@@ -271,34 +303,37 @@ function CompileDragonstoneResource {
     $originalLocation = Get-Location
 
     Write-Host "Compiling, please wait..."
-
-    # Write-Host "Compiling resource from directory: $rcDir"
-    # Write-Host "Using Resource file: $rcFileName"
     
     try {
         Set-Location $rcDir
-        
+
         if ($tool.Name -like 'llvm-rc*') {
-            # Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
-            & $tool.Path '-fo' $outputPath $rcFileName
+            & $tool.Path '-fo' $outputPath $rcFileName 2>&1 | Out-Null
         } else {
-            # Write-Host "Running: $($tool.Name) $rcFileName -O coff -o $outputPath"
-            & $tool.Path $rcFileName '-O' 'coff' '-o' $outputPath
+            $gccPath = Get-Command 'gcc' -ErrorAction SilentlyContinue
+            $oldPath = $env:PATH
+            try {
+                if ($gccPath) {
+                    $gccDir = Split-Path -Parent $gccPath.Path
+                    $env:PATH = "$gccDir;$env:PATH"
+                }
+                & $tool.Path $rcFileName '-O' 'coff' '-o' $outputPath 2>&1 | Out-Null
+            } finally {
+                $env:PATH = $oldPath
+            }
         }
 
         if ($LASTEXITCODE -ne 0) {
-            throw "ERROR: Failed to compile $ScriptPath using $($tool.Name). Exit code: $LASTEXITCODE"
+            return $null
         }
 
         if (-not (Test-Path -Path $outputPath -PathType Leaf)) {
-            throw "WARNING: Resource compilation appeared to succeed but output file not found at: $outputPath"
+            return $null
         }
 
-        # Write-Host "Successfully compiled icon resource: $outputPath"
         return $outputPath
     } catch {
-        Write-Warning "ERROR: Resource compilation failed: $($_.Exception.Message)"
-        throw
+        return $null
     } finally {
         Set-Location $originalLocation
     }
@@ -326,22 +361,196 @@ function Get-ArchiveTool {
     return $null
 }
 
+function Get-GcPlatformId {
+    $arch = $env:PROCESSOR_ARCHITECTURE
+    if ($arch -and $arch -match 'ARM64') {
+        return 'win-arm64'
+    }
+    return 'win-x64'
+}
+
+function Test-GcLibDir {
+    param([string] $GcLibDir)
+
+    if (-not $GcLibDir) {
+        return $false
+    }
+
+    $candidates = @('gc.lib', 'libgc.a', 'libgc.lib')
+    foreach ($candidate in $candidates) {
+        if (Test-Path -Path (Join-Path $GcLibDir $candidate)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-GcIncludeDir {
+    $gcPlatform = Get-GcPlatformId
+    $gcBuildRoot = Join-Path $buildDir 'gc'
+    $gcBuildInclude = Join-Path (Join-Path $gcBuildRoot $gcPlatform) 'include'
+    if ((Test-Path -Path (Join-Path $gcBuildInclude 'gc.h')) -and (Test-GcLibDir (Join-Path (Join-Path $gcBuildRoot $gcPlatform) 'lib'))) {
+        return $gcBuildInclude
+    }
+
+    $vendorRoot = Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor'
+    $vendorCandidates = @(
+        $vendorRoot,
+        (Join-Path $vendorRoot 'include')
+    )
+    $vendorLibCandidates = @(
+        (Join-Path $vendorRoot 'lib'),
+        (Join-Path $vendorRoot 'lib\win-x64')
+    )
+    foreach ($candidate in $vendorCandidates) {
+        $hasLib = $false
+        foreach ($libCandidate in $vendorLibCandidates) {
+            if (Test-GcLibDir $libCandidate) {
+                $hasLib = $true
+                break
+            }
+        }
+        if ($hasLib -and (Test-Path -Path (Join-Path $candidate 'gc.h'))) {
+            return $candidate
+        }
+    }
+
+    if ($env:DRAGONSTONE_GC_INCLUDE) {
+        $candidate = $env:DRAGONSTONE_GC_INCLUDE
+        if (Test-Path -Path (Join-Path $candidate 'gc.h')) {
+            return $candidate
+        }
+    }
+
+    if ($env:GC_INCLUDE) {
+        $candidate = $env:GC_INCLUDE
+        if (Test-Path -Path (Join-Path $candidate 'gc.h')) {
+            return $candidate
+        }
+    }
+
+    if ($script:crystal) {
+        $crystalBin = Split-Path -Parent $script:crystal.Path
+        $crystalRoot = Split-Path -Parent $crystalBin
+        $candidates = @(
+            (Join-Path $crystalRoot 'include'),
+            (Join-Path $crystalRoot 'lib\gc\include'),
+            (Join-Path $crystalRoot 'lib\gc\include\gc'),
+            (Join-Path $crystalRoot 'lib\gc')
+        )
+        foreach ($candidate in $candidates) {
+            if (Test-Path -Path (Join-Path $candidate 'gc.h')) {
+                return $candidate
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-GcLibDir {
+    $gcPlatform = Get-GcPlatformId
+    $gcBuildRoot = Join-Path $buildDir 'gc'
+    $gcBuildLib = Join-Path (Join-Path $gcBuildRoot $gcPlatform) 'lib'
+    if (Test-GcLibDir $gcBuildLib) {
+        return $gcBuildLib
+    }
+
+    $vendorRoot = Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor'
+    $vendorCandidates = @(
+        (Join-Path $vendorRoot 'lib'),
+        (Join-Path $vendorRoot 'lib\win-x64')
+    )
+    foreach ($candidate in $vendorCandidates) {
+        if (Test-GcLibDir $candidate) {
+            return $candidate
+        }
+    }
+
+    if ($env:DRAGONSTONE_GC_LIB) {
+        if (Test-GcLibDir $env:DRAGONSTONE_GC_LIB) {
+            return $env:DRAGONSTONE_GC_LIB
+        }
+    }
+
+    if ($env:GC_LIB) {
+        if (Test-GcLibDir $env:GC_LIB) {
+            return $env:GC_LIB
+        }
+    }
+
+    return $null
+}
+
+function Get-GcLibName {
+    param([string] $GcLibDir)
+
+    $candidates = @('gc.lib', 'libgc.a', 'libgc.lib')
+    foreach ($candidate in $candidates) {
+        if (Test-Path -Path (Join-Path $GcLibDir $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Ensure-GcBuild {
+    param([switch] $Verbose)
+
+    $gcPlatform = Get-GcPlatformId
+    $gcOutputRoot = Join-Path $buildDir "gc\$gcPlatform"
+    $gcInclude = Join-Path $gcOutputRoot 'include\gc.h'
+    $gcLibDir = Join-Path $gcOutputRoot 'lib'
+
+    if ((Test-Path -Path $gcInclude) -and (Test-GcLibDir $gcLibDir)) {
+        return
+    }
+
+    $vendorSource = Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/CMakeLists.txt'
+    if (-not (Test-Path -Path $vendorSource)) {
+        return
+    }
+
+    $buildScript = Join-Path $projectRoot 'scripts/build_gc.ps1'
+    if (-not (Test-Path -Path $buildScript)) {
+        return
+    }
+
+    $gcArgs = @('-IfNeeded')
+    if ($Verbose) {
+        $gcArgs += '-Verbose'
+    }
+
+    if ($script:verboseBuild) {
+        Write-Host "Building Boehm GC: $buildScript $($gcArgs -join ' ')"
+    }
+    & $buildScript @gcArgs
+}
+
 function Build-DragonstoneAbi {
     param([string] $OutputDir)
 
     $compiler = Get-CCompiler
     if (-not $compiler) {
-        throw 'ERROR: C compiler not found (needed to build ABI).'
+        Write-Host "ERROR: C compiler not found" -ForegroundColor Red
+        Write-Host "A C compiler is needed to build the ABI library" -ForegroundColor Yellow
+        throw [System.Exception]::new("C compiler not found")
     }
 
     $archiver = Get-ArchiveTool
     if (-not $archiver) {
-        throw 'ERROR: Archive tool not found (needed to build ABI .lib).'
+        Write-Host "ERROR: Archive tool not found" -ForegroundColor Red
+        Write-Host "llvm-lib or lib.exe is needed to build the ABI library" -ForegroundColor Yellow
+        throw [System.Exception]::new("Archive tool not found")
     }
 
     if (-not (Test-Path -Path $OutputDir)) {
         New-Item -ItemType Directory -Path $OutputDir | Out-Null
     }
+
+    $gcIncludeDir = Get-GcIncludeDir
 
     $objects = @()
 
@@ -364,9 +573,30 @@ function Build-DragonstoneAbi {
         }
 
         if ($needsBuild) {
-            & $compiler '-std=c11' '-O2' '-c' $src '-o' $objPath
+            $compileArgs = @('-std=c11', '-O2', '-c')
+            if ($src -like '*\std\gc\gc.c') {
+                if (-not $gcIncludeDir) {
+                    Write-Host "ERROR: Boehm GC headers not found" -ForegroundColor Red
+                    Write-Host "Please set DRAGONSTONE_GC_INCLUDE to the folder containing gc.h" -ForegroundColor Yellow
+                    throw [System.Exception]::new("GC headers not found")
+                }
+                $compileArgs += "-I$gcIncludeDir"
+                if ($script:verboseBuild) {
+                    Write-Host "GC include dir: $gcIncludeDir"
+                }
+            } elseif ($gcIncludeDir) {
+                $compileArgs += "-I$gcIncludeDir"
+            }
+            $compileArgs += @($src, '-o', $objPath)
+            if ($script:verboseBuild) {
+                $compileArgs = @('-v') + $compileArgs
+                Write-Host "ABI compile: $compiler $($compileArgs -join ' ')"
+            }
+
+            & $compiler @compileArgs 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                throw "ERROR: Failed to compile ABI source: $src"
+                Write-Host "ERROR: Failed to compile ABI source: $(Split-Path -Leaf $src)" -ForegroundColor Red
+                throw [System.Exception]::new("Compilation failed")
             }
         }
 
@@ -388,8 +618,16 @@ function Build-DragonstoneAbi {
     }
 
     if ($needsArchive) {
-        & $archiver "/OUT:$libPath" @objects
+        $archiveArgs = @("/OUT:$libPath") + $objects
+        if ($script:verboseBuild) {
+            $archiveArgs = @('/VERBOSE') + $archiveArgs
+            Write-Host "ABI archive: $archiver $($archiveArgs -join ' ')"
+        }
+        $output = & $archiver @archiveArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
+            if ($script:verboseBuild) {
+                Write-Host $output
+            }
             throw "ERROR: Failed to archive ABI library at $libPath"
         }
     }
@@ -418,44 +656,36 @@ function EnsureDragonstoneExecutable {
 
     $resourcePath = $null
 
-    if (-not $resourceScript) {
-    #     Write-Host "Running resource script: $resourceScript"
-    # } else {
-        Write-Host 'WARNING: The dragonstone.rc resource script was found; But, continuing without adding resource to dragonstone.exe'
-    }
-
-    try {
-        $resourcePath = CompileDragonstoneResource -ScriptPath $resourceScript -OutputBase $resourceOutputBase
-    } catch {
-        if ($Force) {
-            throw
+    if ($resourceScript) {
+        try {
+            $resourcePath = CompileDragonstoneResource -ScriptPath $resourceScript -OutputBase $resourceOutputBase
+        } catch {
+            if ($Force) {
+                throw
+            }
+            # Resource compilation failed but continue without it
         }
-
-        Write-Warning $_.Exception.Message
     }
 
     $envFlagSet = $false
     $resourceLinkArg = $null
     $abiLibPath = $null
 
+    $abiOutputDir = Join-Path $buildDir 'abi'
+    Ensure-GcBuild -Verbose:$script:verboseBuild
+
     try {
-        $abiOutputDir = Join-Path $buildDir 'abi'
         $abiLibPath = Build-DragonstoneAbi -OutputDir $abiOutputDir
     } catch {
-        if ($Force) {
+        if (-not $Force) {
             throw
         }
-        Write-Warning $_.Exception.Message
+        $abiLibPath = $null
     }
 
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
-        # $resourceLinkArg = $resourceLinkArg -replace '\\','/'
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
-
-        # Write-Host "Resource object file: $resourceLinkArg"
-        # Write-Host "Passing resource to linker: $resourceLinkArg"
-
         $env:CRFLAGS = "--link-flags `"$resourceLinkArg`""
         $envFlagSet = $true
     }
@@ -468,22 +698,35 @@ function EnsureDragonstoneExecutable {
         if ($abiLibPath) {
             $linkFlags += "/LIBPATH:$buildDir"
         }
+        $gcLibDir = Get-GcLibDir
+        if ($gcLibDir) {
+            $linkFlags += "/LIBPATH:$gcLibDir"
+            $gcLibName = Get-GcLibName -GcLibDir $gcLibDir
+            if ($gcLibName) {
+                $linkFlags += $gcLibName
+            }
+            if ($script:verboseBuild) {
+                Write-Host "GC lib dir: $gcLibDir"
+            }
+        }
+        if ($script:verboseBuild) {
+            $linkFlags += "/VERBOSE"
+        }
 
         if ($linkFlags.Count -gt 0 -and $script:crystal) {
             $linkFlagsArg = ($linkFlags | ForEach-Object { $_ -replace '\\','/' }) -join ' '
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release', '--link-flags', $linkFlagsArg)
-            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            if ($script:verboseBuild) {
+                $buildArgs += '--verbose'
+                Write-Host "Building with crystal: $($script:crystal.Path) $($buildArgs -join ' ')"
+            }
             & $script:crystal.Path @buildArgs
-        # } elseif ($script:shards) {
-        #     Write-Host "Building with shards..."
-        #     if ($resourceLinkArg) {
-        #         Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
-        #         Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
-        #     }
-        #     & $script:shards.Path 'build'
         } else {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release')
-            # Write-Host "Building with crystal: crystal $($buildArgs -join ' ')"
+            if ($script:verboseBuild) {
+                $buildArgs += '--verbose'
+                Write-Host "Building with crystal: $($script:crystal.Path) $($buildArgs -join ' ')"
+            }
             & $script:crystal.Path @buildArgs
         }
 
@@ -567,13 +810,18 @@ $script:crystal = Get-Command 'crystal' -ErrorAction SilentlyContinue
 try {
     $buildEnsured = EnsureDragonstoneExecutable -Force:$forceRebuild
 } catch {
-    Write-Error $_.Exception.Message
+    Write-Host "ERROR: Build failed." -ForegroundColor Red
+    try {
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    } catch {
+        # Ignore errors in error reporting
+    }
     exit 1
 }
 
 if (-not $buildEnsured -and -not (Test-Path -Path $exePath -PathType Leaf)) {
     if (-not $script:crystal) {
-        Write-Error 'ERROR: The dragonstone.exe was not found and the Crystal compiler is unavailable. Build the project before running Dragonstone.'
+        Write-Host 'ERROR: The dragonstone.exe was not found. The Crystal compiler is also unavailable. Build the project before running Dragonstone.' -ForegroundColor Red
         exit 1
     }
 

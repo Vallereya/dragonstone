@@ -2088,8 +2088,14 @@ void dragonstone_runtime_define_enum_member(void *class_box_ptr, void *name_ptr,
     DSConstant *c = (DSConstant *)ds_alloc(sizeof(DSConstant));
     c->name = ds_strdup(name);
     c->value = val_box;
-    c->next = cls->constants;
-    cls->constants = c;
+    c->next = NULL;
+    if (!cls->constants) {
+        cls->constants = c;
+    } else {
+        DSConstant *tail = cls->constants;
+        while (tail->next) tail = tail->next;
+        tail->next = c;
+    }
 
     char *path = ds_join_path(cls->name, name);
     ds_constant_set(&global_constants, path, val_box);
@@ -2837,7 +2843,7 @@ void *dragonstone_runtime_div(void *lhs, void *rhs) {
     if (ds_is_boxed(rhs)) {
         DSValue *r = (DSValue *)rhs;
         if ((r->kind == DS_VALUE_INT32 && r->as.i32 == 0) || (r->kind == DS_VALUE_INT64 && r->as.i64 == 0) || (r->kind == DS_VALUE_FLOAT && r->as.f64 == 0.0)) {
-            dragonstone_runtime_raise("Division by zero");
+            dragonstone_runtime_raise("Cannot divide by zero");
             return NULL;
         }
     }
@@ -2871,7 +2877,7 @@ void *dragonstone_runtime_mod(void *lhs, void *rhs) {
     if (ds_is_boxed(rhs)) {
         DSValue *r = (DSValue *)rhs;
         if ((r->kind == DS_VALUE_INT32 && r->as.i32 == 0) || (r->kind == DS_VALUE_INT64 && r->as.i64 == 0) || (r->kind == DS_VALUE_FLOAT && r->as.f64 == 0.0)) {
-            dragonstone_runtime_raise("Division by zero");
+            dragonstone_runtime_raise("Cannot divide by zero");
             return NULL;
         }
     }
@@ -2953,7 +2959,7 @@ void *dragonstone_runtime_floor_div(void *lhs, void *rhs) {
     if (ds_is_boxed(rhs)) {
         DSValue *r = (DSValue *)rhs;
         if ((r->kind == DS_VALUE_INT32 && r->as.i32 == 0) || (r->kind == DS_VALUE_INT64 && r->as.i64 == 0) || (r->kind == DS_VALUE_FLOAT && r->as.f64 == 0.0)) {
-            dragonstone_runtime_raise("Division by zero");
+            dragonstone_runtime_raise("Cannot divide by zero");
             return NULL;
         }
     }

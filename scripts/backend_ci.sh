@@ -71,6 +71,8 @@ ABI_SOURCES=(
     "$ABI_SRC_DIR/std/io/io.c"
     "$ABI_SRC_DIR/std/file/file.c"
     "$ABI_SRC_DIR/std/path/path.c"
+    "$ABI_SRC_DIR/std/value/value.c"
+    "$ABI_SRC_DIR/std/gc/gc.c"
     "$ABI_SRC_DIR/platform/platform.c"
     "$ABI_SRC_DIR/platform/lib_c/lib_c.c"
 )
@@ -126,9 +128,108 @@ pick_cc() {
     return 1
 }
 
+gc_platform_id() {
+    local uname_s uname_m os_id arch_id
+    uname_s="$(uname -s)"
+    uname_m="$(uname -m)"
+    case "$uname_s" in
+        Darwin) os_id="macos" ;;
+        Linux) os_id="linux" ;;
+        *) os_id="unknown" ;;
+    esac
+    case "$uname_m" in
+        x86_64|amd64) arch_id="x64" ;;
+        arm64|aarch64) arch_id="arm64" ;;
+        *) arch_id="$uname_m" ;;
+    esac
+    printf '%s-%s\n' "$os_id" "$arch_id"
+}
+
+gc_lib_present() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 1
+    [[ -f "$dir/libgc.a" || -f "$dir/libgc.so" || -f "$dir/libgc.dylib" || -f "$dir/gc.lib" ]] || return 1
+    return 0
+}
+
+gc_include_dir() {
+    local platform
+    platform="$(gc_platform_id)"
+    local build_include="$repo_root/bin/build/gc/$platform/include"
+    if [[ -f "$build_include/gc.h" && -d "$repo_root/bin/build/gc/$platform/lib" ]] && gc_lib_present "$repo_root/bin/build/gc/$platform/lib"; then
+        echo "$build_include"
+        return 0
+    fi
+
+    local vendor_root="$repo_root/src/dragonstone/shared/runtime/abi/std/gc/vendor"
+    local vendor_lib_candidates=("$vendor_root/lib" "$vendor_root/lib/$platform")
+    for candidate in "$vendor_root" "$vendor_root/include"; do
+        local has_lib="false"
+        local lib_candidate
+        for lib_candidate in "${vendor_lib_candidates[@]}"; do
+            if gc_lib_present "$lib_candidate"; then
+                has_lib="true"
+                break
+            fi
+        done
+        if [[ "$has_lib" == "true" && -f "$candidate/gc.h" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    if [[ -n "${DRAGONSTONE_GC_INCLUDE:-}" && -f "$DRAGONSTONE_GC_INCLUDE/gc.h" ]]; then
+        echo "$DRAGONSTONE_GC_INCLUDE"
+        return 0
+    fi
+
+    if [[ -n "${GC_INCLUDE:-}" && -f "$GC_INCLUDE/gc.h" ]]; then
+        echo "$GC_INCLUDE"
+        return 0
+    fi
+
+    return 1
+}
+
+gc_lib_dir() {
+    local platform
+    platform="$(gc_platform_id)"
+    local build_lib="$repo_root/bin/build/gc/$platform/lib"
+    if gc_lib_present "$build_lib"; then
+        echo "$build_lib"
+        return 0
+    fi
+
+    local vendor_root="$repo_root/src/dragonstone/shared/runtime/abi/std/gc/vendor"
+    for candidate in "$vendor_root/lib" "$vendor_root/lib/$platform"; do
+        if gc_lib_present "$candidate"; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    if [[ -n "${DRAGONSTONE_GC_LIB:-}" && -d "$DRAGONSTONE_GC_LIB" ]] && gc_lib_present "$DRAGONSTONE_GC_LIB"; then
+        echo "$DRAGONSTONE_GC_LIB"
+        return 0
+    fi
+
+    if [[ -n "${GC_LIB:-}" && -d "$GC_LIB" ]] && gc_lib_present "$GC_LIB"; then
+        echo "$GC_LIB"
+        return 0
+    fi
+
+    return 1
+}
+
 build_abi_objects() {
     local cc
     cc="$(pick_cc)" || { echo "[backend-ci] C compiler not found (needed to build ABI)" >&2; return 1; }
+    local gc_include=""
+    if gc_include="$(gc_include_dir)"; then
+        :
+    else
+        gc_include=""
+    fi
     local ar_tool=""
     if command -v ar >/dev/null 2>&1; then
         ar_tool="ar"
@@ -148,7 +249,14 @@ build_abi_objects() {
         obj="$obj_dir/${rel//\//_}"
         obj="${obj%.c}.o"
         if [[ ! -f "$obj" || "$src" -nt "$obj" ]]; then
-            "$cc" -std=c11 -O2 -c "$src" -o "$obj"
+            if [[ "$src" == *"/std/gc/gc.c" ]]; then
+                [[ -n "$gc_include" ]] || { echo "[backend-ci] Boehm GC headers not found. Set DRAGONSTONE_GC_INCLUDE or GC_INCLUDE." >&2; return 1; }
+                "$cc" -std=c11 -O2 -I"$gc_include" -c "$src" -o "$obj"
+            elif [[ -n "$gc_include" ]]; then
+                "$cc" -std=c11 -O2 -I"$gc_include" -c "$src" -o "$obj"
+            else
+                "$cc" -std=c11 -O2 -c "$src" -o "$obj"
+            fi
         fi
         objs+=("$obj")
     done
@@ -180,7 +288,14 @@ run_build() {
     echo "[backend-ci] Building CLI stub -> $output_path (backend=$DRAGONSTONE_BACKEND)"
     abi_lib="$(build_abi_objects)"
     if [[ -n "$abi_lib" ]]; then
-        crystal build "$entrypoint_source" -o "$output_path" --link-flags "-L$repo_root/bin/build"
+        local link_flags="-L$repo_root/bin/build"
+        local gc_lib=""
+        if gc_lib="$(gc_lib_dir)"; then
+            if [[ -f "$gc_lib/libgc.a" || -f "$gc_lib/libgc.so" || -f "$gc_lib/libgc.dylib" ]]; then
+                link_flags="$link_flags -L$gc_lib -lgc"
+            fi
+        fi
+        crystal build "$entrypoint_source" -o "$output_path" --link-flags "$link_flags"
     else
         crystal build "$entrypoint_source" -o "$output_path"
     fi

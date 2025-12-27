@@ -59,9 +59,7 @@ module Dragonstone
             @module_graph = nil
             set_variable("ffi", FFIModule.new)
             @gc_manager = Runtime::GC::Manager(RuntimeValue).new(
-                ->(value : RuntimeValue) : RuntimeValue { Runtime::GC.deep_copy_runtime(value) },
-                -> { ::GC.disable },
-                -> { ::GC.enable }
+                ->(value : RuntimeValue) : RuntimeValue { Runtime::GC.deep_copy_runtime(value) }
             )
             set_variable("gc", Runtime::GC::Host.new(@gc_manager))
             @builtin_stdout = BuiltinStream.new(BuiltinStream::Kind::Stdout)

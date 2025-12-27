@@ -33,7 +33,7 @@ if [[ ! -f "$LLVM_FILE" ]]; then
     exit 1
 fi
 
-RUNTIME_STUB="src/dragonstone/core/compiler/targets/llvm/runtime_stub.c"
+RUNTIME_STUB="src/dragonstone/core/compiler/targets/llvm/llvm_runtime.c"
 RUNTIME_OBJ="dev/build/core/llvm/runtime_stub.o"
 
 mkdir -p "$(dirname "$RUNTIME_OBJ")"

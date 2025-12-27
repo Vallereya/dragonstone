@@ -17,5 +17,9 @@ powershell.exe -NoProfile -Command ^
     "  Write-Host \"Added $target to user PATH. Restart your shell to pick it up.\";" ^
     "}"
 
+if exist "%ABS_DIR%scripts\build_gc.ps1" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ABS_DIR%scripts\build_gc.ps1" -IfNeeded
+)
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ABS_DIR%dragonstone.ps1" %*
 endlocal & exit /b %ERRORLEVEL%

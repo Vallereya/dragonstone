@@ -753,6 +753,18 @@ module Dragonstone
 
         private def parse_annotation : AST::Annotation
             start_token = expect(:ANNOTATION_START)
+            if memory_annotation_start?
+                tokens = [] of Token
+                while current_token.type != :RBRACKET
+                    tokens << current_token
+                    advance
+                end
+                expect(:RBRACKET)
+                memory = parse_memory_annotation(tokens)
+                name = tokens.first?.try(&.value.to_s) || "Memory"
+                return AST::Annotation.new(name, [] of AST::Node, start_token.location, memory)
+            end
+
             name_parts = [] of String
             name_parts << expect(:IDENTIFIER).value.as(String)
             while current_token.type == :DOT
@@ -770,17 +782,12 @@ module Dragonstone
         end
 
         private def parse_annotation_arguments : Array(AST::Node)
-            expect(:LPAREN)
-            args = [] of AST::Node
-            unless current_token.type == :RPAREN
-                args << parse_expression
-                while current_token.type == :COMMA
-                    advance
-                    args << parse_expression
-                end
-            end
-            expect(:RPAREN)
-            args
+            parse_argument_list
+        end
+
+        private def memory_annotation_start? : Bool
+            return false unless current_token.type == :IDENTIFIER
+            current_token.value == "Garbage" || current_token.value == "Ownership"
         end
 
         private def parse_annotated_statement : AST::Node
@@ -802,6 +809,104 @@ module Dragonstone
                 parse_abstract_prefixed_statement(annotations)
             else
                 error("Annotations are only allowed before definitions", current_token)
+            end
+        end
+
+        def parse_memory_annotation(tokens : Array(Token)) : AST::Annotation::MemoryAnnotation
+            memory_annotation = AST::Annotation::MemoryAnnotation.new
+            i = 0
+
+            while i < tokens.size
+                skip_memory_annotation_noise(tokens, pointerof(i))
+                break if i >= tokens.size
+
+                case tokens[i].value
+
+                when "Garbage"
+                    i += 1
+                    skip_memory_annotation_noise(tokens, pointerof(i))
+                    mode = parse_garbage_mode(tokens, pointerof(i))
+                    memory_annotation.garbage = mode[:mode]
+                    memory_annotation.area_name = mode[:area_name]
+                when "Ownership"
+                    i += 1
+                    memory_annotation.ownership = parse_ownership_mode(tokens, pointerof(i))
+                when "escape"
+                    i += 1
+                    skip_memory_annotation_noise(tokens, pointerof(i))
+                    if tokens[i]?.try(&.type) == :COLON
+                        i += 1
+                    end
+                    skip_memory_annotation_noise(tokens, pointerof(i))
+                    if tokens[i]?.try(&.value) == "return"
+                        memory_annotation.escape_return = true
+                    end
+                when "&&"
+                    memory_annotation.operator = AST::Annotation::MemoryOperator::And
+                when "||"
+                    memory_annotation.operator = AST::Annotation::MemoryOperator::Or
+                end
+                
+                i += 1
+            end
+            
+            memory_annotation
+        end
+
+        private def skip_memory_annotation_noise(tokens : Array(Token), i : Pointer(Int32)) : Nil
+            while i.value < tokens.size
+                case tokens[i.value].type
+                when :LPAREN, :RPAREN, :COMMA
+                    i.value += 1
+                    next
+                end
+                break
+            end
+        end
+
+        private def parse_garbage_mode(tokens, i : Pointer(Int32)) : NamedTuple(mode: AST::Annotation::MemoryAnnotation::GarbageMode, area_name: String?)
+            skip_memory_annotation_noise(tokens, i)
+
+            # Handle: enable, disable, area, area: "name"
+            case tokens[i.value].value
+
+            when "enable"
+                i.value += 1
+                {mode: AST::Annotation::MemoryAnnotation::GarbageMode::Enable, area_name: nil}
+            when "disable"
+                i.value += 1
+                {mode: AST::Annotation::MemoryAnnotation::GarbageMode::Disable, area_name: nil}
+            when "area"
+                i.value += 1
+                area_name = nil
+
+                if tokens[i.value]?.try(&.type) == :COLON
+                    i.value += 1
+                    name_token = tokens[i.value]?
+                    if name_token && name_token.value.is_a?(String)
+                        area_name = name_token.value.as(String)
+                        i.value += 1
+                    end
+                end
+
+                {mode: AST::Annotation::MemoryAnnotation::GarbageMode::Area, area_name: area_name}
+            else
+                raise "Unknown Garbage mode: #{tokens[i.value].value}"
+            end
+        end
+
+        private def parse_ownership_mode(tokens, i : Pointer(Int32)) : AST::Annotation::MemoryAnnotation::OwnershipMode
+            skip_memory_annotation_noise(tokens, i)
+            case tokens[i.value].value
+
+            when "enable"
+                i.value += 1
+                AST::Annotation::MemoryAnnotation::OwnershipMode::Enable
+            when "disable"
+                i.value += 1
+                AST::Annotation::MemoryAnnotation::OwnershipMode::Disable
+            else
+                raise "Unknown Ownership mode: #{tokens[i.value].value}"
             end
         end
 

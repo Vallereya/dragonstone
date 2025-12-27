@@ -10,6 +10,8 @@ require "./targets/llvm/backend"
 require "./targets/c/backend"
 require "./targets/crystal/backend"
 require "./targets/ruby/backend"
+require "./targets/python/backend"
+require "./targets/javascript/backend"
 
 module Dragonstone
     module Core
@@ -29,6 +31,10 @@ module Dragonstone
                     Targets::Crystal::Backend.new.build(program, options)
                 when Target::Ruby
                     Targets::Ruby::Backend.new.build(program, options)
+                when Target::Python
+                    Targets::Python::Backend.new.build(program, options)
+                when Target::JavaScript
+                    Targets::JavaScript::Backend.new.build(program, options)
                 else
                     raise "Unknown compiler target #{options.target}"
                 end

@@ -42,3 +42,25 @@ end
 code = StatusCodes.new(404)
 echo code
 echo code.value
+
+# Example Four; Set custom starting value.
+enum Player
+    Alive = 1   # Defaults to 0
+    Dead        # Defaults to 1
+end
+
+def is_player_alive(status: Player): bool
+    if status == Player::Alive
+        echo "The player is alive!"
+        return true
+    elsif status == Player::Dead
+        echo "The player is dead!"
+        return false
+    end
+end
+
+echo is_player_alive(Player::Alive)
+echo is_player_alive(Player::Dead)
+
+e! Player::Alive.value      # Verify Alive is 1
+e! Player::Dead.value       # Verify Dead is 2

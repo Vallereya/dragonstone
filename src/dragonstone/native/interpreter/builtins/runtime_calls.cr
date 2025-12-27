@@ -216,12 +216,24 @@ module Dragonstone
         end
 
         private def with_gc_context(flags : Runtime::GC::Flags, &block)
-            if flags.disable && flags.area
-                @gc_manager.with_disabled { @gc_manager.with_area { yield } }
-            elsif flags.disable
-                @gc_manager.with_disabled { yield }
-            elsif flags.area
-                @gc_manager.with_area { yield }
+            if flags.effective_gc_disabled? && flags.effective_gc_area?
+                result = nil
+                @gc_manager.with_disabled do
+                    @gc_manager.with_area(flags.effective_area_name) do
+                        result = yield
+                        result = @gc_manager.copy(result) if flags.escape_return
+                    end
+                end
+                result
+            elsif flags.effective_gc_disabled?
+                yield
+            elsif flags.effective_gc_area?
+                result = nil
+                @gc_manager.with_area(flags.effective_area_name) do
+                    result = yield
+                    result = @gc_manager.copy(result) if flags.escape_return
+                end
+                result
             else
                 yield
             end

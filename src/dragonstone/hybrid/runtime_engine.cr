@@ -122,12 +122,10 @@ module Dragonstone
                     DragonEnumMember.new(DragonEnum.new(value.enum.name), value.name, value.value)
                 when Bytecode::GCHost
                     Runtime::GC::Host.new(Runtime::GC::Manager(RuntimeValue).new(
-                        ->(v : RuntimeValue) { v },
-                        -> { ::GC.disable },
-                        -> { ::GC.enable }
+                        ->(v : RuntimeValue) { v }
                     ))
-                when ::Dragonstone::Runtime::GC::Area(Bytecode::Value)
-                    Runtime::GC::Area(RuntimeValue).new
+                when ::Dragonstone::Runtime::GC::Area
+                    value
                 else
                     raise "Cannot import #{value.class} into interpreter runtime"
                 end

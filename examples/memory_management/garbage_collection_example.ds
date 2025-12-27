@@ -1,0 +1,43 @@
+#[
+
+    Example: Using Garbage Collection.
+
+    For simplicity, these examples are not using type checks.
+
+]#
+
+# Example One: GC enabled, using a named area with escape for return value.
+@[Garbage(enable)]
+@[Garbage(area: "temp", escape: return)]
+def make_message
+    return "Hello! This message was created in a GC area."
+end
+
+@[Garbage(enable)]
+@[Garbage(area: "temp", escape: return)]
+def make_list
+    list = [1, 2, 3]
+    return list
+end
+
+message = make_message()
+echo message
+
+items = make_list()
+echo items
+
+# Example Two: GC disabled for the entire function.
+@[Garbage(disable)]
+def no_gc_message
+    msg = "GC has been disabled!"
+    return msg
+end
+
+@[Garbage(disable)]
+def no_gc_list
+    i = [1, 2, 3]
+    return i
+end
+
+echo no_gc_message()
+echo no_gc_list()

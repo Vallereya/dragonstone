@@ -1,0 +1,27 @@
+#[
+
+    #! WORK IN PROGRESS
+
+    #! CONCURRENCY HAS NOT BEEN IMPLEMENTED YET.
+
+    An idea of how concurrency could be implemented in the future.
+
+]#
+
+spawn do
+    channel -> send(1)
+end
+
+channel <- receive
+
+spawn do
+    channel -> send(1)
+end
+
+spawn do
+    channel <- receive
+end
+
+with fiber
+    yield
+end

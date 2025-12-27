@@ -21,7 +21,7 @@
 - Self-Hosted.
 - Tooling.
 - Crystal and Ruby inspired syntax but with a modern refresh.
-- 3-Way Bindings to C, Crystal and Ruby.
+- Bindings to C, Crystal, Ruby, Python, and JavaScript.
 - Native provider for `eden`.
 - S-Tier Performance: 
     - Compile to Machine Code executed by the DC (**Dragonstone Compiler**)
@@ -193,11 +193,11 @@
 #####   <h6 align="center">         `v0.1.4 -> v0.1.5`
 
 ```diff
-- The `Great Refactor`: (Part Three)            Alpha Refactor.
-+ Added an I/O stdlib, might be temp and move directly to language.
++ The `Great Refactor`: (Part Three)            Alpha Refactor.
++ Removed an I/O stdlib, move directly to language.
 + Fixed build pipeline, so all `shards build`'s go to the same place. 
-+ Added Levenshtein stdlib.
-+ Updated def and fun to support optional define or function depending on preference. 
++ Added Levenshtein, Colorize, and Unicode stdlibs.
++ Updated mod, def, fun, cls, and abs to support optional module, define, function, class, and abstract depending on preference. 
 ```
 
 ---
@@ -214,7 +214,7 @@
 + Expanded `fun` so it works as intended. 
 + Fixed `con` keyword, re-added optional explicit-ness with the keywords `let`, `var`, and `fix`. 
 + Re-Implemented `@@` for class instance variables, and `@@@` for module instance variables. 
-- 
++ Updated the optional Garbage Collection; Is now using hybrid-like system, with boehm fallback via vendor.
 ```
 
 ###     <h2 align="center">         Phase Two
@@ -224,8 +224,8 @@
 - 
 - 
 - 
-- Add dev more commands/flags.
-- Fix `--backend` flags.
+- 
+- 
 ```
 
 ###     <h2 align="center">         Phase Three
@@ -255,8 +255,8 @@
 
 ```diff
 - The `Great Refactor`: (Part Four)             Beta Refactor.
-- 
-- 
+- Begin Bootstrapping.
+- Freeze current grammar subset if needed on C side.
 - 
 - 
 ```
@@ -302,9 +302,9 @@
 #####   <h6 align="center">         `v0.5.0 -> v0.6.0`
 
 ```diff
-- 
-- 
-- 
+- Finish Bootstrapping.
+- Remove donors so everything runs on dragonstone.
+- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
 - 
 - 
 ```
