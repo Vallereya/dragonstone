@@ -196,7 +196,7 @@
 + The `Great Refactor`: (Part Three)            Alpha Refactor.
 + Removed an I/O stdlib, move directly to language.
 + Fixed build pipeline, so all `shards build`'s go to the same place. 
-+ Added Levenshtein stdlib, Colorize, and Unicode.
++ Added Levenshtein, Colorize, and Unicode stdlibs.
 + Updated mod, def, fun, cls, and abs to support optional module, define, function, class, and abstract depending on preference. 
 ```
 
