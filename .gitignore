@@ -30,10 +30,10 @@ src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
 
 # GC Vendor Build Artifacts.
-src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord
-src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra
-src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include
-src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops
+src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord/
+src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra/
+src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include/
+src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops/
 
 # Ignore any Output/Build Cache from testing.
 cache
