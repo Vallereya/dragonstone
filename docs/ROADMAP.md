@@ -193,7 +193,7 @@
 #####   <h6 align="center">         `v0.1.4 -> v0.1.5`
 
 ```diff
-- The `Great Refactor`: (Part Three)            Alpha Refactor.
++ The `Great Refactor`: (Part Three)            Alpha Refactor.
 + Removed an I/O stdlib, move directly to language.
 + Fixed build pipeline, so all `shards build`'s go to the same place. 
 + Added Levenshtein stdlib, Colorize, and Unicode.
@@ -214,7 +214,7 @@
 + Expanded `fun` so it works as intended. 
 + Fixed `con` keyword, re-added optional explicit-ness with the keywords `let`, `var`, and `fix`. 
 + Re-Implemented `@@` for class instance variables, and `@@@` for module instance variables. 
-- 
++ Updated the optional Garbage Collection; Is now using hybrid-like system, with boehm fallback via vendor.
 ```
 
 ###     <h2 align="center">         Phase Two
@@ -255,8 +255,8 @@
 
 ```diff
 - The `Great Refactor`: (Part Four)             Beta Refactor.
-- 
-- 
+- Begin Bootstrapping.
+- Freeze current grammar subset if needed on C side.
 - 
 - 
 ```
@@ -302,9 +302,9 @@
 #####   <h6 align="center">         `v0.5.0 -> v0.6.0`
 
 ```diff
-- 
-- 
-- 
+- Finish Bootstrapping.
+- Remove donors so everything runs on dragonstone.
+- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
 - 
 - 
 ```
