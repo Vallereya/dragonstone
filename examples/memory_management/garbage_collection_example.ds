@@ -27,7 +27,8 @@ echo items
 # Example Two: GC disabled for the entire function.
 @[Garbage(disable)]
 def no_gc_message
-    return "GC has been disabled!"
+    msg = "GC has been disabled!"
+    return msg
 end
 
 @[Garbage(disable)]
@@ -36,8 +37,5 @@ def no_gc_list
     return i
 end
 
-msg = no_gc_message()
-echo msg
-
-i = no_gc_list()
-echo i
+echo no_gc_message()
+echo no_gc_list()

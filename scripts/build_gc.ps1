@@ -229,4 +229,6 @@ if (-not (Test-Path -Path (Join-Path $installLib 'gc.lib'))) {
     }
 }
 
-Write-Host "Boehm GC installed to $installDir"
+if ($Verbose) {
+    Write-Host "Boehm GC installed to $installDir"
+}

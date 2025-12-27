@@ -68,6 +68,32 @@ clean_artifacts() {
     cleaned=$((cleaned+1))
   fi
 
+  # Clean GC vendor artifacts
+  local gc_vendor_lib="$PROJECT_ROOT/src/dragonstone/shared/runtime/abi/std/gc/vendor/lib"
+  if [[ -e "$gc_vendor_lib/cord" ]]; then
+    rm -f -- "$gc_vendor_lib/cord"
+    echo "  Removed: GC vendor/cord symlink"
+    cleaned=$((cleaned+1))
+  fi
+
+  if [[ -e "$gc_vendor_lib/extra" ]]; then
+    rm -f -- "$gc_vendor_lib/extra"
+    echo "  Removed: GC vendor/extra symlink"
+    cleaned=$((cleaned+1))
+  fi
+
+  if [[ -e "$gc_vendor_lib/include" ]]; then
+    rm -f -- "$gc_vendor_lib/include"
+    echo "  Removed: GC vendor/include symlink"
+    cleaned=$((cleaned+1))
+  fi
+
+  if [[ -d "$gc_vendor_lib/libatomic_ops" ]]; then
+    rm -rf -- "$gc_vendor_lib/libatomic_ops"
+    echo "  Removed: GC vendor/libatomic_ops stub"
+    cleaned=$((cleaned+1))
+  fi
+
   if [[ $cleaned -eq 0 ]]; then
     echo "  No build files found to clean."
   else

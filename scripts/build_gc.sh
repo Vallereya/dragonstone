@@ -48,6 +48,53 @@ fi
 
 if [[ "$clean" == "true" ]]; then
   rm -rf "$build_dir" "$install_dir/lib" "$install_dir/include"
+  rm -rf "$SOURCE_ROOT/libatomic_ops"
+  rm -f "$SOURCE_ROOT/cord" "$SOURCE_ROOT/extra" "$SOURCE_ROOT/include"
+fi
+
+# Create symlinks for cord, extra, and include directories
+for dir in cord extra include; do
+  if [[ ! -e "$SOURCE_ROOT/$dir" && -d "$VENDOR_ROOT/$dir" ]]; then
+    ln -sf "$VENDOR_ROOT/$dir" "$SOURCE_ROOT/$dir"
+  fi
+done
+
+# Create libatomic_ops stub for Windows compatibility
+if [[ ! -d "$SOURCE_ROOT/libatomic_ops/src" ]]; then
+  mkdir -p "$SOURCE_ROOT/libatomic_ops/src"
+  cat > "$SOURCE_ROOT/libatomic_ops/src/atomic_ops.h" << 'EOF'
+#ifndef AO_ATOMIC_OPS_H
+#define AO_ATOMIC_OPS_H
+
+#if defined(__GNUC__) || defined(__clang__)
+  typedef volatile long AO_t;
+  typedef unsigned char AO_TS_t;
+
+  #define AO_INLINE static inline
+
+  AO_INLINE AO_t AO_load(const volatile AO_t *addr) {
+    return __atomic_load_n(addr, __ATOMIC_SEQ_CST);
+  }
+
+  AO_INLINE void AO_store(volatile AO_t *addr, AO_t val) {
+    __atomic_store_n(addr, val, __ATOMIC_SEQ_CST);
+  }
+
+  AO_INLINE AO_t AO_fetch_and_add(volatile AO_t *addr, AO_t incr) {
+    return __atomic_fetch_add(addr, incr, __ATOMIC_SEQ_CST);
+  }
+
+  AO_INLINE int AO_compare_and_swap(volatile AO_t *addr, AO_t old_val, AO_t new_val) {
+    return __atomic_compare_exchange_n(addr, &old_val, new_val, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+  }
+
+  AO_INLINE AO_TS_t AO_test_and_set(volatile AO_TS_t *addr) {
+    return __atomic_test_and_set(addr, __ATOMIC_SEQ_CST);
+  }
+#endif
+
+#endif
+EOF
 fi
 
 mkdir -p "$build_dir"
@@ -85,4 +132,6 @@ if [[ ! -f "$install_dir/lib/libgc.a" ]]; then
   fi
 fi
 
-echo "Boehm GC installed to $install_dir"
+if [[ "$verbose" == "true" ]]; then
+  echo "Boehm GC installed to $install_dir"
+fi

@@ -1,10 +1,10 @@
 <#
     .NOTES
         Command Usage:
-            Rebuild: `dragonstone.ps1 --rebuild`
-            Clean: `dragonstone.ps1 --clean`
-            Clean and Rebuild: `dragonstone.ps1 --clean-rebuild`
-            Verbose build: `dragonstone.ps1 --rebuild --verbose`
+            Rebuild:            `dragonstone.ps1 --rebuild`
+            Clean:              `dragonstone.ps1 --clean`
+            Clean and Rebuild:  `dragonstone.ps1 --clean-rebuild`
+            Verbose build:      `dragonstone.ps1 <flag> --verbose`
 
     .SYNOPSIS
         PowerShell launcher script for Dragonstone.
@@ -15,22 +15,16 @@
         variables related to Dragonstone.
 
     .EXAMPLE
-        dragonstone.bat --rebuild
+        `dragonstone.ps1 --rebuild`
+        `dragonstone.ps1 --clean`
+        `dragonstone.ps1 --clean-rebuild`
 
         or
 
         dragonstone.ps1 --rebuild
-
-        This rebuilds the Dragonstone executable with resources.
-
-    .EXAMPLE
-        dragonstone.bat --clean
-
-        or
-
         dragonstone.ps1 --clean
-
-        This removes all build artifacts.
+        dragonstone.ps1 --clean-rebuild
+        
 #>
 
 param(
@@ -147,6 +141,8 @@ function Show-DragonstoneEnv {
     }
 }
 
+# Cleans up Dragonstone build artifacts, including the build directory,
+# compiled resource files, and the version header file.
 function Clean-DragonstoneArtifacts {
     Write-Host "Cleaning build..........."
     
@@ -162,9 +158,34 @@ function Clean-DragonstoneArtifacts {
             Description = 'dragonstone.o'
         },
         @{
+            Path = (Join-Path $scriptRoot 'resources/dragonstone.res')
+            Type = 'File'
+            Description = 'dragonstone.res'
+        },
+        @{
             Path = (Join-Path $projectRoot 'src/dragonstone/core/runtime/include/dragonstone/core/version.h')
             Type = 'File'
             Description = 'version.h'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord')
+            Type = 'Directory'
+            Description = 'GC vendor/cord junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra')
+            Type = 'Directory'
+            Description = 'GC vendor/extra junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include')
+            Type = 'Directory'
+            Description = 'GC vendor/include junction'
+        },
+        @{
+            Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops')
+            Type = 'Directory'
+            Description = 'GC vendor/libatomic_ops stub'
         }
     )
     
@@ -244,7 +265,6 @@ function CompileDragonstoneResource {
     }
 
     $tool = $null
-    # Prefer llvm-rc as it works more reliably on Windows
     $toolNames = @('llvm-rc', 'x86_64-w64-mingw32-windres', 'windres')
 
     foreach ($name in $toolNames) {
@@ -259,8 +279,6 @@ function CompileDragonstoneResource {
         Write-Warning 'WARNING: No resource compiler (windres/x86_64-w64-mingw32-windres/llvm-rc) was found; the executable will be built without the resource.'
         return $null
     }
-
-    # Write-Host "Found resource compiler: $($tool.Name)"
 
     $extension = '.res'
 
@@ -285,19 +303,13 @@ function CompileDragonstoneResource {
     $originalLocation = Get-Location
 
     Write-Host "Compiling, please wait..."
-
-    # Write-Host "Compiling resource from directory: $rcDir"
-    # Write-Host "Using Resource file: $rcFileName"
     
     try {
         Set-Location $rcDir
 
         if ($tool.Name -like 'llvm-rc*') {
-            # Write-Host "Running: $($tool.Name) -fo $outputPath $rcFileName"
             & $tool.Path '-fo' $outputPath $rcFileName 2>&1 | Out-Null
         } else {
-            # windres needs gcc in PATH for preprocessing
-            # Temporarily add gcc's directory to PATH
             $gccPath = Get-Command 'gcc' -ErrorAction SilentlyContinue
             $oldPath = $env:PATH
             try {
@@ -319,7 +331,6 @@ function CompileDragonstoneResource {
             return $null
         }
 
-        # Write-Host "Successfully compiled icon resource: $outputPath"
         return $outputPath
     } catch {
         return $null
@@ -562,7 +573,6 @@ function Build-DragonstoneAbi {
         }
 
         if ($needsBuild) {
-            Write-Host "  Compiling: $(Split-Path -Leaf $src)"
             $compileArgs = @('-std=c11', '-O2', '-c')
             if ($src -like '*\std\gc\gc.c') {
                 if (-not $gcIncludeDir) {
@@ -583,12 +593,9 @@ function Build-DragonstoneAbi {
                 Write-Host "ABI compile: $compiler $($compileArgs -join ' ')"
             }
 
-            $compileLogPath = Join-Path $buildDir "abi_compile_$(Split-Path -Leaf $src).log"
-            & $compiler @compileArgs 2>&1 | Out-File -FilePath $compileLogPath -Encoding UTF8 -Force
+            & $compiler @compileArgs 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "ERROR: Compilation failed for: $(Split-Path -Leaf $src)" -ForegroundColor Red
-                Write-Host "Compiler output saved to: $compileLogPath" -ForegroundColor Yellow
-                Write-Host "Check the log file for details" -ForegroundColor Yellow
+                Write-Host "ERROR: Failed to compile ABI source: $(Split-Path -Leaf $src)" -ForegroundColor Red
                 throw [System.Exception]::new("Compilation failed")
             }
         }
@@ -666,39 +673,19 @@ function EnsureDragonstoneExecutable {
 
     $abiOutputDir = Join-Path $buildDir 'abi'
     Ensure-GcBuild -Verbose:$script:verboseBuild
-    Write-Host "Building ABI library..."
 
     try {
         $abiLibPath = Build-DragonstoneAbi -OutputDir $abiOutputDir
-        if ($abiLibPath) {
-            Write-Host "ABI library built: $abiLibPath"
-        } else {
-            Write-Host "ABI library path is null" -ForegroundColor Yellow
-        }
     } catch {
-        $errorFile = Join-Path $buildDir 'abi_error.txt'
-        try {
-            # Write exception details without triggering parameter binding
-            $_ | Out-String | Out-File -FilePath $errorFile -Encoding UTF8 -Force
-        } catch {
-            "Error occurred but could not be written" | Out-File -FilePath $errorFile -Encoding UTF8 -Force
-        }
-        Write-Host "ABI build failed. Error details written to: $errorFile" -ForegroundColor Red
-
         if (-not $Force) {
-            throw [System.Exception]::new("ABI build failed")
+            throw
         }
         $abiLibPath = $null
     }
 
     if ($resourcePath) {
         $resourceLinkArg = $resourcePath
-        # $resourceLinkArg = $resourceLinkArg -replace '\\','/'
         $resourceLinkArg = $resourceLinkArg -replace '\\','/'
-
-        # Write-Host "Resource object file: $resourceLinkArg"
-        # Write-Host "Passing resource to linker: $resourceLinkArg"
-
         $env:CRFLAGS = "--link-flags `"$resourceLinkArg`""
         $envFlagSet = $true
     }
@@ -734,13 +721,6 @@ function EnsureDragonstoneExecutable {
                 Write-Host "Building with crystal: $($script:crystal.Path) $($buildArgs -join ' ')"
             }
             & $script:crystal.Path @buildArgs
-        # } elseif ($script:shards) {
-        #     Write-Host "Building with shards..."
-        #     if ($resourceLinkArg) {
-        #         Write-Host "CRFLAGS environment variable: $env:CRFLAGS"
-        #         Write-Host "WARNING: shards may not pick up CRFLAGS. Consider using crystal build directly."
-        #     }
-        #     & $script:shards.Path 'build'
         } else {
             $buildArgs = @('build', $sourceEntry, '-o', $exePath, '--release')
             if ($script:verboseBuild) {
