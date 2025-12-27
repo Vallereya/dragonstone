@@ -1,6 +1,8 @@
 #[
 
-    Example: Using Garbage Collection Areas
+    Example: Using Garbage Collection.
+
+    For simplicity, these examples are not using type checks.
 
 ]#
 
