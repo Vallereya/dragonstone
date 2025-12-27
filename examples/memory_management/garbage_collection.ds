@@ -213,7 +213,7 @@ def build_cache(area): Map(int, Value)
     doc   = Document.allocate(area)    # arena-managed
 
     i = 0
-    while i < 1_000_000
+    while i < 1000000
         doc.load_from_source(i)
         cache[i] = GC.escape(doc.to_value)
         doc.reset
@@ -227,7 +227,7 @@ end
 def load_level(path: str): Level
     area = GC.begin_area
 
-    data     = area.allocate(bytes: 1_000_000)
+    data     = area.allocate(bytes: 1000000)
     textures = area.allocate(array: Texture, count: 256)
     load_level_data(path, data, textures)
 
@@ -239,52 +239,3 @@ def load_level(path: str): Level
     GC.end_area(area)
     level
 end
-
-# Example of combining Ownership and Garbage Collection annotations.
-#! BORROW CHECKER HAS NOT BEEN IMPLEMENTED YET.
-#[
-@[Garbage(enable) && Ownership(enable)]
-def process(data: &mut Buffer)  # borrowed mutably
-    temp = data.slice(0, 100)   # temp borrows from data
-    
-    result = compute(temp)      # ownership: temp still valid
-                                # gc: result tracked in case it escapes
-    return result               # ownership: result moves out
-                                # gc: escapes current scope, promoted
-end
-
-@[Garbage(enable) || Ownership(enable)]
-def flexible_func(data)
-    # Compiler: if ownership can prove safety, no GC tracking
-    # Runtime: if ownership can't prove it, GC kicks in
-end
-
-@[Garbage(disable) && Ownership(disable)]
-def unsafe_ffi_call(ptr: *void, len: int)
-    # No safety nets
-    # You must manually free anything allocated
-    # Useful for: FFI, embedded, real-time guarantees
-end
-
-# With both gc and bc.
-@[Garbage(disable) && Ownership(enable)]
-def Load(area: Area): Level
-    let doc: @own Document = Document.allocate(area)
-    
-    do
-        let editor: &mut Document = &mut doc
-        editor.append("Hello")
-    end
-
-    alias data = doc.data
-    alias meta = doc.meta
-
-    let level: Level = Level.allocate(
-        data: GC.escape(data),
-        meta: GC.escape(meta)
-    )
-
-    doc.drop()
-    return level
-end
-]#

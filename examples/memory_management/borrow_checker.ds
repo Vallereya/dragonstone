@@ -1,9 +1,63 @@
 #[
 
     #! WORK IN PROGRESS
+    #! BORROW CHECKER HAS NOT BEEN IMPLEMENTED YET.
 
     An Example of the Borrow Checker.
 
 ]#
 
+#[
 
+    Please take a look at the Garbage Collection example
+    for details on how Garbage Collection and the
+    Borrow Checker interact.
+
+]#
+
+#[
+@[Garbage(enable) && Ownership(enable)]
+def process(data: &mut Buffer)  # borrowed mutably
+    temp = data.slice(0, 100)   # temp borrows from data
+    
+    result = compute(temp)      # ownership: temp still valid
+                                # gc: result tracked in case it escapes
+    return result               # ownership: result moves out
+                                # gc: escapes current scope, promoted
+end
+
+@[Garbage(enable) || Ownership(enable)]
+def flexible_func(data)
+    # Compiler: if ownership can prove safety, no GC tracking
+    # Runtime: if ownership can't prove it, GC kicks in
+end
+
+@[Garbage(disable) && Ownership(disable)]
+def unsafe_ffi_call(ptr: *void, len: int)
+    # No safety nets
+    # You must manually free anything allocated
+    # Useful for: FFI, embedded, real-time guarantees
+end
+
+# With both gc and bc.
+@[Garbage(disable) && Ownership(enable)]
+def Load(area: Area): Level
+    let doc: @own Document = Document.allocate(area)
+    
+    do
+        let editor: &mut Document = &mut doc
+        editor.append("Hello")
+    end
+
+    alias data = doc.data
+    alias meta = doc.meta
+
+    let level: Level = Level.allocate(
+        data: GC.escape(data),
+        meta: GC.escape(meta)
+    )
+
+    doc.drop()
+    return level
+end
+]#

@@ -93,6 +93,15 @@ static void dragonstone_gc_warn(const char* fmt, ...)
     va_end(args);
 }
 
+static char* ds_gc_strdup(const char* value)
+{
+#if defined(_WIN32)
+    return value ? _strdup(value) : NULL;
+#else
+    return value ? strdup(value) : NULL;
+#endif
+}
+
 static void dragonstone_gc_area_grow(DragonstoneGcArea* area) 
 {
     size_t new_capacity = area->capacity == 0 ? 64 : area->capacity * 2;
@@ -441,7 +450,7 @@ DragonstoneGcArea* dragonstone_gc_begin_area_named(const char* name)
     area->count = 0;
     area->capacity = 0;
     area->parent = dragonstone_gc_global.current_area;
-    area->debug_name = name ? strdup(name) : NULL;
+    area->debug_name = name ? ds_gc_strdup(name) : NULL;
     area->opened_at_file = NULL;
     area->opened_at_line = 0;
     area->total_bytes = 0;
