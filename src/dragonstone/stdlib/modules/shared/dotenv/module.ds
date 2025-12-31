@@ -1,5 +1,7 @@
 #[
+
     `dotenv` module for loading .env files into environment variables.
+
 ]#
 
 use "file_utilities"
@@ -8,7 +10,6 @@ use "strings_build"
 module DOTENV
     extend self
 
-    # Loads the .env file and sets environment variables.
     def load(path: str = ".env", set_env: bool = true, override_env: bool = true) -> Hash(str, str)
         hash = {} as str -> str
 
@@ -20,7 +21,7 @@ module DOTENV
                 apply_env(hash, override_env)
             end
         rescue
-            # Return empty hash if file is missing/unreadable.
+            # Return empty.
         end
 
         hash
@@ -33,7 +34,6 @@ module DOTENV
     private def apply_env(hash: Hash(str, str), override_env: bool)
         hash.each do |key, value|
 
-            # Check existing ENV via FFI (assuming ENV object isn't native yet).
             current_val = ffi.call_crystal("ENV.[]?", [key])
             
             if current_val == nil || override_env
@@ -60,26 +60,22 @@ module DOTENV
         private def parse_line
             skip_whitespace
 
-            # Handle comments and empty lines.
             if current_char == '#' || current_char == '\n' || at_end?
                 consume_rest_of_line
                 return
             end
 
-            # Support 'export' prefix common in .env files.
             if match_keyword("export")
                 skip_whitespace
             end
 
             key = consume_key
             
-            # If we don't find an equals sign, skip the line.
             if current_char != '='
                  consume_rest_of_line
                  return
             end
 
-            # Skip '='
             advance
 
             value = consume_value
@@ -91,12 +87,10 @@ module DOTENV
         private def consume_key
             start = @index
             
-            # Key ends at '=', space, or comment start
             while !at_end? && current_char != '=' && current_char != ' ' && current_char != '#'
                 advance
             end
             
-            # Use native .slice to extract key.
             key_len = @index - start
             @content.slice(start, key_len)
         end
@@ -115,10 +109,8 @@ module DOTENV
 
         private def consume_double_quoted_value
 
-            # Skip opening "
             advance
             
-            # Use Builder for efficient string construction.
             strings.build do |sb|
                 while !at_end?
                     char = current_char
@@ -146,7 +138,7 @@ module DOTENV
         end
 
         private def consume_single_quoted_value
-            advance # Skip opening '
+            advance
             start = @index
             while !at_end? && current_char != '\''
                 advance
@@ -155,7 +147,7 @@ module DOTENV
             len = @index - start
             val = @content.slice(start, len)
             
-            advance # Skip closing '
+            advance
             val
         end
 
@@ -170,7 +162,6 @@ module DOTENV
             len = @index - start
             raw_val = @content.slice(start, len)
             
-            # Use .strip to clean up surrounding whitespace.
             raw_val.strip
         end
 
@@ -179,7 +170,6 @@ module DOTENV
 
             if @index + len <= @length
 
-                # Use .slice for comparison.
                 sub = @content.slice(@index, len)
 
                 if sub == keyword

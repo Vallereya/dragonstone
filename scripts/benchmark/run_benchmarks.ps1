@@ -25,7 +25,7 @@ if ($Iterations -lt 1) {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent $scriptDir
+$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
 Set-Location $repoRoot
 
 if (-not $Programs -or $Programs.Count -eq 0) {

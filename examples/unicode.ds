@@ -36,8 +36,8 @@ end
 🔥.道
 
 # Example Four: Using Unicode Characters in Function Names and Parameters.
-def Saudação(اسم, อายุ)
+def saudação(اسم, อายุ)
     echo "Hello, #{اسم}! You are #{อายุ}."
 end
 
-Saudação("Jules", 25)
+saudação("Jules", 25)
