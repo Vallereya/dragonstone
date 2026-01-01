@@ -19,6 +19,7 @@ dev/
 # Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
 bootstrap/
 !bootstrap/README.md
+!bootstrap/forge.toml
 
 # Unicode Data Files.
 src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
@@ -41,11 +42,6 @@ cache
 cache/
 .cache
 .cache/
-tmp
-tmp/
-.tmp
-.tmp/
-.crystal-cache
 
 # Ignore any IDE folders.
 .vscode
