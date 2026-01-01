@@ -72,6 +72,7 @@ module Dragonstone
             class 
             cls
             return 
+            quit
             true 
             false 
             nil 
@@ -90,6 +91,7 @@ module Dragonstone
             rescue
             ensure
             raise
+            abort
             redo
             retry
             use
@@ -606,6 +608,7 @@ module Dragonstone
                     when "module", "mod" then :MODULE
                     when "class", "cls" then :CLASS
                     when "return" then :RETURN
+                    when "quit" then :QUIT
                     when "typeof" then :TYPEOF
                     when "con" then :CON
                     when "var" then :VAR
@@ -621,6 +624,7 @@ module Dragonstone
                     when "rescue" then :RESCUE
                     when "ensure" then :ENSURE
                     when "raise" then :RAISE
+                    when "abort" then :ABORT
                     when "redo" then :REDO
                     when "retry" then :RETRY
                     when "use" then :USE

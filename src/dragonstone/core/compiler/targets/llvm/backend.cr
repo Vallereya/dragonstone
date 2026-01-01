@@ -131,6 +131,8 @@ module Dragonstone
               stdin_get: String,
               argc_get: String,
               argf_get: String,
+              io_quit: String,
+              io_abort: String,
               root_self: String,
               singleton_define: String,
               define_class: String,
@@ -257,6 +259,8 @@ module Dragonstone
                 stdin_get: "dragonstone_runtime_stdin",
                 argc_get: "dragonstone_runtime_argc",
                 argf_get: "dragonstone_runtime_argf",
+                io_quit: "dragonstone_io_quit",
+                io_abort: "dragonstone_io_abort",
                 root_self: "dragonstone_runtime_root_self",
                 singleton_define: "dragonstone_runtime_define_singleton_method",
                 define_class: "dragonstone_runtime_define_class",
@@ -439,6 +443,10 @@ module Dragonstone
                 node.ensure_block.try(&.each { |stmt| collect_globals_from(stmt) })
               when AST::ReturnStatement
                 node.value.try { |expr| collect_globals_from(expr) }
+              when AST::QuitStatement
+                node.status.try { |expr| collect_globals_from(expr) }
+              when AST::AbortStatement
+                node.message.try { |expr| collect_globals_from(expr) }
               when AST::DebugEcho
                 collect_globals_from(node.expression)
               when AST::Assignment
@@ -975,6 +983,8 @@ module Dragonstone
               io << "declare i8* @#{@runtime[:stdin_get]}()\n"
               io << "declare i8* @#{@runtime[:argc_get]}()\n"
               io << "declare i8* @#{@runtime[:argf_get]}()\n"
+              io << "declare void @#{@runtime[:io_quit]}(i64)\n"
+              io << "declare void @#{@runtime[:io_abort]}(i8*)\n"
               io << "declare i8* @#{@runtime[:array_literal]}(i64, i8**)\n"
               io << "declare i8* @#{@runtime[:map_literal]}(i64, i8**, i8**)\n"
               io << "declare i8* @#{@runtime[:tuple_literal]}(i64, i8**)\n"
@@ -1311,6 +1321,10 @@ module Dragonstone
                 #     emit_default_return(ctx)
                 # end
                 # true
+              when AST::QuitStatement
+                generate_quit_statement(ctx, stmt)
+              when AST::AbortStatement
+                generate_abort_statement(ctx, stmt)
               when AST::BinaryOp
                 generate_expression(ctx, stmt)
                 false
@@ -1666,6 +1680,35 @@ module Dragonstone
                 ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
                 emit_default_return(ctx)
               end
+              true
+            end
+
+            private def generate_quit_statement(ctx : FunctionContext, stmt : AST::QuitStatement) : Bool
+              status = if status_node = stmt.status
+                generate_expression(ctx, status_node)
+              else
+                value_ref("i64", "0", constant: true)
+              end
+
+              status = ensure_value_type(ctx, status, "i64")
+              ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+              ctx.io << "  call void @#{@runtime[:io_quit]}(i64 #{status[:ref]})\n"
+              ctx.io << "  unreachable\n"
+              true
+            end
+
+            private def generate_abort_statement(ctx : FunctionContext, stmt : AST::AbortStatement) : Bool
+              message = if message_node = stmt.message
+                generate_expression(ctx, message_node)
+              else
+                value_ref("i8*", materialize_string_pointer(ctx, "Aborted"))
+              end
+
+              message = box_value(ctx, message) unless message[:type] == "i8*"
+              message_ptr = runtime_call(ctx, "i8*", @runtime[:to_string], [{type: "i8*", ref: message[:ref]}])
+              ctx.io << "  call void @#{@runtime[:debug_flush]}()\n"
+              ctx.io << "  call void @#{@runtime[:io_abort]}(i8* #{message_ptr[:ref]})\n"
+              ctx.io << "  unreachable\n"
               true
             end
 

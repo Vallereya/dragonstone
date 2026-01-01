@@ -228,6 +228,18 @@ module Dragonstone
                 if value = node.value
                     print_ast(value, indent + 1, io)
                 end
+            when Dragonstone::AST::QuitStatement
+                io.puts "#{prefix}QuitStatement:"
+
+                if status = node.status
+                    print_ast(status, indent + 1, io)
+                end
+            when Dragonstone::AST::AbortStatement
+                io.puts "#{prefix}AbortStatement:"
+
+                if message = node.message
+                    print_ast(message, indent + 1, io)
+                end
             else
                 io.puts "#{prefix}Unknown: #{node.class}"
             end

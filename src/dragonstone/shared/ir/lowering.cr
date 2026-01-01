@@ -121,6 +121,10 @@ module Dragonstone
                             interpolated_string_supported?(node)
                         when AST::ReturnStatement
                             node.value.nil? || node_supported?(node.value.not_nil!)
+                        when AST::QuitStatement
+                            node.status.nil? || node_supported?(node.status.not_nil!)
+                        when AST::AbortStatement
+                            node.message.nil? || node_supported?(node.message.not_nil!)
                         when AST::FunctionDef
                             function_supported?(node)
                         when AST::FunctionLiteral

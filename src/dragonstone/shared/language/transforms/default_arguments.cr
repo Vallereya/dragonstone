@@ -118,6 +118,10 @@ module Dragonstone
             AST::CaseStatement.new(expr, whens, else_block, location: node.location)
           when AST::ReturnStatement
             AST::ReturnStatement.new(node.value.try { |v| rewrite_node(v, defaults) }, location: node.location)
+          when AST::QuitStatement
+            AST::QuitStatement.new(node.status.try { |v| rewrite_node(v, defaults) }, location: node.location)
+          when AST::AbortStatement
+            AST::AbortStatement.new(node.message.try { |v| rewrite_node(v, defaults) }, location: node.location)
           when AST::YieldExpression
             AST::YieldExpression.new(node.arguments.map { |arg| rewrite_node(arg, defaults) }, location: node.location)
           when AST::BeginExpression

@@ -706,6 +706,20 @@ module Dragonstone
             raise ReturnValue.new(value)
         end
 
+        def visit_quit_statement(node : AST::QuitStatement) : RuntimeValue?
+            status_value = node.status ? node.status.not_nil!.accept(self) : 0
+            status = coerce_int64(status_value, node).to_i64
+            DragonstoneABI.dragonstone_io_quit(status)
+            nil
+        end
+
+        def visit_abort_statement(node : AST::AbortStatement) : RuntimeValue?
+            message_value = node.message ? node.message.not_nil!.accept(self) : nil
+            message = message_value.nil? ? "Aborted" : message_value.to_s
+            DragonstoneABI.dragonstone_io_abort(message.to_unsafe)
+            nil
+        end
+
         def visit_module_definition(node : AST::ModuleDefinition) : RuntimeValue?
             container = @container_definition_depth.positive? ? current_container : nil
 

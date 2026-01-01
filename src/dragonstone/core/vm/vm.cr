@@ -1180,6 +1180,16 @@ module Dragonstone
                 when OPC::HALT
                     flush_debug_inline
                     return @stack.empty? ? nil : pop
+                when OPC::QUIT
+                    flush_debug_inline
+                    status_value = pop
+                    status = coerce_int64(status_value, "quit").to_i64
+                    DragonstoneABI.dragonstone_io_quit(status)
+                when OPC::ABORT
+                    flush_debug_inline
+                    message_value = pop
+                    message = message_value.nil? ? "Aborted" : stringify(message_value)
+                    DragonstoneABI.dragonstone_io_abort(message.to_unsafe)
                 when OPC::NOP
                     # nil
                 when OPC::CONST

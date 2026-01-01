@@ -23,11 +23,13 @@ module Dragonstone
             :RESCUE, 
             :ENSURE,
             :RETURN, 
+            :QUIT,
             :BREAK, 
             :NEXT, 
             :REDO,
             :RETRY,
             :RAISE,
+            :ABORT,
             :CON, 
             :VAR,
             :LET,
@@ -322,6 +324,8 @@ module Dragonstone
                 parse_visibility_prefixed_statement(:public)
             when :RETURN
                 parse_return_statement
+            when :QUIT
+                parse_quit_statement
             when :CASE, :SELECT
                 parse_case_statement
             when :BREAK
@@ -332,6 +336,8 @@ module Dragonstone
                 parse_redo_statement
             when :RETRY
                 parse_retry_statement
+            when :ABORT
+                parse_abort_statement
             when :END, :ELSIF, :ELSE, :RESCUE, :WHEN
                 error("Unexpected #{token.type.to_s.downcase}", token)
             when :USE
@@ -1166,6 +1172,26 @@ module Dragonstone
             else
                 value = parse_expression
                 AST::ReturnStatement.new(value, location: return_token.location)
+            end
+        end
+
+        private def parse_quit_statement : AST::Node
+            quit_token = expect(:QUIT)
+            if return_value_terminator?(current_token)
+                AST::QuitStatement.new(nil, location: quit_token.location)
+            else
+                status = parse_expression
+                AST::QuitStatement.new(status, location: quit_token.location)
+            end
+        end
+
+        private def parse_abort_statement : AST::Node
+            abort_token = expect(:ABORT)
+            if return_value_terminator?(current_token)
+                AST::AbortStatement.new(nil, location: abort_token.location)
+            else
+                message = parse_expression
+                AST::AbortStatement.new(message, location: abort_token.location)
             end
         end
 
