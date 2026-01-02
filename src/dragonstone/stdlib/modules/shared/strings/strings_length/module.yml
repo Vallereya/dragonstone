@@ -1,3 +1,0 @@
-name: strings/strings_length
-entry: module.ds
-requires: shared

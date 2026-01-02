@@ -22,6 +22,7 @@ text = "hello world"
 e! text.upcase
 e! text.downcase
 e! text.length
+e! text.size
 
 # Nested interpolation.
 a = 3

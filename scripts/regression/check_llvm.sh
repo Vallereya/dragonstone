@@ -99,6 +99,5 @@ run ./examples/types/types.ds
 run ./examples/types/type_casting.ds
 
 # run ./examples/stdlib/strings_build.ds
-# run ./examples/stdlib/strings_length.ds
 # run ./examples/stdlib/file.ds
 # run ./examples/stdlib/toml.ds

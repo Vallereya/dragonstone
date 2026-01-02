@@ -1,11 +1,21 @@
 #[
-    #! INSIDE LIBRARIES
-    
-    Dragonstone Standard Library Entry Point.
+    --------------------------------
+    ------- STANDARD LIBRARY -------
+    ------- (IMPORT MODULES) -------
+    -------------------------------- 
+]#
 
-    Loading this file will load every module that ships with
-    Dragonstone. Individual modules can also be imported directly (e.g.
-    `use "string_length"`).
+#[
+    
+    The Dragonstone Standard Library Entry Point.
+
+    This file will load every module that ships with
+    Dragonstone. Individual modules can also be 
+    imported directly (e.g.`use "colorize"`).
+
+    These modules are located in: 
+    `src/dragonstone/stdlib/modules/`
+
 ]#
 
 module Dragonstone

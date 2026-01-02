@@ -105,7 +105,6 @@ $files = @(
     ".\examples\types\type_casting.ds"
 
     # ".\examples\stdlib\strings_build.ds",
-    # ".\examples\stdlib\strings_length.ds",
     # ".\examples\stdlib\file.ds",
     # ".\examples\stdlib\toml.ds"
 )

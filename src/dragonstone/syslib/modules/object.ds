@@ -1,0 +1,5 @@
+class Object
+    define to_s -> str
+        return self.display
+    end
+end

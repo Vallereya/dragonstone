@@ -1,0 +1,29 @@
+#[
+    --------------------------------
+    -------- SYSTEM LIBRARY --------
+    ------- (SYSTEM MODULES) -------
+    -------------------------------- 
+]#
+
+#[
+    
+    The Dragonstone System Library Entry Point.
+
+    This file automatically loads every module 
+    located in the `syslib/modules/` directory. 
+    These modules provide low-level functionality 
+    and/or system-level services required by 
+    Dragonstone.
+
+    These modules are located in: 
+    `src/dragonstone/syslib/modules/`
+
+]#
+
+module Dragonstone
+    module SYSLIB
+        extend self
+    end
+end
+
+use "./modules/*"

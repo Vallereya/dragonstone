@@ -310,6 +310,7 @@ module Dragonstone
                     unit = Unit.new(path, backend)
                     importer = Importer.new(@resolver, self)
                     begin
+                        preload_syslib(unit, importer, path, backend.backend_mode)
                         program.ast.use_decls.each do |use_decl|
                             importer.apply_imports(unit, use_decl, path)
                         end
@@ -359,6 +360,27 @@ module Dragonstone
                 end
 
                 candidates
+            end
+
+            private def preload_syslib(unit : Unit, importer : Importer, path : String, preferred_backend : BackendMode) : Nil
+                syslib_path = @resolver.syslib_entry_path
+                return unless syslib_path
+
+                syslib_root = @resolver.syslib_root_path
+                if syslib_root
+                    expanded_root = File.expand_path(syslib_root)
+                    expanded_path = File.expand_path(path)
+                    return if expanded_path.starts_with?(expanded_root)
+                end
+
+                return if syslib_path == path
+
+                unless @resolver.cache.get(syslib_path)
+                    @resolver.resolve(syslib_path)
+                end
+
+                namespace = importer.load_namespace(syslib_path, preferred_backend)
+                unit.bind_namespace(namespace)
             end
 
             private def build_interpreter_backend(typing_flag : Bool) : Backend
