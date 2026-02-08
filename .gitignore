@@ -30,6 +30,8 @@ dev/
 # completion.
 bootstrap/
 !bootstrap/README.md
+!bootstrap/bin/
+!bootstrap/bin/main.ds
 
 # Ignore any Output/Build Files and Directories.
 install-dragonstone.iss

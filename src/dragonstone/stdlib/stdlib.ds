@@ -19,8 +19,8 @@
 ]#
 
 module Dragonstone
-    module StdLib
-        
+    module STDLIB
+        extend self
     end
 end
 

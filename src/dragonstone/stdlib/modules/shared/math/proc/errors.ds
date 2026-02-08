@@ -1,0 +1,19 @@
+module Math
+    class Ex
+        define DivisionByZeroError
+            raise "Cannot divide by zero."
+        end
+
+        define SquareRootOfNegativeError
+            raise "Cannot compute square root of a negative number."
+        end
+
+        define LogOfNonPositiveError
+            raise "Logarithm is undefined for non-positive values."
+        end
+
+        define InvalidLogBaseError
+            raise "Logarithm base must be greater than 1."
+        end
+    end
+end

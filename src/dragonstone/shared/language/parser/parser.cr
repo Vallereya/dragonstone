@@ -607,6 +607,10 @@ module Dragonstone
                 advance
                 superclass = expect(:IDENTIFIER).value.as(String)
             end
+            if superclass.nil?
+                class_name = name_token.value.as(String)
+                superclass = "Object" unless class_name == "Object"
+            end
             body = parse_block([:END])
             expect(:END)
             AST::ClassDefinition.new(name_token.value.as(String), body, superclass, is_abstract, annotations, visibility: visibility, location: class_token.location)

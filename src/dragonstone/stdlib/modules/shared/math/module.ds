@@ -1,0 +1,359 @@
+use "./proc/errors"
+
+module Math
+    extend self
+
+    # The mathematical constant π (pi), 
+    # approximately equal to 3.14159.
+    con PI      = 3.14159265358979323846
+    con π       = PI
+
+    # The mathematical constant τ (tau), 
+    # equal to 2π, approximately 6.28318.
+    con TAU     = 6.283185307179586476925
+    con τ       = TAU
+
+    # Euler's number (e).
+    con E       = 2.71828182845904523536
+    con 𝑒       = E
+    
+    # The natural logarithm of 2.
+    con Log2    = 0.69314718055994530942
+    # con 𝑒²      = Log2
+
+    # The natural logarithm of 10.
+    con Log10   = 2.30258509299404695509
+    # con 𝑒¹⁰     = Log10
+
+    # The golden ratio (φ), 
+    # approximately equal to 1.61803.
+    con PHI     = 1.61803398874989848204
+    con φ       = PHI
+
+    # Not a Number (NaN).
+    # con NAN               = 0.0 / 0.0
+
+    # Positive Infinity.
+    # con POS_INFINITY      = 1.0 / 0.0
+    # con ∞                 = POS_INFINITY
+
+    # Negative Infinity.
+    # con NEG_INFINITY      = -1.0 / 0.0
+    # con -∞                = NEG_INFINITY
+
+    # The mathematical constant euler-mascheroni, 
+    # approximately equal to 0.57721.
+    con EULER_MASCHERONI    = 0.57721566490153286060
+    con γ                   = EULER_MASCHERONI
+
+    # The absolute value of an integer.
+    define absolute(value: int) -> int
+        if value < 0
+            return -value
+        else
+            return value
+        end
+    end
+
+    # The maximum of two integers.
+    define max(a: int, b: int) -> int
+        if a > b
+            return a
+        else
+            return b
+        end
+    end
+
+    # The minimum of two integers.
+    define min(a: int, b: int) -> int
+        if a < b
+            return a
+        else
+            return b
+        end
+    end
+
+    # Clamps an integer between a 
+    # minimum and maximum value.
+    define clamp(value: int, min_value: int, max_value: int) -> int
+        if value < min_value
+            return min_value
+        elsif value > max_value
+            return max_value
+        else
+            return value
+        end
+    end
+
+    #[
+        
+        Rounding
+
+    ]#
+
+    # To the nearest lower integer (toward negative infinity).
+    define floor(value)
+        return ffi.call_c("floor", [value])
+    end
+
+    # Floor division (integer division rounded down).
+    define floor_divide(x: int, y: int): int
+        if y == 0
+            raise Ex.DivisionByZeroError
+        end
+        return x // y
+    end
+
+    # To the nearest higher integer (toward positive infinity).
+    define ceil(value)
+        return ffi.call_c("ceil", [value])
+    end
+
+    # Ceiling division (integer division rounded up).
+    define ceil_divide(x: int, y: int): int
+        if y == 0
+            raise Ex.DivisionByZeroError
+        end
+        return (x + y - 1) // y
+    end
+
+    # Rounding to nearest integer (half away from zero).
+    define round(value)
+        return ffi.call_c("round", [value])
+    end
+
+    # Truncate toward zero.
+    define truncate(value)
+        return ffi.call_c("trunc", [value])
+    end
+
+    #[
+        
+        Powers and Roots
+
+    ]#
+
+    # Square root of a number.
+    define sqrt(value)
+        if value < 0
+            raise Ex.SquareRootOfNegativeError
+        end
+        return value ** 0.5
+    end
+
+    # Cube root of a number.
+    define cbrt(value)
+        return value ** (1.0 / 3.0)
+    end
+
+    # Power of x raised to y.
+    define pow(base: int, exponent: int) -> int
+        return base ** exponent
+    end
+
+    # Exponential function e^x.
+    define exp(value)
+        return E ** value
+    end
+
+    #[
+        
+        Logarithms
+
+    ]#
+
+    # Natural logarithm (base e).
+    define log(value, base)
+        epsilon = 0.000001
+
+        if value == 1
+            return 0.0
+        end
+
+        if value <= 0
+            raise Ex.LogOfNonPositiveError
+        end
+
+        if base <= 0 || base == 1
+            raise Ex.InvalidLogBaseError
+        end
+
+        low = 0.0
+        high = 1.0
+
+        if value > 1
+            while base**high < value
+                low = high
+                high *= 2
+            end
+        else
+            while base**low > value
+                high = low
+                low *= 2
+            end
+        end
+
+        while (high - low) > epsilon
+            mid = (low + high) / 2.0
+
+            if base**mid < value
+                low = mid
+            else
+                high = mid
+            end
+        end
+
+        x = (low + high) / 2.0
+        return round(x)
+    end
+
+    # Base-2 logarithm.
+    define log2(value)
+        epsilon = 0.000001
+        base = 2.0
+
+        if value == 1
+            return 0.0
+        end
+
+        if value <= 0
+            raise Ex.LogOfNonPositiveError
+        end
+
+        low = 0.0
+        high = 1.0
+
+        if value > 1
+            while base**high < value
+                low = high
+                high *= 2
+            end
+        else
+            while base**low > value
+                high = low
+                low *= 2
+            end
+        end
+
+        while (high - low) > epsilon
+            mid = (low + high) / 2.0
+
+            if base**mid < value
+                low = mid
+            else
+                high = mid
+            end
+        end
+
+        x = (low + high) / 2.0
+        return round(x)
+    end
+
+    # Base-10 logarithm.
+    define log10(value)
+        epsilon = 0.000001
+        base = 10.0
+
+        if value == 1
+            return 0.0
+        end
+
+        if value <= 0
+            raise Ex.LogOfNonPositiveError
+        end
+
+        low = 0.0
+        high = 1.0
+
+        if value > 1
+            while base**high < value
+                low = high
+                high *= 2
+            end
+        else
+            while base**low > value
+                high = low
+                low *= 2
+            end
+        end
+
+        while (high - low) > epsilon
+            mid = (low + high) / 2.0
+
+            if base**mid < value
+                low = mid
+            else
+                high = mid
+            end
+        end
+
+        x = (low + high) / 2.0
+        return round(x)
+    end
+
+    #[
+        
+        Trigonometry
+
+    ]#
+
+    define sin
+
+    end
+
+    define cos
+
+    end
+
+    define tan
+
+    end
+
+    define asin
+
+    end
+
+    define acos
+
+    end
+
+    define atan
+
+    end
+
+    define atan2
+
+    end
+
+    #[
+        
+        Hyperbolic
+
+    ]#
+
+    define sinh
+
+    end
+
+    define cosh
+
+    end
+
+    define tanh
+
+    end
+
+    #[
+        
+        Utilities
+
+    ]#
+
+    define hypot
+
+    end
+
+    define fmod
+
+    end
+end

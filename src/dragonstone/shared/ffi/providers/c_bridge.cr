@@ -8,6 +8,13 @@ module Dragonstone
                     fun getchar : Int32
                 end
 
+                lib LibM
+                    fun floor(value : Float64) : Float64
+                    fun ceil(value : Float64) : Float64
+                    fun round(value : Float64) : Float64
+                    fun trunc(value : Float64) : Float64
+                end
+
                 def self.call(function_name : String, arguments : Array(Dragonstone::FFI::InteropValue)) : Dragonstone::FFI::InteropValue
                     case function_name
                     when "printf"
@@ -38,6 +45,54 @@ module Dragonstone
                     when "chr"
                         code = expect_int(arguments, 0, function_name)
                         code.chr
+                    when "floor"
+                        value = arguments[0]
+                        case value
+                        when Float64
+                            LibM.floor(value)
+                        when Float32
+                            LibM.floor(value.to_f64)
+                        when Int32, Int64
+                            value.to_f64
+                        else
+                            raise "floor requires a numeric argument"
+                        end
+                    when "ceil"
+                        value = arguments[0]
+                        case value
+                        when Float64
+                            LibM.ceil(value)
+                        when Float32
+                            LibM.ceil(value.to_f64)
+                        when Int32, Int64
+                            value.to_f64
+                        else
+                            raise "ceil requires a numeric argument"
+                        end
+                    when "round"
+                        value = arguments[0]
+                        case value
+                        when Float64
+                            LibM.round(value)
+                        when Float32
+                            LibM.round(value.to_f64)
+                        when Int32, Int64
+                            value.to_f64
+                        else
+                            raise "round requires a numeric argument"
+                        end
+                    when "trunc"
+                        value = arguments[0]
+                        case value
+                        when Float64
+                            LibM.trunc(value)
+                        when Float32
+                            LibM.trunc(value.to_f64)
+                        when Int32, Int64
+                            value.to_f64
+                        else
+                            raise "trunc requires a numeric argument"
+                        end
                     when "fsync"
                         fd = expect_int(arguments, 0, function_name)
                         {% if flag?(:windows) %}

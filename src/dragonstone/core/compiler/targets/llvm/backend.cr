@@ -4515,7 +4515,9 @@ module Dragonstone
               end
 
               if superclass_name = node.superclass
-                super_full_name = if superclass_name.includes?("::")
+                super_full_name = if superclass_name == "Object"
+                                    "Object"
+                                  elsif superclass_name.includes?("::")
                                     superclass_name
                                   else
                                     qualify_name(superclass_name)
