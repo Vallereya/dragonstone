@@ -210,7 +210,7 @@
 #####   <h6 align="center">         `v0.1.5 -> v0.1.6`
 
 ```diff
-- Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
++ Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
 + Expanded `fun` so it works as intended. 
 + Fixed `con` keyword, re-added optional explicit-ness with the keywords `let`, `var`, and `fix`. 
 + Re-Implemented `@@` for class instance variables, and `@@@` for module instance variables. 
@@ -313,7 +313,7 @@
 #####   <h6 align="center">         `v0.6.0 -> v0.7.0`
 
 ```diff
-- Start building a VSCode extension for language syntax support and running files.
+- Start building a VSCode extension and NeoVim extension for language syntax support and running files.
 - Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
 - Start building the website documentation subdomain.
 - Start building the website forge subdomain.
@@ -335,7 +335,7 @@
 #####   <h6 align="center">         `v0.8.0 -> v0.9.0`
 
 ```diff
-- VSCode extension completed.
+- VSCode extension and NeoVim extension completed.
 - dragonstone-lang.org completed.
 - docs.dragonstone-lang.org completed.
 - forge.dragonstone-lang.org completed.

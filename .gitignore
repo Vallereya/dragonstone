@@ -16,17 +16,13 @@ cache/
 .cache/
 .dragonstone
 
-# Ignore `dev` Build Files & Directories.
-# These are for development builds only.
-dev/
-!dev/README.md
-
 # Ignore `bootstrap` Build Files & Directories.
 # This is for self-hosting/bootstrap builds, and
 # will eventually be un-ignored when nearing
 # completion.
 bootstrap/
 !bootstrap/README.md
+!bootstrap/forge.toml
 !bootstrap/bin/
 !bootstrap/bin/main.ds
 
