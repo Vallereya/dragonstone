@@ -2,10 +2,9 @@
 #   .gitignore for Dragonstone.
 #
 
-# Annoying IDE ignores.
+# IDE & OS ignores.
 .fake
-
-# Ignore any IDE folders.
+.DS_Store
 .vscode
 .idea
 .nvim
@@ -15,8 +14,6 @@ cache
 cache/
 .cache
 .cache/
-
-# Ignore any caches from testing.
 .dragonstone
 
 # Ignore `dev` Build Files & Directories.
