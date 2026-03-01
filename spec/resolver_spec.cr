@@ -93,6 +93,23 @@ DS
         end
     end
 
+    it "prefers a syslib root that contains syslib.ds" do
+        with_tmpdir do |dir|
+            shadow_syslib = File.join(dir, "examples", "syslib")
+            real_syslib = File.join(dir, "src", "dragonstone", "syslib")
+
+            Dir.mkdir_p(shadow_syslib)
+            Dir.mkdir_p(real_syslib)
+            File.write(File.join(real_syslib, "syslib.ds"), "module Dragonstone\nend\n")
+
+            config = Dragonstone::ModuleConfig.new([shadow_syslib, real_syslib])
+            resolver = Dragonstone::ModuleResolver.new(config)
+
+            resolver.syslib_root_path.should eq(real_syslib)
+            resolver.syslib_entry_path.should eq(File.join(real_syslib, "syslib.ds"))
+        end
+    end
+
     it "rejects modules incompatible with the requested backend" do
         with_tmpdir do |dir|
             dep_dir = File.join(dir, "dep")
