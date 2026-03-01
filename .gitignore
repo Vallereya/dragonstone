@@ -9,6 +9,9 @@
 .idea
 .nvim
 
+# Testing ROADMAP.
+docs/OVERALL_ROADMAP.md
+
 # Ignore any caches from testing.
 cache
 cache/
