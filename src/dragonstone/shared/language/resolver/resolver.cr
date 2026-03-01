@@ -102,10 +102,14 @@ module Dragonstone
     end
 
     def syslib_root_path : String?
+      # Prefer explicit syslib roots that actually contain the syslib entrypoint.
       config.roots.each do |root|
-        return root if File.basename(root) == "syslib"
+        next unless File.basename(root) == "syslib"
+        return root if File.file?(File.join(root, "syslib.ds"))
       end
-      nil
+
+      # Fallback for custom layouts where the root is not named `syslib`.
+      config.roots.find { |root| File.file?(File.join(root, "syslib.ds")) }
     end
 
     def syslib_entry_path : String?

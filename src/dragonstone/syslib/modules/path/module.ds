@@ -1,0 +1,29 @@
+module Path
+    define create(target: str) -> str
+        ffi.call("path_create", [target])
+    end
+
+    define normalize(value: str) -> str
+        ffi.call("path_normalize", [value])
+    end
+
+    define parent(value: str) -> str
+        ffi.call("path_parent", [value])
+    end
+
+    define base(value: str) -> str
+        ffi.call("path_base", [value])
+    end
+
+    define expand(value: str) -> str
+        ffi.call("path_expand", [value])
+    end
+
+    define delete(value: str) -> str
+        ffi.call("path_delete", [value])
+    end
+end
+
+# define path
+#     path.new
+# end

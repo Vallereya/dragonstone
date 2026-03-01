@@ -1,0 +1,10 @@
+use "./file/module.ds"
+
+# File = utilities.file()
+
+# File.open("./demo.txt", "r", false)
+# File.read("./demo.txt")
+# File.write("./demo.txt", "content", false)
+# File.append("./demo.txt", "\nextra", true)
+# File.create("./demo.txt", "initial", true)
+# File.delete("./demo.txt")

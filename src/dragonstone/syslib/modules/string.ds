@@ -1,1 +1,1 @@
-use "./string/build.ds"
+use "./string/module.ds"

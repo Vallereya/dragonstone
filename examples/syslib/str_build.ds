@@ -1,0 +1,82 @@
+#[
+
+    String Builder and Build Functions
+
+    The builder allows appending segments and 
+    characters without creating intermediate
+    string objects, which can be more efficient
+    for larger strings or when building strings 
+    in a loop.
+
+]#
+
+#[
+
+    This is using the string builder from the 
+    standard library. This is depreciated in 
+    favor of using the builder directly from the
+    system library, which does not require an
+    import and is more efficient.
+
+    !# This will be removed in a future release, so it's
+    !# recommended to switch to using the builder from
+    !# the system library directly.
+
+]#
+
+use "strings_build"
+
+# Build a string by appending segments and characters (default capacity).
+greeting = strings.build do |builder|
+    builder.append("Hello")
+    builder.append_char(' ')
+    builder.append("Dragonstone")
+    builder.append_char('!')
+end
+
+echo greeting
+
+# Provide an explicit capacity and reuse builder helpers.
+path = strings.build_with_capacity(8) do |builder|
+    builder.append("usr")
+    builder.append_char('/')
+    builder.append("local")
+    builder.append_char('/')
+    builder.append("bin")
+end
+
+echo path
+
+#[
+
+    This is using the string builder from the 
+    system library to build strings in a more 
+    efficient way, without the need for imports.
+
+    Location:
+        `./src/dragonstone/syslib/modules/string.ds`
+        `./src/dragonstone/syslib/modules/string/module.ds`
+        `./src/dragonstone/syslib/modules/string/build/build.ds`
+
+]#
+
+# Build a string by appending segments and characters (default capacity).
+greeting = str.build do |b|
+    b.append("Hello")
+    b.append_char(' ')
+    b.append("Dragonstone")
+    b.append_char('!')
+end
+
+echo greeting
+
+# Provide an explicit capacity and reuse builder helpers.
+path = str.build_with_capacity(8) do |b|
+    b.append("usr")
+    b.append_char('/')
+    b.append("local")
+    b.append_char('/')
+    b.append("bin")
+end
+
+echo path

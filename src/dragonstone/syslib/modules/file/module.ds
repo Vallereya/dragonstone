@@ -1,0 +1,29 @@
+module File
+    define open(path: str, mode: str, create_dirs: bool)
+        ffi.call("file_open", [path, mode, create_dirs])
+    end
+
+    define read(path: str) -> str
+        ffi.call("file_read", [path])
+    end
+
+    define write(path: str, content: str, create_dirs: bool) -> int
+        ffi.call("file_write", [path, content, create_dirs])
+    end
+
+    define append(path: str, content: str, create_if_missing: bool) -> int
+        ffi.call("file_append", [path, content, create_if_missing])
+    end
+
+    define create(path: str, contents: str, create_dirs: bool) -> str
+        ffi.call("file_create", [path, contents, create_dirs])
+    end
+
+    define delete(path: str) -> bool
+        ffi.call("file_delete", [path])
+    end
+end
+
+# define file
+#     file.new
+# end
