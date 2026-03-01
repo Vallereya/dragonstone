@@ -1,9 +1,13 @@
 # ---------------------------------
 # ---------- C Backend ------------
 # ---------------------------------
+
 require "../../build_options"
 require "../shared/helpers"
 require "../shared/program_serializer"
+require "../../../../shared/language/lexer/lexer"
+require "../../../../shared/language/parser/parser"
+require "../../../../shared/runtime/symbol"
 
 module Dragonstone
     module Core
