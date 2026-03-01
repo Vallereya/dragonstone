@@ -1,6 +1,6 @@
 #[
 
-    String Builder and Build Functions
+    String Builder and Build Functions Example
 
     The builder allows appending segments and 
     characters without creating intermediate
@@ -24,28 +24,28 @@
 
 ]#
 
-use "strings_build"
+# use "strings_build"
 
 # Build a string by appending segments and characters (default capacity).
-greeting = strings.build do |builder|
-    builder.append("Hello")
-    builder.append_char(' ')
-    builder.append("Dragonstone")
-    builder.append_char('!')
-end
+# greeting = strings.build do |builder|
+#     builder.append("Hello")
+#     builder.append_char(' ')
+#     builder.append("Dragonstone")
+#     builder.append_char('!')
+# end
 
-echo greeting
+# echo greeting
 
 # Provide an explicit capacity and reuse builder helpers.
-path = strings.build_with_capacity(8) do |builder|
-    builder.append("usr")
-    builder.append_char('/')
-    builder.append("local")
-    builder.append_char('/')
-    builder.append("bin")
-end
+# path = strings.build_with_capacity(8) do |builder|
+#     builder.append("usr")
+#     builder.append_char('/')
+#     builder.append("local")
+#     builder.append_char('/')
+#     builder.append("bin")
+# end
 
-echo path
+# echo path
 
 #[
 
