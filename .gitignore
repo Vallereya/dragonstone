@@ -33,6 +33,7 @@ bootstrap/
 install-dragonstone.iss
 bin/build/
 bin/payloads/
+bin/dev/
 dragonstone-dev
 dragonstone.res
 dragonstone.o

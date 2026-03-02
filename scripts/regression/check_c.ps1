@@ -6,8 +6,8 @@ function Run-Example([string]$file) {
     Write-Host ""
     Write-Host "============================================================"
     Write-Host "FILE: $file"
-    Write-Host "CMD : .\bin\build\dragonstone.exe build-run --target llvm --output .\bin\dev\build $file"
-    & .\bin\build\dragonstone.exe build-run --target llvm --output .\bin\dev\build $file
+    Write-Host "CMD : .\bin\build\dragonstone.exe build-run --target c --output .\bin\dev\build $file"
+    & .\bin\build\dragonstone.exe build-run --target c --output .\bin\dev\build $file
 }
 
 $files = @(

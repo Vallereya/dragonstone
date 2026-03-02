@@ -7,8 +7,8 @@ run() {
     echo
     echo "============================================================"
     echo "FILE: $file"
-    echo "CMD : ./bin/dragonstone.sh build-run --target llvm --output ./bin/dev/build $file"
-    ./bin/dragonstone.sh build-run --target llvm --output ./bin/dev/build "$file"
+    echo "CMD : ./bin/dragonstone.sh build-run --target c --output ./bin/dev/build $file"
+    ./bin/dragonstone.sh build-run --target c --output ./bin/dev/build "$file"
 }
 
 run ./examples/raise.ds
