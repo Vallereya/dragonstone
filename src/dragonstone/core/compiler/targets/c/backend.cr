@@ -93,6 +93,8 @@ module Dragonstone
             @emitted_functions : Set(String)
 
             @globals : Set(String)
+            @known_constants : Set(String)
+            @class_scope_bindings : Hash(String, Set(String))
             @namespace_stack : Array(String)
             @class_name_occurrences : Hash(String, Int32)
 
@@ -119,6 +121,8 @@ module Dragonstone
               @emitted_functions = Set(String).new
 
               @globals = Set(String).new
+              @known_constants = Set(String).new
+              @class_scope_bindings = Hash(String, Set(String)).new { |h, k| h[k] = Set(String).new }
               @namespace_stack = [] of String
               @class_name_occurrences = Hash(String, Int32).new(0)
 
@@ -137,6 +141,7 @@ module Dragonstone
             def generate(io : IO)
               collect_strings
               collect_globals
+              collect_bindings
               collect_functions
 
               @namespace_stack.clear
@@ -193,7 +198,7 @@ module Dragonstone
                 "extern void  *dragonstone_runtime_map_literal(int64_t len, void **keys, void **vals);",
                 "extern void  *dragonstone_runtime_tuple_literal(int64_t len, void **elems);",
                 "extern void  *dragonstone_runtime_named_tuple_literal(int64_t len, void **keys, void **vals);",
-                "extern void  *dragonstone_runtime_block_literal(void *func, void *env);",
+                "extern void  *dragonstone_runtime_block_literal(void *(*func)(void *, int64_t, void **), void *env);",
                 "extern void  *dragonstone_runtime_block_invoke(void *block, int64_t argc, void **argv);",
                 "extern void **dragonstone_runtime_block_env_allocate(int64_t count);",
                 "extern void  *dragonstone_runtime_method_invoke(void *recv, void *name, int64_t argc, void **argv, void *block);",
@@ -225,6 +230,9 @@ module Dragonstone
                 "extern void  *dragonstone_runtime_negate(void *v);",
                 "extern void  *dragonstone_runtime_shl(void *l, void *r);",
                 "extern void  *dragonstone_runtime_shr(void *l, void *r);",
+                "extern void  *dragonstone_runtime_bit_and(void *l, void *r);",
+                "extern void  *dragonstone_runtime_bit_or(void *l, void *r);",
+                "extern void  *dragonstone_runtime_bit_xor(void *l, void *r);",
                 "extern void  *dragonstone_runtime_pow(void *l, void *r);",
                 "extern void  *dragonstone_runtime_floor_div(void *l, void *r);",
                 "extern void  *dragonstone_runtime_cmp(void *l, void *r);",
@@ -415,6 +423,7 @@ module Dragonstone
                    AST::InterpolatedString, AST::BeginExpression,
                    AST::InstanceVariable, AST::InstanceVariableAssignment,
                    AST::IfStatement, AST::UnlessStatement, AST::CaseStatement,
+                   AST::ConditionalExpression,
                    AST::Assignment, AST::AttributeAssignment, AST::IndexAssignment,
                    AST::YieldExpression, AST::DebugEcho,
                    AST::ArgvExpression, AST::ArgcExpression, AST::ArgfExpression,
@@ -429,6 +438,14 @@ module Dragonstone
               case stmt
               when AST::FunctionDef
                 emit_function_inline(stmt)
+                if recv = stmt.receiver
+                  c_name = @function_names[stmt]?
+                  if c_name
+                    recv_ref = emit_expr(ctx, recv)
+                    meth_name_ref = string_ref(stmt.name)
+                    ctx.io << "    dragonstone_runtime_define_singleton_method(#{recv_ref}, (void*)#{meth_name_ref}, (void*)#{c_name});\n"
+                  end
+                end
                 false
               when AST::ClassDefinition
                 emit_class_definition(ctx, stmt)
@@ -543,6 +560,8 @@ module Dragonstone
                 emit_unless_expr(ctx, node)
               when AST::CaseStatement
                 emit_case_expr(ctx, node)
+              when AST::ConditionalExpression
+                emit_conditional_expr(ctx, node)
               when AST::WhileStatement
                 emit_while(ctx, node)
                 "NULL"
@@ -655,12 +674,11 @@ module Dragonstone
 
             private def emit_variable_ref(ctx : FunctionContext, node : AST::Variable) : String
               name = node.name
-              if constant_symbol?(name)
-                segments_ref = "[1]{ (void*)#{string_ref(name)} }"
-                t = ctx.fresh
-                ctx.io << "    { void *_seg[] = {(void*)#{string_ref(name)}}; "
-                ctx.io << "void *#{t} = dragonstone_runtime_constant_lookup(1, _seg); }\n"
-                return emit_constant_path_by_name(ctx, [name])
+              if name == "ffi"
+                return "(void*)#{string_ref("ffi")}"
+              end
+              if name == "self"
+                return ctx.has_local?("self") ? "self" : "dragonstone_runtime_root_self()"
               end
 
               full_name = qualify_name(name)
@@ -679,11 +697,31 @@ module Dragonstone
               cname = safe_c_name(name)
               return cname if ctx.has_local?(cname)
 
+              if const_path = resolve_constant_path(name)
+                return emit_constant_path_by_name(ctx, const_path)
+              end
+
+              if owner_ns = resolve_class_scope_binding_owner(name)
+                owner_ref = emit_constant_path_by_name(ctx, owner_ns.split("::"))
+                t = ctx.fresh
+                name_ref = string_ref(name)
+                ctx.io << "    void *#{t} = dragonstone_runtime_ivar_get(#{owner_ref}, (void*)#{name_ref});\n"
+                return t
+              end
+
               recv = ctx.has_local?("self") ? "self" : "dragonstone_runtime_root_self()"
-              t = ctx.fresh
               name_ref = string_ref(name)
-              ctx.io << "    void *#{t} = dragonstone_runtime_method_invoke(#{recv}, (void*)#{name_ref}, 0, NULL, NULL);\n"
-              t
+              if ctx.has_local?("self")
+                t_ivar = ctx.fresh
+                t = ctx.fresh
+                ctx.io << "    void *#{t_ivar} = dragonstone_runtime_ivar_get(#{recv}, (void*)#{name_ref});\n"
+                ctx.io << "    void *#{t} = #{t_ivar} ? #{t_ivar} : dragonstone_runtime_method_invoke(#{recv}, (void*)#{name_ref}, 0, NULL, NULL);\n"
+                t
+              else
+                t = ctx.fresh
+                ctx.io << "    void *#{t} = dragonstone_runtime_method_invoke(#{recv}, (void*)#{name_ref}, 0, NULL, NULL);\n"
+                t
+              end
             end
 
             private def emit_constant_path(ctx : FunctionContext, node : AST::ConstantPath) : String
@@ -742,7 +780,9 @@ module Dragonstone
             private def emit_runtime_binop(ctx : FunctionContext, op : String, left : String, right : String) : String
               fn = case op
                    when "+"   then "dragonstone_runtime_add"
+                   when "&+"  then "dragonstone_runtime_add"
                    when "-"   then "dragonstone_runtime_sub"
+                   when "&-"  then "dragonstone_runtime_sub"
                    when "*"   then "dragonstone_runtime_mul"
                    when "/"   then "dragonstone_runtime_div"
                    when "%"   then "dragonstone_runtime_mod"
@@ -750,6 +790,9 @@ module Dragonstone
                    when "//"  then "dragonstone_runtime_floor_div"
                    when "<<"  then "dragonstone_runtime_shl"
                    when ">>"  then "dragonstone_runtime_shr"
+                   when "&"   then "dragonstone_runtime_bit_and"
+                   when "|"   then "dragonstone_runtime_bit_or"
+                   when "^"   then "dragonstone_runtime_bit_xor"
                    when ">"   then "dragonstone_runtime_gt"
                    when "<"   then "dragonstone_runtime_lt"
                    when ">="  then "dragonstone_runtime_gte"
@@ -812,24 +855,25 @@ module Dragonstone
               name = node.name
               receiver = node.receiver
               block = node.arguments.last?.try { |a| (a.is_a?(AST::BlockLiteral) || a.is_a?(AST::ParaLiteral)) ? a : nil }
-              args = block ? node.arguments[0..-2] : node.arguments
+              block_stripped_args = block ? node.arguments[0..-2] : node.arguments
+              args = node.arguments
 
               if receiver.nil? || (receiver.is_a?(AST::Variable) && receiver.as(AST::Variable).name == "self")
                 case name
                 when "echo", "puts"
-                  val = args.empty? ? "NULL" : emit_expr(ctx, args[0])
+                  val = block_stripped_args.empty? ? "NULL" : emit_expr(ctx, block_stripped_args[0])
                   t = ctx.fresh
                   ctx.io << "    void *#{t} = dragonstone_runtime_value_display(#{val});\n"
                   ctx.io << "    puts((char *)#{t});\n"
                   return "NULL"
                 when "eecho", "print"
-                  val = args.empty? ? "NULL" : emit_expr(ctx, args[0])
+                  val = block_stripped_args.empty? ? "NULL" : emit_expr(ctx, block_stripped_args[0])
                   t = ctx.fresh
                   ctx.io << "    void *#{t} = dragonstone_runtime_value_display(#{val});\n"
                   ctx.io << "    fputs((char *)#{t}, stdout);\n"
                   return "NULL"
                 when "typeof"
-                  val = args.empty? ? "NULL" : emit_expr(ctx, args[0])
+                  val = block_stripped_args.empty? ? "NULL" : emit_expr(ctx, block_stripped_args[0])
                   t = ctx.fresh
                   ctx.io << "    void *#{t} = dragonstone_runtime_typeof(#{val});\n"
                   return t
@@ -840,14 +884,23 @@ module Dragonstone
                 case name
                 when "echo", "puts", "write", "print", "<<", "flush"
                   recv_ref = emit_expr(ctx, recv)
-                  val = args.empty? ? "NULL" : emit_expr(ctx, args[0])
+                  val = block_stripped_args.empty? ? "NULL" : emit_expr(ctx, block_stripped_args[0])
                   return emit_stream_write(ctx, recv_ref, val, name)
                 end
               end
 
               if receiver.nil?
-                if c_name = resolve_direct_call(name, args.size)
-                  return emit_direct_call(ctx, c_name, nil, args, block)
+                if block
+                  if c_name = resolve_direct_call(name, block_stripped_args.size, true)
+                    return emit_direct_call(ctx, c_name, nil, block_stripped_args, block)
+                  end
+                  if c_name = resolve_direct_call(name, args.size, false)
+                    return emit_direct_call(ctx, c_name, nil, args, nil)
+                  end
+                else
+                  if c_name = resolve_direct_call(name, args.size, false)
+                    return emit_direct_call(ctx, c_name, nil, args, nil)
+                  end
                 end
               end
 
@@ -857,7 +910,7 @@ module Dragonstone
                            "dragonstone_runtime_root_self()"
                          end
 
-              emit_dynamic_call(ctx, recv_ref, name, args, block)
+              emit_dynamic_call(ctx, recv_ref, name, block_stripped_args, block)
             end
 
             private def emit_stream_write(ctx : FunctionContext, recv_ref : String, val : String, name : String) : String
@@ -908,17 +961,20 @@ module Dragonstone
               arg_refs = real_args.map { |a| emit_expr(ctx, a) }
               block_ref = block_node ? emit_block_node(ctx, block_node) : "NULL"
 
-              ns = @namespace_stack.join("::")
-              klass_ref = string_ref(ns.empty? ? "Object" : ns)
+              owner_ref = if @namespace_stack.empty?
+                            emit_constant_path_by_name(ctx, ["Object"])
+                          else
+                            emit_constant_path_by_name(ctx, @namespace_stack)
+                          end
               meth_ref = string_ref(ctx.callable_name || "initialize")
 
               t = ctx.fresh
               if arg_refs.empty?
-                ctx.io << "    void *#{t} = dragonstone_runtime_super_invoke(self, (void*)#{klass_ref}, (void*)#{meth_ref}, 0, NULL, #{block_ref});\n"
+                ctx.io << "    void *#{t} = dragonstone_runtime_super_invoke(self, #{owner_ref}, (void*)#{meth_ref}, 0, NULL, #{block_ref});\n"
               else
                 arr = ctx.fresh("_sargs")
                 ctx.io << "    void *#{arr}[] = {#{arg_refs.join(", ")}};\n"
-                ctx.io << "    void *#{t} = dragonstone_runtime_super_invoke(self, (void*)#{klass_ref}, (void*)#{meth_ref}, #{arg_refs.size}, #{arr}, #{block_ref});\n"
+                ctx.io << "    void *#{t} = dragonstone_runtime_super_invoke(self, #{owner_ref}, (void*)#{meth_ref}, #{arg_refs.size}, #{arr}, #{block_ref});\n"
               end
               t
             end
@@ -968,10 +1024,13 @@ module Dragonstone
               block_id = @block_counter
               @block_counter += 1
               func_name = "_ds_block_#{block_id}"
+              env_var = "_ds_env"
+              argc_var = "_ds_argc"
+              argv_var = "_ds_argv"
 
               blk_io = String::Builder.new
-              blk_io << "static void *#{func_name}(void *__env_raw, int64_t __argc, void **__argv) {\n"
-              blk_io << "    void **__env = (void**)__env_raw;\n"
+              blk_io << "static void *#{func_name}(void *#{env_var}_raw, int64_t #{argc_var}, void **#{argv_var}) {\n"
+              blk_io << "    void **#{env_var} = (void**)#{env_var}_raw;\n"
 
               inner_ctx = FunctionContext.new(blk_io)
               inner_ctx.block_param = nil
@@ -979,13 +1038,13 @@ module Dragonstone
               captures.each_with_index do |cap, i|
                 cname = safe_c_name(cap)
                 inner_ctx.declare_local(cname)
-                blk_io << "    void *#{cname} = __env ? __env[#{i}] : NULL;\n"
+                blk_io << "    void *#{cname} = #{env_var} ? #{env_var}[#{i}] : NULL;\n"
               end
 
               params.each_with_index do |pname, i|
                 cname = safe_c_name(pname)
                 inner_ctx.declare_local(cname)
-                blk_io << "    void *#{cname} = __argc > #{i} ? __argv[#{i}] : NULL;\n"
+                blk_io << "    void *#{cname} = #{argc_var} > #{i} ? #{argv_var}[#{i}] : NULL;\n"
               end
 
               pre_declare_locals(inner_ctx, body)
@@ -997,14 +1056,14 @@ module Dragonstone
 
               t = ctx.fresh("_blk")
               if captures.empty?
-                ctx.io << "    void *#{t} = dragonstone_runtime_block_literal((void*)#{func_name}, NULL);\n"
+                ctx.io << "    void *#{t} = dragonstone_runtime_block_literal(#{func_name}, NULL);\n"
               else
                 env = ctx.fresh("_env")
                 ctx.io << "    void **#{env} = dragonstone_runtime_block_env_allocate(#{captures.size});\n"
                 captures.each_with_index do |cap, i|
                   ctx.io << "    #{env}[#{i}] = #{safe_c_name(cap)};\n"
                 end
-                ctx.io << "    void *#{t} = dragonstone_runtime_block_literal((void*)#{func_name}, (void*)#{env});\n"
+                ctx.io << "    void *#{t} = dragonstone_runtime_block_literal(#{func_name}, (void*)#{env});\n"
               end
               t
             end
@@ -1027,6 +1086,8 @@ module Dragonstone
               when AST::Assignment
                 scan_capture_node(node.value, bound, used)
                 bound << node.name
+              when AST::InstanceVariableAssignment
+                scan_capture_node(node.value, bound, used)
               when AST::FunctionDef, AST::ClassDefinition, AST::ModuleDefinition,
                    AST::StructDefinition, AST::BlockLiteral, AST::ParaLiteral, AST::FunctionLiteral
               when AST::MethodCall
@@ -1037,6 +1098,10 @@ module Dragonstone
                 scan_capture_node(node.right, bound, used)
               when AST::UnaryOp
                 scan_capture_node(node.operand, bound, used)
+              when AST::ConditionalExpression
+                scan_capture_node(node.condition, bound, used)
+                scan_capture_node(node.then_branch, bound, used)
+                scan_capture_node(node.else_branch, bound, used)
               when AST::ReturnStatement
                 node.value.try { |v| scan_capture_node(v, bound, used) }
               when AST::IfStatement
@@ -1047,52 +1112,100 @@ module Dragonstone
               when AST::WhileStatement
                 scan_capture_node(node.condition, bound, used)
                 scan_capture_nodes(node.block, bound, used)
+              when AST::UnlessStatement
+                scan_capture_node(node.condition, bound, used)
+                scan_capture_nodes(node.body, bound, used)
+                node.else_block.try { |b| scan_capture_nodes(b, bound, used) }
+              when AST::CaseStatement
+                node.expression.try { |e| scan_capture_node(e, bound, used) }
+                node.when_clauses.each do |clause|
+                  clause.conditions.each { |cond| scan_capture_node(cond, bound, used) }
+                  scan_capture_nodes(clause.block, bound, used)
+                end
+                node.else_block.try { |b| scan_capture_nodes(b, bound, used) }
+              when AST::BeginExpression
+                scan_capture_nodes(node.body, bound, used)
+                node.rescue_clauses.each do |clause|
+                  clause.exception_variable.try { |v| bound << v }
+                  scan_capture_nodes(clause.body, bound, used)
+                end
+                node.else_block.try { |b| scan_capture_nodes(b, bound, used) }
+                node.ensure_block.try { |b| scan_capture_nodes(b, bound, used) }
               when AST::ArrayLiteral
                 node.elements.each { |e| scan_capture_node(e, bound, used) }
+              when AST::MapLiteral
+                node.entries.each { |(k, v)| scan_capture_node(k, bound, used); scan_capture_node(v, bound, used) }
+              when AST::TupleLiteral
+                node.elements.each { |e| scan_capture_node(e, bound, used) }
+              when AST::NamedTupleLiteral
+                node.entries.each { |entry| scan_capture_node(entry.value, bound, used) }
+              when AST::InterpolatedString
+                node.normalized_parts.each do |type, content|
+                  next unless type == :expression
+                  expr_node = content.is_a?(AST::Node) ? content.as(AST::Node) : parse_interpolation(content.to_s)
+                  scan_capture_node(expr_node, bound, used)
+                end
               else
                 # Continue.
               end
             end
 
             private def emit_if(ctx : FunctionContext, node : AST::IfStatement)
+              done_lbl = ctx.fresh_label("_ifDone")
+
               cond = emit_expr(ctx, node.condition)
               ctx.io << "    if (dragonstone_runtime_is_truthy(#{cond})) {\n"
               generate_block(ctx, node.then_block)
+              ctx.io << "    goto #{done_lbl};\n"
+              ctx.io << "    }\n"
+
               node.elsif_blocks.each do |clause|
-                ctx.io << "    } else if (dragonstone_runtime_is_truthy(#{emit_expr(ctx, clause.condition)})) {\n"
+                elsif_cond = emit_expr(ctx, clause.condition)
+                ctx.io << "    if (dragonstone_runtime_is_truthy(#{elsif_cond})) {\n"
                 generate_block(ctx, clause.block)
+                ctx.io << "    goto #{done_lbl};\n"
+                ctx.io << "    }\n"
               end
+
               if eb = node.else_block
-                ctx.io << "    } else {\n"
                 generate_block(ctx, eb)
               end
-              ctx.io << "    }\n"
+
+              ctx.io << "    #{done_lbl}:;\n"
             end
 
             private def emit_if_expr(ctx : FunctionContext, node : AST::IfStatement) : String
               result = ctx.fresh("_ifr")
+              done_lbl = ctx.fresh_label("_ifExprDone")
               ctx.io << "    void *#{result} = NULL;\n"
+
               cond = emit_expr(ctx, node.condition)
               ctx.io << "    if (dragonstone_runtime_is_truthy(#{cond})) {\n"
               if !node.then_block.empty?
                 last = emit_block_result(ctx, node.then_block)
                 ctx.io << "    #{result} = #{last};\n"
               end
+              ctx.io << "    goto #{done_lbl};\n"
+              ctx.io << "    }\n"
+
               node.elsif_blocks.each do |clause|
-                ctx.io << "    } else if (dragonstone_runtime_is_truthy(#{emit_expr(ctx, clause.condition)})) {\n"
+                elsif_cond = emit_expr(ctx, clause.condition)
+                ctx.io << "    if (dragonstone_runtime_is_truthy(#{elsif_cond})) {\n"
                 unless clause.block.empty?
                   last = emit_block_result(ctx, clause.block)
                   ctx.io << "    #{result} = #{last};\n"
                 end
+                ctx.io << "    goto #{done_lbl};\n"
+                ctx.io << "    }\n"
               end
+
               if eb = node.else_block
-                ctx.io << "    } else {\n"
                 unless eb.empty?
                   last = emit_block_result(ctx, eb)
                   ctx.io << "    #{result} = #{last};\n"
                 end
               end
-              ctx.io << "    }\n"
+              ctx.io << "    #{done_lbl}:;\n"
               result
             end
 
@@ -1123,6 +1236,20 @@ module Dragonstone
                   ctx.io << "    #{result} = #{last};\n"
                 end
               end
+              ctx.io << "    }\n"
+              result
+            end
+
+            private def emit_conditional_expr(ctx : FunctionContext, node : AST::ConditionalExpression) : String
+              result = ctx.fresh("_condR")
+              ctx.io << "    void *#{result} = NULL;\n"
+              cond = emit_expr(ctx, node.condition)
+              ctx.io << "    if (dragonstone_runtime_is_truthy(#{cond})) {\n"
+              then_ref = emit_expr(ctx, node.then_branch)
+              ctx.io << "    #{result} = #{then_ref};\n"
+              ctx.io << "    } else {\n"
+              else_ref = emit_expr(ctx, node.else_branch)
+              ctx.io << "    #{result} = #{else_ref};\n"
               ctx.io << "    }\n"
               result
             end
@@ -1159,8 +1286,8 @@ module Dragonstone
 
             private def emit_case_impl(ctx : FunctionContext, node : AST::CaseStatement, result_var : String?)
               subj_ref = node.expression ? emit_expr(ctx, node.expression.not_nil!) : nil
+              done_lbl = ctx.fresh_label("_caseDone")
 
-              first = true
               node.when_clauses.each do |clause|
                 cond_parts = clause.conditions.map do |cond|
                   t = ctx.fresh
@@ -1186,10 +1313,7 @@ module Dragonstone
                   tt
                 }
 
-                keyword = first ? "if" : "} else if"
-                ctx.io << "    #{keyword} (dragonstone_runtime_is_truthy(#{combined})) {\n"
-                first = false
-
+                ctx.io << "    if (dragonstone_runtime_is_truthy(#{combined})) {\n"
                 if rv = result_var
                   unless clause.block.empty?
                     last = emit_block_result(ctx, clause.block)
@@ -1198,10 +1322,11 @@ module Dragonstone
                 else
                   generate_block(ctx, clause.block)
                 end
+                ctx.io << "    goto #{done_lbl};\n"
+                ctx.io << "    }\n"
               end
 
               if eb = node.else_block
-                ctx.io << (first ? "    {\n" : "    } else {\n")
                 if rv = result_var
                   unless eb.empty?
                     last = emit_block_result(ctx, eb)
@@ -1211,7 +1336,7 @@ module Dragonstone
                   generate_block(ctx, eb)
                 end
               end
-              ctx.io << "    }\n" unless first
+              ctx.io << "    #{done_lbl}:;\n"
             end
 
             private def emit_begin(ctx : FunctionContext, node : AST::BeginExpression)
@@ -1225,8 +1350,8 @@ module Dragonstone
 
               ctx.retry_stack << retry_lbl
               ctx.io << "    { DSExceptionFrame #{frame};\n"
-              ctx.io << "    dragonstone_runtime_push_exception_frame((void*)&#{frame});\n"
               ctx.io << "    #{retry_lbl}:;\n"
+              ctx.io << "    dragonstone_runtime_push_exception_frame((void*)&#{frame});\n"
 
               if has_rescue
                 ctx.io << "    if (setjmp(#{frame}.env) == 0) {\n"
@@ -1288,8 +1413,7 @@ module Dragonstone
 
               ctx.io << "    #{class_var} = dragonstone_runtime_define_class((void*)#{name_ref});\n"
 
-              if super_node = node.superclass
-                super_name = super_node.is_a?(AST::Variable) ? super_node.as(AST::Variable).name : super_node.is_a?(AST::ConstantPath) ? super_node.as(AST::ConstantPath).names.join("::") : "Object"
+              if super_name = node.superclass
                 super_ref = emit_constant_path_by_name(ctx, super_name.split("::"))
                 ctx.io << "    dragonstone_runtime_set_superclass(#{class_var}, #{super_ref});\n"
               end
@@ -1334,11 +1458,19 @@ module Dragonstone
                 emit_struct_definition(ctx, stmt)
               when AST::AccessorMacro
                 emit_accessor_macro(ctx, stmt, container_var)
+              when AST::ExtendStatement
+                stmt.targets.each do |target|
+                  mod_ref = emit_expr(ctx, target)
+                  ctx.io << "    dragonstone_runtime_extend_container(#{container_var}, #{mod_ref});\n"
+                end
               when AST::Assignment
                 val = emit_expr(ctx, stmt.value)
                 if stmt.name.starts_with?("@@") || stmt.name.starts_with?("@@@")
                   gname = mangle_global_name(qualify_name(stmt.name))
                   ctx.io << "    #{gname} = #{val};\n"
+                elsif constant_symbol?(stmt.name)
+                  name_ref = string_ref(qualify_name(stmt.name))
+                  ctx.io << "    dragonstone_runtime_define_constant((void*)#{name_ref}, #{val});\n"
                 else
                   ctx.io << "    { void *_kval = #{val}; dragonstone_runtime_ivar_set(#{container_var}, (void*)#{string_ref(stmt.name)}, _kval); }\n"
                 end
@@ -1404,17 +1536,22 @@ module Dragonstone
               enum_var = mangle_global_name(full_name)
 
               ctx.io << "    #{enum_var} = dragonstone_runtime_define_class((void*)#{name_ref});\n"
-              node.members.each_with_index do |member, i|
-                value = member.value ? dragonstone_runtime_unbox_i64(emit_expr(ctx, member.value.not_nil!)) : i.to_i64
+              current_value = -1_i64
+              node.members.each do |member|
+                if explicit = member.value
+                  current_value = static_int_value(explicit) || current_value + 1_i64
+                else
+                  current_value += 1_i64
+                end
                 mem_ref = string_ref(member.name)
-                ctx.io << "    dragonstone_runtime_define_enum_member(#{enum_var}, (void*)#{mem_ref}, #{value}LL);\n"
+                ctx.io << "    dragonstone_runtime_define_enum_member(#{enum_var}, (void*)#{mem_ref}, #{current_value}LL);\n"
               end
             end
 
             private def emit_ivar_assignment(ctx : FunctionContext, node : AST::InstanceVariableAssignment)
               val = emit_expr(ctx, node.value)
               self_ref = ctx.has_local?("self") ? "self" : "dragonstone_runtime_root_self()"
-              name_ref = string_ref(node.name)
+              name_ref = string_ref(normalize_ivar_name(node.name))
               ctx.io << "    dragonstone_runtime_ivar_set(#{self_ref}, (void*)#{name_ref}, #{val});\n"
             end
 
@@ -1430,7 +1567,7 @@ module Dragonstone
 
             private def emit_ivar_get_by_name(ctx : FunctionContext, ivar_name : String) : String
               self_ref = ctx.has_local?("self") ? "self" : "dragonstone_runtime_root_self()"
-              name_ref = string_ref(ivar_name)
+              name_ref = string_ref(normalize_ivar_name(ivar_name))
               t = ctx.fresh
               ctx.io << "    void *#{t} = dragonstone_runtime_ivar_get(#{self_ref}, (void*)#{name_ref});\n"
               t
@@ -1572,7 +1709,7 @@ module Dragonstone
 
             private def emit_debug_echo(ctx : FunctionContext, node : AST::DebugEcho)
               val = emit_expr(ctx, node.expression)
-              label_ref = string_ref("#{node.expression.to_source} # -> ")
+              label_ref = string_ref(node.expression.to_source)
               ctx.io << "    dragonstone_runtime_debug_accum((void*)#{label_ref}, #{val});\n"
               ctx.io << "    dragonstone_runtime_debug_flush();\n"
             end
@@ -1729,6 +1866,10 @@ module Dragonstone
                 scan_locals(node.right, vars)
               when AST::UnaryOp
                 scan_locals(node.operand, vars)
+              when AST::ConditionalExpression
+                scan_locals(node.condition, vars)
+                scan_locals(node.then_branch, vars)
+                scan_locals(node.else_branch, vars)
               when AST::MethodCall
                 node.receiver.try { |r| scan_locals(r, vars) }
                 node.arguments.each { |a| scan_locals(a, vars) }
@@ -1769,6 +1910,12 @@ module Dragonstone
               when AST::FunctionDef
                 intern_string(node.name)
                 node.body.each { |s| collect_strings_from(s) }
+              when AST::BlockLiteral
+                node.body.each { |s| collect_strings_from(s) }
+              when AST::ParaLiteral
+                node.body.each { |s| collect_strings_from(s) }
+              when AST::FunctionLiteral
+                node.body.each { |s| collect_strings_from(s) }
               when AST::ClassDefinition, AST::ModuleDefinition, AST::StructDefinition
                 intern_string(qualify_name(node.name))
                 with_namespace(node.name) { node.body.each { |s| collect_strings_from(s) } }
@@ -1785,10 +1932,27 @@ module Dragonstone
               when AST::BinaryOp
                 collect_strings_from(node.left)
                 collect_strings_from(node.right)
+              when AST::UnaryOp
+                collect_strings_from(node.operand)
+              when AST::ConditionalExpression
+                collect_strings_from(node.condition)
+                collect_strings_from(node.then_branch)
+                collect_strings_from(node.else_branch)
               when AST::IfStatement
                 collect_strings_from(node.condition)
                 node.then_block.each { |s| collect_strings_from(s) }
                 node.elsif_blocks.each { |c| collect_strings_from(c.condition); c.block.each { |s| collect_strings_from(s) } }
+                node.else_block.try { |b| b.each { |s| collect_strings_from(s) } }
+              when AST::UnlessStatement
+                collect_strings_from(node.condition)
+                node.body.each { |s| collect_strings_from(s) }
+                node.else_block.try { |b| b.each { |s| collect_strings_from(s) } }
+              when AST::CaseStatement
+                node.expression.try { |e| collect_strings_from(e) }
+                node.when_clauses.each do |clause|
+                  clause.conditions.each { |cond| collect_strings_from(cond) }
+                  clause.block.each { |s| collect_strings_from(s) }
+                end
                 node.else_block.try { |b| b.each { |s| collect_strings_from(s) } }
               when AST::WhileStatement
                 collect_strings_from(node.condition)
@@ -1797,20 +1961,44 @@ module Dragonstone
                 node.elements.each { |e| collect_strings_from(e) }
               when AST::MapLiteral
                 node.entries.each { |(k, v)| collect_strings_from(k); collect_strings_from(v) }
+              when AST::TupleLiteral
+                node.elements.each { |e| collect_strings_from(e) }
+              when AST::NamedTupleLiteral
+                node.entries.each do |entry|
+                  intern_string(entry.name)
+                  collect_strings_from(entry.value)
+                end
+              when AST::BagConstructor
+                intern_string(node.element_type.to_source)
+              when AST::IndexAccess
+                collect_strings_from(node.object)
+                collect_strings_from(node.index)
+              when AST::IndexAssignment
+                collect_strings_from(node.object)
+                collect_strings_from(node.index)
+                collect_strings_from(node.value)
               when AST::ReturnStatement
                 node.value.try { |v| collect_strings_from(v) }
+              when AST::YieldExpression
+                node.arguments.each { |a| collect_strings_from(a) }
               when AST::BeginExpression
                 node.body.each { |s| collect_strings_from(s) }
                 node.rescue_clauses.each { |c| c.body.each { |s| collect_strings_from(s) } }
+                node.else_block.try { |b| b.each { |s| collect_strings_from(s) } }
+                node.ensure_block.try { |b| b.each { |s| collect_strings_from(s) } }
               when AST::InstanceVariable, AST::InstanceVariableAssignment
-                intern_string(node.is_a?(AST::InstanceVariable) ? node.name : node.as(AST::InstanceVariableAssignment).name)
+                raw_name = node.is_a?(AST::InstanceVariable) ? node.name : node.as(AST::InstanceVariableAssignment).name
+                intern_string(normalize_ivar_name(raw_name))
+                if node.is_a?(AST::InstanceVariableAssignment)
+                  collect_strings_from(node.as(AST::InstanceVariableAssignment).value)
+                end
               when AST::AttributeAssignment
                 intern_string(node.name)
                 intern_string("#{node.name}=")
                 collect_strings_from(node.receiver)
                 collect_strings_from(node.value)
               when AST::DebugEcho
-                intern_string("#{node.expression.to_source} # -> ")
+                intern_string(node.expression.to_source)
                 collect_strings_from(node.expression)
               else
                 # Skip.
@@ -1821,6 +2009,91 @@ module Dragonstone
               @namespace_stack.clear
               @program.ast.statements.each { |s| collect_globals_from(s) }
               @namespace_stack.clear
+            end
+
+            private def collect_bindings
+              @namespace_stack.clear
+              @class_name_occurrences.clear
+              @program.ast.statements.each { |s| collect_bindings_from(s) }
+              @namespace_stack.clear
+            end
+
+            private def collect_bindings_from(node : AST::Node)
+              case node
+              when AST::ClassDefinition, AST::ModuleDefinition
+                @known_constants << qualify_name(node.name)
+                with_namespace(node.name) { node.body.each { |s| collect_bindings_from(s) } }
+              when AST::StructDefinition
+                @known_constants << qualify_name(node.name)
+                with_namespace(node.name) { node.body.each { |s| collect_bindings_from(s) } }
+              when AST::EnumDefinition
+                @known_constants << qualify_name(node.name)
+              when AST::ConstantDeclaration
+                @known_constants << qualify_name(node.name)
+                collect_bindings_from(node.value)
+              when AST::Assignment
+                if !@namespace_stack.empty? && !node.name.starts_with?("@@") && !node.name.starts_with?("@@@")
+                  if constant_symbol?(node.name)
+                    @known_constants << qualify_name(node.name)
+                  else
+                    @class_scope_bindings[@namespace_stack.join("::")] << node.name
+                  end
+                end
+                collect_bindings_from(node.value)
+              when AST::FunctionDef
+                node.body.each { |s| collect_bindings_from(s) }
+              when AST::IfStatement
+                collect_bindings_from(node.condition)
+                node.then_block.each { |s| collect_bindings_from(s) }
+                node.elsif_blocks.each { |c| collect_bindings_from(c.condition); c.block.each { |s| collect_bindings_from(s) } }
+                node.else_block.try { |b| b.each { |s| collect_bindings_from(s) } }
+              when AST::UnlessStatement
+                collect_bindings_from(node.condition)
+                node.body.each { |s| collect_bindings_from(s) }
+                node.else_block.try { |b| b.each { |s| collect_bindings_from(s) } }
+              when AST::CaseStatement
+                node.expression.try { |e| collect_bindings_from(e) }
+                node.when_clauses.each do |c|
+                  c.conditions.each { |cond| collect_bindings_from(cond) }
+                  c.block.each { |s| collect_bindings_from(s) }
+                end
+                node.else_block.try { |b| b.each { |s| collect_bindings_from(s) } }
+              when AST::WhileStatement
+                collect_bindings_from(node.condition)
+                node.block.each { |s| collect_bindings_from(s) }
+              when AST::BeginExpression
+                node.body.each { |s| collect_bindings_from(s) }
+                node.rescue_clauses.each { |c| c.body.each { |s| collect_bindings_from(s) } }
+                node.else_block.try { |b| b.each { |s| collect_bindings_from(s) } }
+                node.ensure_block.try { |b| b.each { |s| collect_bindings_from(s) } }
+              when AST::MethodCall
+                node.receiver.try { |r| collect_bindings_from(r) }
+                node.arguments.each { |a| collect_bindings_from(a) }
+              when AST::BinaryOp
+                collect_bindings_from(node.left)
+                collect_bindings_from(node.right)
+              when AST::UnaryOp
+                collect_bindings_from(node.operand)
+              when AST::ConditionalExpression
+                collect_bindings_from(node.condition)
+                collect_bindings_from(node.then_branch)
+                collect_bindings_from(node.else_branch)
+              when AST::ArrayLiteral
+                node.elements.each { |e| collect_bindings_from(e) }
+              when AST::MapLiteral
+                node.entries.each { |(k, v)| collect_bindings_from(k); collect_bindings_from(v) }
+              when AST::TupleLiteral
+                node.elements.each { |e| collect_bindings_from(e) }
+              when AST::NamedTupleLiteral
+                node.entries.each { |entry| collect_bindings_from(entry.value) }
+              when AST::InterpolatedString
+                node.normalized_parts.each do |type, content|
+                  next unless type == :expression
+                  collect_bindings_from(content.is_a?(AST::Node) ? content.as(AST::Node) : parse_interpolation(content.to_s))
+                end
+              else
+                # Skip.
+              end
             end
 
             private def collect_globals_from(node : AST::Node)
@@ -1859,11 +2132,7 @@ module Dragonstone
                 struct_name = @struct_unique_names[node]? || node.name
                 with_namespace(struct_name) { node.body.each { |s| collect_functions_from(s) } }
               when AST::ClassDefinition, AST::ModuleDefinition
-                full_name = qualify_name(node.name)
-                @class_name_occurrences[full_name] += 1
-                count = @class_name_occurrences[full_name]
-                unique_ns = count > 1 ? "#{node.name}_#{count}" : node.name
-                with_namespace(unique_ns) { node.body.each { |s| collect_functions_from(s) } }
+                with_namespace(node.name) { node.body.each { |s| collect_functions_from(s) } }
               when AST::FunctionDef
                 register_function(node)
               end
@@ -1973,7 +2242,7 @@ module Dragonstone
               parts.empty? ? "void" : parts.join(", ")
             end
 
-            private def resolve_direct_call(name : String, argc : Int32) : String?
+            private def resolve_direct_call(name : String, argc : Int32, has_block : Bool) : String?
               candidates = [] of String
 
               if @namespace_stack.empty?
@@ -1994,17 +2263,72 @@ module Dragonstone
 
               return nil if candidates.empty?
 
+              exact = candidates.find do |c_name|
+                if func = @function_defs[c_name]?
+                  expects_block = @function_requires_block[c_name]? || false
+                  func.typed_parameters.size == argc && expects_block == has_block
+                else
+                  false
+                end
+              end
+              return exact if exact
+
+              # If the block-flag differed, allow arity-only exact matches.
               candidates.find do |c_name|
                 if func = @function_defs[c_name]?
                   func.typed_parameters.size == argc
                 else
                   false
                 end
-              end || candidates.first?
+              end
             end
 
-            private def dragonstone_runtime_unbox_i64(expr_ref : String) : Int64
-              0_i64
+            private def resolve_constant_path(name : String) : Array(String)?
+              ns = @namespace_stack.dup
+              while ns.size >= 0
+                names = ns + [name]
+                full = names.join("::")
+                return names if @known_constants.includes?(full)
+                break if ns.empty?
+                ns.pop
+              end
+              @known_constants.includes?(name) ? [name] : nil
+            end
+
+            private def resolve_class_scope_binding_owner(name : String) : String?
+              ns = @namespace_stack.dup
+              while ns.size > 0
+                owner = ns.join("::")
+                if @class_scope_bindings[owner]?.try(&.includes?(name))
+                  return owner
+                end
+                ns.pop
+              end
+              nil
+            end
+
+            private def static_int_value(node : AST::Node) : Int64?
+              case node
+              when AST::Literal
+                case val = node.value
+                when Int32 then val.to_i64
+                when Int64 then val
+                else
+                  nil
+                end
+              when AST::UnaryOp
+                if node.operator == "-" || node.operator == :"-"
+                  if inner = static_int_value(node.operand)
+                    -inner
+                  else
+                    nil
+                  end
+                else
+                  nil
+                end
+              else
+                nil
+              end
             end
 
             private def intern_string(s : String) : String
@@ -2082,6 +2406,10 @@ module Dragonstone
 
             private def constant_symbol?(name : String) : Bool
               !name.empty? && name[0].uppercase?
+            end
+
+            private def normalize_ivar_name(name : String) : String
+              name.starts_with?("@") ? name : "@#{name}"
             end
 
             private def parse_interpolation(source : String) : AST::Node
