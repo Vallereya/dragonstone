@@ -18,8 +18,8 @@
     <div align="center">
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D"/>
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D"/>
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D"/>
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D"/>
+        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D"/> -->
+        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D"/> -->
     </div>
 </p>
 <br>
