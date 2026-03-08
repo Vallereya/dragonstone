@@ -211,7 +211,7 @@
 
 ```diff
 + Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
-- Begin Bootstrapping, incrementally.
++ Begin Bootstrapping, incrementally.
 + Expanded `fun` so it works as intended. 
 + Fixed `con` keyword, re-added optional explicit-ness with the keywords `let`, `var`, and `fix`. 
 + Re-Implemented `@@` for class instance variables, and `@@@` for module instance variables. 
