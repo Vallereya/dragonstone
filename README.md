@@ -9,12 +9,18 @@
     <br>
     <div align="center">
         <img src="https://img.shields.io/badge/🟢%20Passing-Frontend:%20Interpreter-379144"/>
+        <br>
         <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20ByteCode-379144"/>
+        <br>
         <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20LLVM-379144"/>
+        <br>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20C-379144"/>
     </div>
+    <!--
     <div align="center">
         <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20C-E7CD54"/>
     </div>
+    -->
     <div align="center">
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D"/>
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D"/>
