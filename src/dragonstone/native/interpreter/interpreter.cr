@@ -66,6 +66,12 @@ module Dragonstone
             @builtin_stderr = BuiltinStream.new(BuiltinStream::Kind::Stderr)
             @builtin_stdin = BuiltinStdin.new
             @builtin_argf = BuiltinArgf.new
+            ensure_root_object
+        end
+
+        private def ensure_root_object : Nil
+            return if lookup_constant_value("Object")
+            set_constant("Object", DragonClass.new("Object"))
         end
 
         def typing_enabled? : Bool

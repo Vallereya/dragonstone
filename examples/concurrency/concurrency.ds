@@ -9,19 +9,19 @@
 ]#
 
 spawn do
-    channel -> send(1)
+    channel -> send
 end
 
 channel <- receive
 
 spawn do
-    channel -> send(1)
+    channel -> send
 end
 
 spawn do
     channel <- receive
 end
 
-with fiber
+fiber
     yield
 end

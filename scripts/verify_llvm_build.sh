@@ -7,7 +7,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SOURCE="$1"
-OUTPUT="${2:-dev/build/core/llvm/dragonstone_llvm.out}"
+OUTPUT="${2:-build/core/llvm/dragonstone_llvm.out}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -27,19 +27,50 @@ mkdir -p "$CRYSTAL_CACHE_DIR" "$TMPDIR"
 CRYSTAL_CACHE_DIR="$CRYSTAL_CACHE_DIR" TMPDIR="$TMPDIR" TMP="$TMP" TEMP="$TEMP" \
     crystal run bin/dragonstone -- build --target llvm "$SOURCE"
 
-LLVM_FILE="dev/build/core/llvm/dragonstone_llvm.ll"
+LLVM_FILE="build/core/llvm/dragonstone_llvm.ll"
 if [[ ! -f "$LLVM_FILE" ]]; then
     echo "LLVM IR not found at $LLVM_FILE" >&2
     exit 1
 fi
 
 RUNTIME_STUB="src/dragonstone/core/compiler/targets/llvm/llvm_runtime.c"
-RUNTIME_OBJ="dev/build/core/llvm/runtime_stub.o"
+ABI_SOURCES=(
+    "src/dragonstone/shared/runtime/abi/abi.c"
+    "src/dragonstone/shared/runtime/abi/std/std.c"
+    "src/dragonstone/shared/runtime/abi/std/io/io.c"
+    "src/dragonstone/shared/runtime/abi/std/file/file.c"
+    "src/dragonstone/shared/runtime/abi/std/path/path.c"
+    "src/dragonstone/shared/runtime/abi/platform/platform.c"
+    "src/dragonstone/shared/runtime/abi/platform/lib_c/lib_c.c"
+)
+UTF8PROC_SOURCE="src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c"
 
-mkdir -p "$(dirname "$RUNTIME_OBJ")"
-clang -std=c11 -c "$RUNTIME_STUB" -o "$RUNTIME_OBJ"
+output_dir="$(dirname "$LLVM_FILE")"
+mkdir -p "$output_dir"
 
-clang "$LLVM_FILE" "$RUNTIME_OBJ" -o "$OUTPUT"
+runtime_objects=()
+compile_source() {
+    local source="$1"
+    local obj="$2"
+    local extra_args=()
+    if [[ "$source" == "$UTF8PROC_SOURCE" ]]; then
+        extra_args+=("-DUTF8PROC_STATIC")
+    fi
+    clang -std=c11 -c "$source" -o "$obj" "${extra_args[@]}"
+    runtime_objects+=("$obj")
+}
+
+compile_source "$RUNTIME_STUB" "$output_dir/$(basename "$RUNTIME_STUB" .c).o"
+for source in "${ABI_SOURCES[@]}"; do
+    compile_source "$source" "$output_dir/$(basename "$source" .c).o"
+done
+compile_source "$UTF8PROC_SOURCE" "$output_dir/$(basename "$UTF8PROC_SOURCE" .c).o"
+
+link_args=("$LLVM_FILE" "${runtime_objects[@]}" -o "$OUTPUT")
+if [[ "$(uname -s)" == "Linux" ]]; then
+    link_args+=("-lm")
+fi
+clang "${link_args[@]}"
 echo "Linked LLVM artifact -> $OUTPUT"
 if [[ -x "$OUTPUT" ]]; then
     "$OUTPUT"

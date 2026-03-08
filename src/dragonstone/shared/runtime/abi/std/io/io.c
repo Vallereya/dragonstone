@@ -138,3 +138,21 @@ char *dragonstone_io_read_argf(void) {
 
     return out;
 }
+
+void dragonstone_io_quit(int64_t status) {
+    ds_platform_fflush(ds_platform_stdout());
+    ds_platform_fflush(ds_platform_stderr());
+    exit((int)status);
+}
+
+void dragonstone_io_abort(const char *message) {
+    if (message && message[0] != '\0') {
+        size_t len = strlen(message);
+        dragonstone_io_write_stderr((const uint8_t *)message, len);
+        if (message[len - 1] != '\n') {
+            dragonstone_io_write_stderr((const uint8_t *)"\n", 1);
+        }
+    }
+    ds_platform_fflush(ds_platform_stderr());
+    exit(1);
+}

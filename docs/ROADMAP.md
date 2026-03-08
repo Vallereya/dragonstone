@@ -210,44 +210,44 @@
 #####   <h6 align="center">         `v0.1.5 -> v0.1.6`
 
 ```diff
-- Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
++ Alpha Update ->       Documentation, Examples, Tutorials, and ChangeLog.
++ Begin Bootstrapping, incrementally.
 + Expanded `fun` so it works as intended. 
 + Fixed `con` keyword, re-added optional explicit-ness with the keywords `let`, `var`, and `fix`. 
 + Re-Implemented `@@` for class instance variables, and `@@@` for module instance variables. 
-+ Updated the optional Garbage Collection; Is now using hybrid-like system, with boehm fallback via vendor.
 ```
 
 ###     <h2 align="center">         Phase Two
 #####   <h6 align="center">         `v0.1.6 -> v0.1.7`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
++ Updated the optional Garbage Collection; Is now using hybrid-like system, with boehm fallback via vendor.
++ Completion of LLVM Backend. 
++ Completion of C Backend.
+- Hotfix optional typing system.
+- Freeze current grammar subset if needed on C side.
 ```
 
 ###     <h2 align="center">         Phase Three
 #####   <h6 align="center">         `v0.1.7 -> v0.1.8`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Finish basic implementation of the optional Borrow Checker/Ownership.
+- Implement support for concurrency.
+- Update Garbage Collection? Currently implicit but add optional .allocate/.deallocate? 
+- Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
++ Added syslib, these will allow easy extension of core language features.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.1.8 -> v0.1.9`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Completion of Ruby Backend.
+- Completion of Crystal Backend.
+- Extension of C FFI Bridge.
+- Extension of Ruby FFI Bridge.
+- Extension of Crystal FFI Bridge.
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -255,10 +255,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Four)             Beta Refactor.
-- Begin Bootstrapping.
-- Freeze current grammar subset if needed on C side.
-- 
-- 
+- Finish Bootstrapping.
+- Port validator.cpp to Dragonstone FFI.
+- Python bindings for PyTorch.
+- C bindings for Bullet.
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>
@@ -270,9 +270,9 @@
 
 ```diff
 - Beta Update ->        Documentation, Examples, Tutorials, and ChangeLog.
-- 
-- 
-- 
+- create stdlib's or syslib's for: channel, time, event, math (basic), and tensor.
+- create stdlib's or syslib's for: state, proto, log, config, and test.
+- create stdlib's or syslib's for: math/linalg, math/stats, database, config, and test.
 - 
 ```
 
@@ -280,66 +280,66 @@
 #####   <h6 align="center">         `v0.3.0 -> v0.4.0`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Implement a Spec stdlib module.
+- Setup more micro-benchmarks and spec/unit testing.
+- VM unwind stack w/ exception objects, make a method cache w/ fallback path.
+- For exceptions (ParserError, RuntimeError, TypeError, etc) needs redone for the same reasons as diagnostics.
+- For diagnostics (file:line:col, caret spans, suggestion hints) needs redone some are empty or not giving enough info for the errors.
 ```
 
 ###     <h2 align="center">         Phase Three
 #####   <h6 align="center">         `v0.4.0 -> v0.5.0`
 
 ```diff
-- 
-- 
-- 
-- 
-- 
+- Remove donors so everything runs on dragonstone.
+- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
+- Expand the stdlib/syslib and port any to dragonstone if there is any not.
+- Start work on embedded functionality.
+- Start work for the `forge` package manager.
 ```
 
 ###     <h2 align="center">         Phase Four
 #####   <h6 align="center">         `v0.5.0 -> v0.6.0`
 
 ```diff
-- Finish Bootstrapping.
-- Remove donors so everything runs on dragonstone.
-- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
-- 
-- 
+- Expand the bindings of the 3-Way Interop, so Dragonstone can call more.
+- Implement native provider for `eden`.
+- Test performance overhead (<10% target) and verify time dilation still works (50x+ target).
+- Verify parser & bytecode coverage for all operators, on frontend and all backends.
+- Extend the all backends so they are able to compile all stdlibs if needed.
 ```
 
 ###     <h2 align="center">         Phase Five
 #####   <h6 align="center">         `v0.6.0 -> v0.7.0`
 
 ```diff
-- Start building a VSCode extension for language syntax support and running files.
-- Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
-- Start building the website documentation subdomain.
-- Start building the website forge subdomain.
-- Start work for the `forge` package manager.
++ Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
++ Start building a VSCode extension for language syntax support and running files.
++ Start building a NeoVim extension for language syntax support and running files.
+- Fix `--backend` flags and fix `--backend` flags.
+- Work on performance optimizations.
 ```
 
 ###     <h2 align="center">         Phase Six
 #####   <h6 align="center">         `v0.7.0 -> v0.8.0`
 
 ```diff
-- Start work on embedded functionality.
-- Setup a proper build/release pipeline.
-- Set CI + cross-platform builds (Linux/macOS/Windows).
-- Maximize portability/native cross-platform.
-- Add signed binaries.
++ VSCode extension completed.
++ NeoVim extension completed.
+- Start building the website docs subdomain.
+- Start building the website forge subdomain.
+- The `forge` package manager has the ability for development by others.
 ```
 
 ###     <h2 align="center">         Phase Seven
 #####   <h6 align="center">         `v0.8.0 -> v0.9.0`
 
 ```diff
-- VSCode extension completed.
+- Start eden.dragonstone-lang.org completed? or dedicated site?
+- Finish eden.dragonstone-lang.org completed? or dedicated site?
 - dragonstone-lang.org completed.
 - docs.dragonstone-lang.org completed.
 - forge.dragonstone-lang.org completed.
-- The `forge` package manager has the ability for development by others.
 ```
 
 ###     <h2 align="center">         Phase Eight
@@ -347,10 +347,10 @@
 
 ```diff
 - The `Great Refactor`: (Part Five & Final)     Release Refactor.
-- 
-- 
-- 
-- 
+- Setup a proper build/release pipeline.
+- Set CI + cross-platform builds (Linux/macOS/Windows).
+- Maximize portability/native cross-platform.
+- Add signed binaries.
 ```
 <h1 align="center">                    The Future of Dragonstone        </h1>
 <h1 align="center">                     & Transition to Release         </h1>
@@ -359,11 +359,12 @@
 
 ###     <h2 align="center">         Phase One
 #####   <h6 align="center">         `v1.0.0+`
+#####   <h6 align="center">         Q3 2026+
 
 ```diff
 - Release Update ->     Documentation, Examples, Tutorials, and ChangeLog.
-- Implement native provider for `eden`.
-- 
-- 
-- 
+- Extension of Python FFI Bridge?
+- Extension of JavaScript FFI Bridge?
+- Finish Python compile target/backend?
+- Finish JavaScript compile target/backend?
 ```

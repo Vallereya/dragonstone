@@ -13,6 +13,7 @@ module Dragonstone
 
     EXECUTABLE_SUFFIX = {% if flag?(:windows) %} ".exe" {% else %} "" {% end %}
     LLVM_RUNTIME_STUB = "src/dragonstone/core/compiler/targets/llvm/llvm_runtime.c"
+    C_RUNTIME_STUB    = "src/dragonstone/core/compiler/targets/c/c_runtime.c"
 
 	    private struct CLIOptions
 	      getter typed : Bool
@@ -236,7 +237,11 @@ module Dragonstone
       targets.each do |target|
         options = Core::Compiler::BuildOptions.new(target: target, output_dir: output_dir)
         artifact = Core::Compiler.build(program, options)
-        linked_path = target == Core::Compiler::Target::LLVM ? link_llvm_binary(artifact, stdout, stderr) : nil
+        linked_path = case target
+                      when Core::Compiler::Target::LLVM then link_llvm_binary(artifact, stdout, stderr)
+                      when Core::Compiler::Target::C    then link_c_binary(artifact, stdout, stderr)
+                      else                                   nil
+                      end
         report_artifact(target, artifact, stdout, linked_path)
         artifacts << {target: target, artifact: artifact, linked_path: linked_path}
       end
@@ -267,7 +272,7 @@ module Dragonstone
 	      when Core::Compiler::Target::Crystal
 	        run_crystal_artifact(artifact, stdout, stderr, argv)
 	      when Core::Compiler::Target::C
-	        run_c_artifact(artifact, stdout, stderr, argv)
+	        run_c_artifact(artifact, stdout, stderr, linked_path, argv)
 	      when Core::Compiler::Target::LLVM
 	        run_llvm_artifact(artifact, stdout, stderr, linked_path, argv)
 	      else
@@ -352,43 +357,12 @@ module Dragonstone
 	      end
 	    end
 
-	    private def run_c_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, argv : Array(String)) : Bool
-      path = artifact.object_path
-
-      unless path
-        stderr.puts "C artifact did not produce an output file"
-        return false
-      end
-
-      binary_path = c_binary_path(path)
-      compiler_used = nil
-      ["cc", "gcc", "clang"].each do |candidate|
-        begin
-          status = Process.run(candidate, args: ["-std=c11", path, "-o", binary_path], output: stdout, error: stderr)
-          if status.success?
-            compiler_used = candidate
-            break
-          else
-            stderr.puts "C compiler '#{candidate}' exited with status #{status.exit_code}"
-            return false
-          end
-        rescue ex : File::NotFoundError
-          next
-        rescue ex
-          stderr.puts "Failed to invoke #{candidate}: #{ex.message}"
-          return false
-        end
-      end
-
-      unless compiler_used
-        stderr.puts "Cannot execute C artifact: no compiler found (tried cc, gcc, clang)"
-        return false
-      end
-
-	      run_process(binary_path, argv, stdout, stderr, lookup: false)
-	    ensure
-	      if binary_path && File.exists?(binary_path)
-	        File.delete(binary_path)
+	    private def run_c_artifact(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO, linked_path : String?, argv : Array(String)) : Bool
+	      if linked_path && File.exists?(linked_path)
+	        run_process(linked_path, argv, stdout, stderr, lookup: false)
+	      else
+	        stderr.puts "C artifact could not be linked — ensure a C compiler (cc, gcc, or clang) is installed"
+	        false
 	      end
 	    end
 
@@ -498,6 +472,60 @@ module Dragonstone
       false
     rescue ex
       stderr.puts "Failed to run clang: #{ex.message}"
+      false
+    end
+
+    private def link_c_binary(artifact : Core::Compiler::BuildArtifact, stdout : IO, stderr : IO) : String?
+      c_path = artifact.object_path
+      return nil unless c_path && File.exists?(c_path)
+
+      runtime_objs = compile_c_runtime_stubs(File.dirname(c_path), stdout, stderr)
+      return nil unless runtime_objs
+
+      binary_path = c_binary_path(c_path)
+      return nil unless compile_c_with_runtime(c_path, runtime_objs, binary_path, stdout, stderr)
+
+      binary_path
+    end
+
+    private def compile_c_runtime_stubs(output_dir : String, stdout : IO, stderr : IO) : Array(String)?
+      sources = [C_RUNTIME_STUB] + ABI_RUNTIME_SOURCES + [UTF8PROC_RUNTIME_SOURCE]
+      objects = [] of String
+
+      sources.each do |source|
+        basename    = File.basename(source, ".c")
+        object_path = File.join(output_dir, "#{basename}.o")
+        args        = ["-std=c11", "-c", source, "-o", object_path]
+        args << "-DUTF8PROC_STATIC" if source == UTF8PROC_RUNTIME_SOURCE
+        return nil unless run_any_c_compiler(args, stdout, stderr)
+        objects << object_path
+      end
+
+      objects
+    end
+
+    private def compile_c_with_runtime(c_path : String, runtime_objs : Array(String), binary_path : String, stdout : IO, stderr : IO) : Bool
+      args = ["-std=c11", c_path] + runtime_objs + ["-o", binary_path]
+      {% if flag?(:linux) %}
+        args << "-lm"
+      {% end %}
+      run_any_c_compiler(args, stdout, stderr)
+    end
+
+    private def run_any_c_compiler(args : Array(String), stdout : IO, stderr : IO) : Bool
+      ["cc", "gcc", "clang"].each do |candidate|
+        begin
+          status = Process.run(candidate, args: args, output: stdout, error: stderr)
+          return status.success?
+        rescue ex : File::NotFoundError
+          next
+        rescue ex
+          stderr.puts "Failed to invoke #{candidate}: #{ex.message}"
+          return false
+        end
+      end
+
+      stderr.puts "No C compiler found (tried cc, gcc, clang)"
       false
     end
   end

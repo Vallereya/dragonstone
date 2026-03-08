@@ -1,13 +1,13 @@
 $ErrorActionPreference = "Stop"
 
-New-Item -ItemType Directory -Force -Path ".\dev\build" | Out-Null
+New-Item -ItemType Directory -Force -Path ".\bin\dev\build" | Out-Null
 
 function Run-Example([string]$file) {
     Write-Host ""
     Write-Host "============================================================"
     Write-Host "FILE: $file"
-    Write-Host "CMD : .\bin\build\dragonstone.exe build-run --target llvm --output .\dev\build $file"
-    & .\bin\build\dragonstone.exe build-run --target llvm --output .\dev\build $file
+    Write-Host "CMD : .\bin\build\dragonstone.exe build-run --target llvm --output .\bin\dev\build $file"
+    & .\bin\build\dragonstone.exe build-run --target llvm --output .\bin\dev\build $file
 }
 
 $files = @(
@@ -99,7 +99,6 @@ $files = @(
     ".\examples\types\type_casting.ds"
 
     # ".\examples\stdlib\strings_build.ds",
-    # ".\examples\stdlib\strings_length.ds",
     # ".\examples\stdlib\file.ds",
     # ".\examples\stdlib\toml.ds"
 )

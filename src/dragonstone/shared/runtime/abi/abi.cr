@@ -21,6 +21,8 @@ lib DragonstoneABI
     # Input functions.
     fun dragonstone_io_read_stdin_line : UInt8*
     fun dragonstone_io_read_argf : UInt8*
+    fun dragonstone_io_quit(status : Int64) : Void
+    fun dragonstone_io_abort(message : UInt8*) : Void
 
     # Standard memory management functions.
     fun dragonstone_std_free(ptr : Void*) : Void

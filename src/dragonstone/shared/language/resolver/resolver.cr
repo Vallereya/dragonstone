@@ -101,6 +101,24 @@ module Dragonstone
       remote_path?(path) ? remote_directory_name(path) : File.dirname(path)
     end
 
+    def syslib_root_path : String?
+      # Prefer explicit syslib roots that actually contain the syslib entrypoint.
+      config.roots.each do |root|
+        next unless File.basename(root) == "syslib"
+        return root if File.file?(File.join(root, "syslib.ds"))
+      end
+
+      # Fallback for custom layouts where the root is not named `syslib`.
+      config.roots.find { |root| File.file?(File.join(root, "syslib.ds")) }
+    end
+
+    def syslib_entry_path : String?
+      root = syslib_root_path
+      return nil unless root
+      candidate = File.join(root, "syslib.ds")
+      File.file?(candidate) ? candidate : nil
+    end
+
     # Expand a UseItem into concrete file paths.
     def expand_use_item(item : AST::UseItem, base_dir : String, exclude_path : String? = nil) : Array(String)
       case item.kind

@@ -2,24 +2,45 @@
 #   .gitignore for Dragonstone.
 #
 
+# IDE & OS ignores.
+.fake
+.DS_Store
+.vscode
+.idea
+.nvim
+
+# Testing ROADMAP.
+docs/OVERALL_ROADMAP.md
+
+# Ignore any caches from testing.
+cache
+cache/
+.cache
+.cache/
+.dragonstone
+
+# Ignore `bootstrap` Build Files & Directories.
+# This is for self-hosting/bootstrap builds, and
+# will eventually be un-ignored when nearing
+# completion.
+bootstrap/
+!bootstrap/README.md
+!bootstrap/forge.toml
+!bootstrap/bin/
+!bootstrap/bin/main.ds
+
 # Ignore any Output/Build Files and Directories.
 install-dragonstone.iss
 bin/build/
+bin/payloads/
+bin/dev/
 dragonstone-dev
 dragonstone.res
 dragonstone.o
 version.h
 NUL
 
-# Ignore Dev Build Files, Directories, and Notes.
-dev/
-!dev/README.md
-
-# Ignore Self-Hosting/Bootstrap Build Files, Directories, and Notes.
-bootstrap/
-!bootstrap/README.md
-
-# Unicode Data Files.
+# Unicode Vendor Build/Data Artifacts/Files.
 src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt
@@ -29,26 +50,8 @@ src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc_data.c
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
 
-# GC Vendor Build Artifacts.
+# GC Vendor Build/Data Artifacts/Files.
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops/
-
-# Ignore any Output/Build Cache from testing.
-cache
-cache/
-.cache
-.cache/
-tmp
-tmp/
-.tmp
-.tmp/
-.crystal-cache
-
-# Ignore any IDE folders.
-.vscode
-.idea
-
-# Annoying IDE ignores.
-.fake

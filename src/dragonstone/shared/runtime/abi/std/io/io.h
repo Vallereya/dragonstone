@@ -19,6 +19,9 @@ void dragonstone_io_flush_stderr(void);
 char *dragonstone_io_read_stdin_line(void);
 char *dragonstone_io_read_argf(void);
 
+void dragonstone_io_quit(int64_t status);
+void dragonstone_io_abort(const char *message);
+
 #ifdef __cplusplus
 }
 #endif

@@ -16,6 +16,11 @@ module Dragonstone
     def initialize(@resolver : ModuleResolver, @runtime : Runtime::Engine)
     end
 
+    def load_namespace(path : String, preferred_backend : BackendMode)
+      unit = load_unit(path, preferred_backend)
+      unit.default_namespace
+    end
+
     def apply_imports(current_unit, use_decl : AST::UseDecl, base_file : String)
       base_dir = @resolver.base_directory(base_file)
       preferred_backend = current_unit.backend.backend_mode

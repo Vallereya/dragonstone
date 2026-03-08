@@ -1,7 +1,7 @@
 use "modules/shared/utilities/file_utilities/module"
 
-File = utilities.file()
-Path = utilities.path()
+con File = utilities.file()
+con Path = utilities.path()
 
 # File.open("./demo.txt", "r", false)
 # File.read("./demo.txt")

@@ -2,6 +2,20 @@
     Visibility Example
 ]#
 
+class Person
+    public def introduce
+        echo "Hello, I am a person."
+        secret_info
+    end
+
+    private def secret_info
+        echo "This is a secret!"
+    end
+end
+
+person = Person.new
+person.introduce
+
 class Database
     def connect
         echo "Public: Connecting..."

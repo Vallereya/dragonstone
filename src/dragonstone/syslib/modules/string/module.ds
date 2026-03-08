@@ -1,0 +1,33 @@
+use "./build/build.ds"
+
+module str
+
+    #[
+
+        String Builder and Build Functions
+
+    ]#
+
+    # This is the default capacity for the string builder. It 
+    # can be overridden by using `str.build_with_capacity` and 
+    # providing an explicit capacity.
+    con default_capacity = 16
+
+    # str.build
+    define build
+        builder = Builder.new(default_capacity)
+        yield builder
+        result = builder.to_s
+        builder.setup_buffer(0)
+        result
+    end
+
+    # or str.build_with_capacity
+    define build_with_capacity(initial_capacity: int)
+        builder = Builder.new(initial_capacity)
+        yield builder
+        result = builder.to_s
+        builder.setup_buffer(0)
+        result
+    end
+end

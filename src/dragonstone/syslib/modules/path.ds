@@ -1,0 +1,10 @@
+use "./path/module.ds"
+
+# Path = utilities.path()
+
+# Path.create("./bar")
+# Path.normalize("./foo/../bar")
+# Path.parent("foo/bar/baz.ds")
+# Path.base("foo/bar/baz.ds")
+# Path.expand("~/bin")
+# Path.delete("./bar")

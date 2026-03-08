@@ -120,6 +120,22 @@ module Dragonstone
                         io << "nil"
                     end
                     io << ")"
+                when AST::QuitStatement
+                    io << "Quit("
+                    if status = node.status
+                        describe_node(status, io)
+                    else
+                        io << "nil"
+                    end
+                    io << ")"
+                when AST::AbortStatement
+                    io << "Abort("
+                    if message = node.message
+                        describe_node(message, io)
+                    else
+                        io << "nil"
+                    end
+                    io << ")"
                 when AST::FunctionDef
                     io << "Function(" << node.name << ",params:"
                     io << node.parameters.join(",")

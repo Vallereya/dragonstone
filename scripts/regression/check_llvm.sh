@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mkdir -p ./dev/build
+mkdir -p ./bin/dev/build
 
 run() {
     local file="$1"
     echo
     echo "============================================================"
     echo "FILE: $file"
-    echo "CMD : ./bin/dragonstone.sh build-run --target llvm --output ./dev/build $file"
-    ./bin/dragonstone.sh build-run --target llvm --output ./dev/build "$file"
+    echo "CMD : ./bin/dragonstone.sh build-run --target llvm --output ./bin/dev/build $file"
+    ./bin/dragonstone.sh build-run --target llvm --output ./bin/dev/build "$file"
 }
 
 run ./examples/raise.ds
@@ -99,6 +99,5 @@ run ./examples/types/types.ds
 run ./examples/types/type_casting.ds
 
 # run ./examples/stdlib/strings_build.ds
-# run ./examples/stdlib/strings_length.ds
 # run ./examples/stdlib/file.ds
 # run ./examples/stdlib/toml.ds

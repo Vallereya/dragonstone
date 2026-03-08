@@ -7,5 +7,6 @@ $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $here
 
-& "$here\check_llvm.ps1"
 & "$here\check_run.ps1"
+& "$here\check_llvm.ps1"
+& "$here\check_c.ps1"

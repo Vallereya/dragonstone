@@ -9,26 +9,29 @@
     <br>
     <div align="center">
         <img src="https://img.shields.io/badge/🟢%20Passing-Frontend:%20Interpreter-379144"/>
+        <br>
         <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20ByteCode-379144"/>
+        <br>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20LLVM-379144"/>
+        <br>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20C-379144"/>
     </div>
+    <!--
     <div align="center">
-        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20LLVM-E7CD54"/>
-        <!-- <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20C-E7CD54"/> -->
+        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20C-E7CD54"/>
     </div>
+    -->
     <div align="center">
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20C-BC002D"/>
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D"/>
         <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D"/>
-        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D"/>
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D"/> -->
+        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D"/> -->
+        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D"/> -->
     </div>
 </p>
 <br>
 
 ## <img src="./docs/0_Index/icons/dragonstone.png" width="25"/> What is Dragonstone?
 Dragonstone is a general purpose, high-level, object-oriented programming language. It is both an interpreted and compiled language, it's inspired by Ruby and Crystal but designed for programmer happiness, productivity, and choice.
-
-> **WARNING:** Some compile targets are still a work in progress, as of `v0.1.5` the LLVM backend has limited support, all examples, excluding the stdlibs are working fine. Please report any you find so they outside of that so they can be fixed. In regards to the other backends these still need built out as they only create temporary artifacts for minimal functions, I haven't merged that work yet. The priority right now is 100% llvm backend support.
 
 <br>
 

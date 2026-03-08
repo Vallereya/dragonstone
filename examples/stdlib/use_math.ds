@@ -1,0 +1,114 @@
+#[
+
+    !# WORK IN PROGRESS
+    
+    This example demonstrates the usage of the 
+    basic Math standard library module.
+
+]#
+
+use "math"
+
+# The mathematical constant π (pi), 
+# approximately equal to 3.14159.
+echo Math::PI
+echo Math::π
+
+# The mathematical constant τ (tau), 
+# equal to 2π, approximately 6.28318.
+echo Math::TAU
+echo Math::τ
+
+# The Euler's number (e).
+echo Math::E
+echo Math::𝑒
+
+# The natural logarithm of 2.
+echo Math::Log2
+# echo Math::𝑒²
+
+# The natural logarithm of 10.
+echo Math::Log10
+# echo Math::𝑒¹⁰
+
+# The golden ratio (φ), 
+# approximately equal to 1.61803.
+echo Math::PHI
+echo Math::φ
+
+# Not a Number (NaN).
+# echo Math::NAN
+
+# Positive Infinity.
+# echo Math::POSITIVE_INFINITY
+# echo Math::∞
+
+# Negative Infinity.
+# echo Math::NEGATIVE_INFINITY
+# echo Math::-∞
+
+# The mathematical constant euler-mascheroni, 
+# approximately equal to 0.57721.
+echo Math::EULER_MASCHERONI
+echo Math::γ
+
+# The absolute value of an integer.
+echo Math.absolute(-10)
+echo Math.absolute(15)
+
+# The maximum of two integers.
+echo Math.max(10, 20)
+echo Math.max(5, 3)
+
+# The minimum of two integers.
+echo Math.min(10, 20)
+echo Math.min(5, 3)
+
+# Clamps an integer between a 
+# minimum and maximum value.
+echo Math.clamp(5, 1, 10)
+echo Math.clamp(-5, 0, 10)
+
+# Floor division (integer division rounded down).
+echo Math.floor_divide(7, 3)
+echo Math.floor_divide(20, 6)
+
+# Ceiling division (integer division rounded up).
+echo Math.ceil_divide(7, 3)
+echo Math.ceil_divide(20, 6)
+
+# Rounding to nearest integer.
+echo Math.round(3.6)
+echo Math.round(2.3)
+
+# Truncate toward zero.
+echo Math.truncate(3.6)
+echo Math.truncate(-2.3)
+
+# Square root of a number.
+echo Math.sqrt(16.0)
+echo Math.sqrt(2.0)
+
+# Cube root of a number.
+echo Math.cbrt(27.0)
+echo Math.cbrt(8.0)
+
+# Power of x raised to y.
+echo Math.pow(2, 3)
+echo Math.pow(5, 4)
+
+# Exponential function e^x.
+echo Math.exp(1.0)
+echo Math.exp(2.0)
+
+# Natural logarithm (base e).
+echo Math.log(10, 10)
+echo Math.log(100, 10)
+
+# Base-2 logarithm.
+echo Math.log2(8)
+echo Math.log2(16)
+
+# Base-10 logarithm.
+echo Math.log10(1000)
+echo Math.log10(10000)

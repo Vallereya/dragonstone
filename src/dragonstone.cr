@@ -84,6 +84,10 @@ module Dragonstone
             end
         end
 
+        if syslib_root = default_syslib_root
+            roots << syslib_root
+        end
+
         if default_root = default_stdlib_root
             roots << default_root
         end
@@ -94,6 +98,11 @@ module Dragonstone
 
     private def self.default_stdlib_root : String?
         root = File.expand_path("./dragonstone/stdlib", __DIR__)
+        File.directory?(root) ? root : nil
+    end
+
+    private def self.default_syslib_root : String?
+        root = File.expand_path("./dragonstone/syslib", __DIR__)
         File.directory?(root) ? root : nil
     end
 

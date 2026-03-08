@@ -1,10 +1,31 @@
 #[
-    #! INSIDE LIBRARIES
-    
-    Dragonstone Standard Library (Core-only extensions).
-
-    Import this file in addition to `stdlib` if you need compiler-only
-    modules (e.g., utilities backed by Crystal FFI bindings).
+    --------------------------------
+    ------- STANDARD LIBRARY -------
+    ------- (IMPORT MODULES) -------
+    -------------------------------- 
 ]#
+
+#[
+    
+    The Dragonstone Standard Library Entry Point.
+
+    #! THIS IS CORE-ONLY EXTENSIONS
+    #! This provides modules that only work in the core
+    #! Dragonstone compiler, not in the native interpreter.
+
+    This file will load every module that ships with
+    Dragonstone. Individual modules can also be 
+    imported directly (e.g.`use "colorize"`).
+
+    These modules are located in: 
+    `src/dragonstone/stdlib/modules/`
+
+]#
+
+module Dragonstone
+    module STDLIB
+        extend self
+    end
+end
 
 use "./modules/core/**/module"

@@ -7,5 +7,6 @@ set -euo pipefail
 #   `bash ./scripts/regression/check_all.sh`
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-"$HERE/check_llvm.sh"
 "$HERE/check_run.sh"
+"$HERE/check_llvm.sh"
+"$HERE/check_c.sh"

@@ -183,6 +183,12 @@ module Dragonstone
                     when AST::ReturnStatement
                         value = node.value ? rewrite_node(node.value.not_nil!, scopes, counter, containers) : nil
                         AST::ReturnStatement.new(value, location: node.location)
+                    when AST::QuitStatement
+                        status = node.status ? rewrite_node(node.status.not_nil!, scopes, counter, containers) : nil
+                        AST::QuitStatement.new(status, location: node.location)
+                    when AST::AbortStatement
+                        message = node.message ? rewrite_node(node.message.not_nil!, scopes, counter, containers) : nil
+                        AST::AbortStatement.new(message, location: node.location)
                     when AST::DebugEcho
                         expr = rewrite_node(node.expression, scopes, counter, containers)
                         AST::DebugEcho.new(expr, node.inline, location: node.location)

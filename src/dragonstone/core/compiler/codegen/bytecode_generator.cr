@@ -144,6 +144,10 @@ module Dragonstone
 
             when AST::ReturnStatement
                 compile_return(node)
+            when AST::QuitStatement
+                compile_quit(node)
+            when AST::AbortStatement
+                compile_abort(node)
                 
             when AST::FunctionDef
                 compile_function_def(node)
@@ -828,6 +832,26 @@ module Dragonstone
             @stack_depth = 0
         end
 
+        private def compile_quit(node : AST::QuitStatement)
+            if status = node.status
+                compile_expression(status)
+            else
+                emit_const(0_i64)
+            end
+            emit(OPC::QUIT)
+            @stack_depth = 0
+        end
+
+        private def compile_abort(node : AST::AbortStatement)
+            if message = node.message
+                compile_expression(message)
+            else
+                emit_const("Aborted")
+            end
+            emit(OPC::ABORT)
+            @stack_depth = 0
+        end
+
         private def compile_function_def(node : AST::FunctionDef)
             if node.abstract && @container_depth == 0
                 raise "'abstract def' is only allowed inside classes or modules"
@@ -1318,6 +1342,10 @@ module Dragonstone
                 stack_pop
 
             when OPC::RET
+                @stack_depth = 0
+
+            when OPC::QUIT, OPC::ABORT
+                stack_pop
                 @stack_depth = 0
 
             when OPC::CHECK_TYPE

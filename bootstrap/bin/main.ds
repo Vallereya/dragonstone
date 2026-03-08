@@ -1,0 +1,43 @@
+#[
+    ---------------------------------
+    ---------- MAIN ENTRY -----------
+    --------------------------------- 
+]#
+
+#[
+
+    This is the main entry point for 
+    the Dragonstone Programming Language.
+
+    It initializes the CLI and starts
+    the execution process. It will
+    handle command-line arguments and
+    manage input/output streams. Returns
+    an integer exit code upon completion.
+
+    !#[ 
+        
+        There is an easier way to do this, 
+        but this is more explicit and easier 
+        to understand.
+
+    !]#
+    
+]#
+
+use "../src/dragonstone/cli/cli"
+
+module Dragonstone
+    extend self 
+
+    define main: int
+        return Dragonstone::CLI.run(
+            args = nil, 
+            out  = nil, 
+            ex   = nil, 
+            in   = nil
+        )
+    end
+end
+
+quit Dragonstone.main

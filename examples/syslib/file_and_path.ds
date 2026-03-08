@@ -1,0 +1,105 @@
+#[
+
+    File and Path Utilities Example
+
+    This example demonstrates the usage of file
+    and path utilities which provide functions 
+    for common file and path operations such as 
+    creating, reading, writing, appending, and 
+    deleting files, as well as creating 
+    directories, normalizing paths, and more.
+
+    P.S.: It doesn't need to be this complicated
+    just took me several days to figure out the 
+    ffi -> dragonstone for io file handling 
+    through crystal so i didn't have to create 
+    the whole system. But ended up doing it 
+    anyway, so here it is.
+    
+]#
+
+#[
+
+    This is the file and path utilities example, which is
+    using the file and path utilities from the standard 
+    library. This is depreciated in favor of using the
+    file and path utilities directly from the system 
+    library, which does not require imports and is more
+    efficient.
+
+    !# This will be removed in a future release, so it's
+    !# recommended to switch to using the it from the
+    !# system library directly.
+    
+]#
+
+# use "file_utilities"
+# use "path_utilities"
+
+# tmp_dir = "./tmp_examples"
+# target = "#{tmp_dir}/demo.txt"
+
+# Path.create(tmp_dir)
+
+# create = File.create(target, "hello", true)
+# echo "create -> #{create}"
+# echo "read   -> #{File.read(target)}"
+
+# write = File.write(target, "world", true)
+# echo "write  -> bytes=#{write}"
+
+# append = File.append(target, "!", true)
+# echo "append -> bytes=#{append}"
+# echo "read   -> #{File.read(target)}"
+
+# open = File.open(target, "r", false)
+# echo "open   -> #{open}"
+# echo "read   -> #{File.read(target)}"
+
+# File.write(target, "Hello World", true)
+# File.append(target, "!", true)
+# echo "read   -> #{File.read(target)}"
+
+# echo "delete -> #{File.delete(target)}"
+# File.delete(tmp_dir)
+
+#[
+
+    This is using the file and path utilities from the 
+    system library to build strings in a more efficient 
+    way, without the need for imports.
+
+    Location:
+        `./src/dragonstone/syslib/modules/file.ds`
+        `./src/dragonstone/syslib/modules/path.ds`
+        `./src/dragonstone/syslib/modules/file/module.ds`
+        `./src/dragonstone/syslib/modules/path/module.ds`
+
+]#
+
+tmp_dir = "./tmp_examples"
+target = "#{tmp_dir}/demo.txt"
+
+Path.create(tmp_dir)
+
+create = File.create(target, "hello", true)
+echo "create -> #{create}"
+echo "read   -> #{File.read(target)}"
+
+write = File.write(target, "world", true)
+echo "write  -> bytes=#{write}"
+
+append = File.append(target, "!", true)
+echo "append -> bytes=#{append}"
+echo "read   -> #{File.read(target)}"
+
+open = File.open(target, "r", false)
+echo "open   -> #{open}"
+echo "read   -> #{File.read(target)}"
+
+File.write(target, "Hello World", true)
+File.append(target, "!", true)
+echo "read   -> #{File.read(target)}"
+
+echo "delete -> #{File.delete(target)}"
+File.delete(tmp_dir)

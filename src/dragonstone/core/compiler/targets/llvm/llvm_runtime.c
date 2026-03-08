@@ -637,6 +637,9 @@ void *dragonstone_runtime_eq(void *lhs, void *rhs);
 void *dragonstone_runtime_ne(void *lhs, void *rhs);
 void *dragonstone_runtime_shl(void *lhs, void *rhs);
 void *dragonstone_runtime_shr(void *lhs, void *rhs);
+void *dragonstone_runtime_bit_and(void *lhs, void *rhs);
+void *dragonstone_runtime_bit_or(void *lhs, void *rhs);
+void *dragonstone_runtime_bit_xor(void *lhs, void *rhs);
 void *dragonstone_runtime_pow(void *lhs, void *rhs);
 void *dragonstone_runtime_floor_div(void *lhs, void *rhs);
 void *dragonstone_runtime_cmp(void *lhs, void *rhs);
@@ -2125,6 +2128,42 @@ void *dragonstone_runtime_constant_lookup(int64_t length, void **segments) {
     void *val = ds_constant_get(global_constants, path);
     if (val) return val;
 
+    /* Case-variant fallback for the last segment only, so `A::Test` can still
+       resolve `A::test` when mixed styles are used across files/imports. */
+    if (length >= 1) {
+        const char *last_in = (const char *)segments[length - 1];
+        if (last_in && last_in[0]) {
+            char *last_alt = ds_strdup(last_in);
+            unsigned char c0 = (unsigned char)last_alt[0];
+            if (isalpha(c0)) {
+                last_alt[0] = islower(c0) ? (char)toupper(c0) : (char)tolower(c0);
+
+                size_t total_len2 = 0;
+                for (int64_t i = 0; i < length; i++) {
+                    const char *seg = (i == length - 1) ? last_alt : (const char *)segments[i];
+                    total_len2 += strlen(seg);
+                    if (i < length - 1) total_len2 += 2;
+                }
+                char *path2 = (char *)ds_alloc(total_len2 + 1);
+                size_t off2 = 0;
+                for (int64_t i = 0; i < length; i++) {
+                    const char *seg = (i == length - 1) ? last_alt : (const char *)segments[i];
+                    size_t sl = strlen(seg);
+                    memcpy(path2 + off2, seg, sl);
+                    off2 += sl;
+                    if (i < length - 1) {
+                        path2[off2++] = ':';
+                        path2[off2++] = ':';
+                    }
+                }
+                path2[off2] = '\0';
+
+                val = ds_constant_get(global_constants, path2);
+                if (val) return val;
+            }
+        }
+    }
+
     const char *last_seg = (const char *)segments[length - 1];
     DSClass *curr = global_classes;
     while (curr) {
@@ -2262,46 +2301,61 @@ void *dragonstone_runtime_typeof(void *value) {
 void *dragonstone_runtime_ivar_get(void *obj, void *name) {
     if (!ds_is_boxed(obj)) return NULL;
     DSValue *box = (DSValue *)obj;
-    if (box->kind != DS_VALUE_INSTANCE) return NULL;
-    DSInstance *inst = (DSInstance *)box->as.ptr;
-    if (!inst->ivars) return NULL;
-
     const char *name_str = ds_arg_string(name);
     if (!name_str) return NULL;
 
-    DSMapEntry *curr = inst->ivars->head;
-    while (curr) {
-        if (strcmp((char *)curr->key, name_str) == 0) return curr->value;
-        curr = curr->next;
+    if (box->kind == DS_VALUE_INSTANCE) {
+        DSInstance *inst = (DSInstance *)box->as.ptr;
+        if (!inst->ivars) return NULL;
+        DSMapEntry *curr = inst->ivars->head;
+        while (curr) {
+            if (strcmp((char *)curr->key, name_str) == 0) return curr->value;
+            curr = curr->next;
+        }
+        return NULL;
     }
+
+    if (box->kind == DS_VALUE_CLASS) {
+        DSClass *cls = (DSClass *)box->as.ptr;
+        return ds_constant_get(cls ? cls->constants : NULL, name_str);
+    }
+
     return NULL;
 }
 
 void *dragonstone_runtime_ivar_set(void *obj, void *name, void *val) {
     if (!ds_is_boxed(obj)) return val;
     DSValue *box = (DSValue *)obj;
-    if (box->kind != DS_VALUE_INSTANCE) return val;
-    DSInstance *inst = (DSInstance *)box->as.ptr;
-
     const char *name_str = ds_arg_string(name);
     if (!name_str) return val;
 
-    if (!inst->ivars) {
-        inst->ivars = (DSMap *)ds_alloc(sizeof(DSMap));
-        inst->ivars->head = NULL;
-        inst->ivars->count = 0;
-    }
-
-    DSMapEntry *curr = inst->ivars->head;
-    while (curr) {
-        if (strcmp((char *)curr->key, name_str) == 0) {
-            curr->value = val;
-            return val;
+    if (box->kind == DS_VALUE_INSTANCE) {
+        DSInstance *inst = (DSInstance *)box->as.ptr;
+        if (!inst->ivars) {
+            inst->ivars = (DSMap *)ds_alloc(sizeof(DSMap));
+            inst->ivars->head = NULL;
+            inst->ivars->count = 0;
         }
-        curr = curr->next;
+        DSMapEntry *curr = inst->ivars->head;
+        while (curr) {
+            if (strcmp((char *)curr->key, name_str) == 0) {
+                curr->value = val;
+                return val;
+            }
+            curr = curr->next;
+        }
+        ds_map_append_entry(inst->ivars, ds_strdup(name_str), val);
+        return val;
     }
 
-    ds_map_append_entry(inst->ivars, ds_strdup(name_str), val);
+    if (box->kind == DS_VALUE_CLASS) {
+        DSClass *cls = (DSClass *)box->as.ptr;
+        if (cls) {
+            ds_constant_set(&cls->constants, name_str, val);
+        }
+        return val;
+    }
+
     return val;
 }
 
@@ -2950,6 +3004,33 @@ void *dragonstone_runtime_shr(void *lhs, void *rhs) {
     int64_t li = dragonstone_runtime_unbox_i64(lhs);
     int64_t ri = dragonstone_runtime_unbox_i64(rhs);
     return dragonstone_runtime_box_i64(li >> ri);
+}
+
+void *dragonstone_runtime_bit_and(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "&", rhs);
+    if (over) return over;
+
+    int64_t li = dragonstone_runtime_unbox_i64(lhs);
+    int64_t ri = dragonstone_runtime_unbox_i64(rhs);
+    return dragonstone_runtime_box_i64(li & ri);
+}
+
+void *dragonstone_runtime_bit_or(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "|", rhs);
+    if (over) return over;
+
+    int64_t li = dragonstone_runtime_unbox_i64(lhs);
+    int64_t ri = dragonstone_runtime_unbox_i64(rhs);
+    return dragonstone_runtime_box_i64(li | ri);
+}
+
+void *dragonstone_runtime_bit_xor(void *lhs, void *rhs) {
+    void *over = ds_try_invoke_operator(lhs, "^", rhs);
+    if (over) return over;
+
+    int64_t li = dragonstone_runtime_unbox_i64(lhs);
+    int64_t ri = dragonstone_runtime_unbox_i64(rhs);
+    return dragonstone_runtime_box_i64(li ^ ri);
 }
 
 void *dragonstone_runtime_floor_div(void *lhs, void *rhs) {

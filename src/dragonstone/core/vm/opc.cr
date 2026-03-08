@@ -108,5 +108,7 @@ module Dragonstone
         LOAD_ARGC       = 106   # LOAD_ARGC                                                 -> push argc integer
         LOAD_ARGF       = 107   # LOAD_ARGF                                                 -> push builtin argf stream
         MAKE_PARA       = 108   # [MAKE_PARA, signature_const, chunk_const]                 -> push capturing para literal
+        QUIT            = 109   # QUIT                                                      -> pop exit status and terminate process
+        ABORT           = 110   # ABORT                                                     -> pop message and terminate process
     end
 end

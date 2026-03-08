@@ -19,4 +19,4 @@ ee! "done!"
 # Basic usage.
 eecho "Hello, "
 eecho "world!\n" # Explicitly add a newline character
-eecho "Welcome to Dragonstone programming."
+eecho "Welcome to Dragonstone programming.\n"
