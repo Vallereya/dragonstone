@@ -33,10 +33,14 @@ This is a working directory for Self-Hosting/Bootstrapping, currently ignored fi
     └── README.md                   -> *you are here* (Bootstrap README)
 ```
 
-> ^NOTE: Regarding `EDEN`
+> ^**NOTE**: Regarding `EDEN`
 
 <br>
 
 > You might notice a placeholder folder and/or files that mention EDEN. Overall the scope of the Dragonstone language isn't meant or is going to be "*just another general-purpose language*". I'm keeping the future in mind, and with my structure for this language each having a purpose.
-
+>
 > Many successful languages are driven by some "Killer App" (Ruby has Rails, Rust has Servo, etc.) and Dragonstone will have EDEN, at least from my end, what its community creates for it is another story.
+
+<br>
+
+> From `V`
