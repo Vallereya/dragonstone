@@ -1,0 +1,4 @@
+[metadata]
+name = "toml"
+entry = "module.ds"
+requires = "shared"

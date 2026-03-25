@@ -1,0 +1,4 @@
+[metadata]
+name = "levenshtein"
+entry = "module.ds"
+requires = "shared"
