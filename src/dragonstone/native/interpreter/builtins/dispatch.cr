@@ -899,6 +899,19 @@ module Dragonstone
                 else
                     runtime_error(InterpreterError, "Unknown method '#{node.name}' for Function", node)
                 end
+
+            when Int64, Int32
+                call_int_method(receiver.is_a?(Int32) ? receiver.to_i64 : receiver.as(Int64), node.name, args, block_value, node)
+
+            when Float64
+                call_float_method(receiver.as(Float64), node.name, args, block_value, node)
+
+            when Char
+                call_char_method(receiver.as(Char), node.name, args, block_value, node)
+
+            when Bool
+                call_bool_method(receiver.as(Bool), node.name, args, block_value, node)
+
             else
                 runtime_error(TypeError, "Cannot call method '#{node.name}' on #{receiver.class}", node)
 
@@ -1873,9 +1886,125 @@ module Dragonstone
                     runtime_error(InterpreterError, "String#slice expects either 2 arguments (start, length) or 1 range argument, got #{args.size}", node)
                 end
 
+            when "to_i"
+                reject_block(block_value, "String##{name}", node)
+                if args.size == 1
+                    base = case args[0]
+                    when Int64 then args[0].as(Int64).to_i32
+                    when Int32 then args[0].as(Int32)
+                    else runtime_error(TypeError, "String#to_i base must be an integer", node)
+                    end
+                    string.to_i64(base)
+                else
+                    string.to_i64
+                end
+
+            when "to_f"
+                reject_block(block_value, "String##{name}", node)
+                string.to_f64
+
+            when "to_s"
+                reject_block(block_value, "String##{name}", node)
+                if args.size == 1
+                    # to_s on string is identity
+                    string
+                else
+                    string
+                end
+
+            when "chars"
+                reject_block(block_value, "String##{name}", node)
+                string.chars.map { |c| c.as(RuntimeValue) }
+
+            when "index"
+                reject_block(block_value, "String##{name}", node)
+                if args.size != 1
+                    runtime_error(InterpreterError, "String#index expects 1 argument, got #{args.size}", node)
+                end
+                substr = case args[0]
+                when String then args[0].as(String)
+                when Char   then args[0].as(Char).to_s
+                else runtime_error(TypeError, "String#index expects a String or Char argument", node)
+                end
+                result = string.index(substr)
+                result ? result.to_i64 : nil
+
+            when "includes?", "includes"
+                reject_block(block_value, "String##{name}", node)
+                if args.size != 1
+                    runtime_error(InterpreterError, "String#includes? expects 1 argument, got #{args.size}", node)
+                end
+                substr = case args[0]
+                when String then args[0].as(String)
+                when Char   then args[0].as(Char).to_s
+                else runtime_error(TypeError, "String#includes? expects a String or Char argument", node)
+                end
+                string.includes?(substr)
+
+            when "starts_with?", "starts_with"
+                reject_block(block_value, "String##{name}", node)
+                if args.size != 1
+                    runtime_error(InterpreterError, "String#starts_with? expects 1 argument, got #{args.size}", node)
+                end
+                prefix = case args[0]
+                when String then args[0].as(String)
+                when Char   then args[0].as(Char).to_s
+                else runtime_error(TypeError, "String#starts_with? expects a String or Char argument", node)
+                end
+                string.starts_with?(prefix)
+
+            when "ends_with?", "ends_with"
+                reject_block(block_value, "String##{name}", node)
+                if args.size != 1
+                    runtime_error(InterpreterError, "String#ends_with? expects 1 argument, got #{args.size}", node)
+                end
+                suffix = case args[0]
+                when String then args[0].as(String)
+                when Char   then args[0].as(Char).to_s
+                else runtime_error(TypeError, "String#ends_with? expects a String or Char argument", node)
+                end
+                string.ends_with?(suffix)
+
+            when "split"
+                reject_block(block_value, "String##{name}", node)
+                if args.size == 1
+                    delimiter = case args[0]
+                    when String then args[0].as(String)
+                    when Char   then args[0].as(Char).to_s
+                    else runtime_error(TypeError, "String#split expects a String or Char delimiter", node)
+                    end
+                    string.split(delimiter).map { |s| s.as(RuntimeValue) }
+                elsif args.size == 0
+                    string.split.map { |s| s.as(RuntimeValue) }
+                else
+                    runtime_error(InterpreterError, "String#split expects 0 or 1 arguments, got #{args.size}", node)
+                end
+
+            when "replace"
+                reject_block(block_value, "String##{name}", node)
+                if args.size != 2
+                    runtime_error(InterpreterError, "String#replace expects 2 arguments, got #{args.size}", node)
+                end
+                from = case args[0]
+                when String then args[0].as(String)
+                else runtime_error(TypeError, "String#replace expects String arguments", node)
+                end
+                to = case args[1]
+                when String then args[1].as(String)
+                else runtime_error(TypeError, "String#replace expects String arguments", node)
+                end
+                string.gsub(from, to)
+
+            when "last"
+                reject_block(block_value, "String##{name}", node)
+                if string.empty?
+                    runtime_error(OutOfBounds, "String#last called on empty string", node)
+                end
+                string[-1].to_s
+
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for String", node)
-                
+
             end
         end
 
@@ -1949,6 +2078,236 @@ module Dragonstone
                     runtime_error(TypeError, "String##{description} must be numeric", node)
                 end
             number
+        end
+
+        # Int64 Methods
+        # 
+        private def call_int_method(value : Int64, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "to_s"
+                reject_block(block_value, "Int##{name}", node)
+                if args.size == 1
+                    base = case args[0]
+                    when Int64 then args[0].as(Int64).to_i32
+                    when Int32 then args[0].as(Int32)
+                    else runtime_error(TypeError, "Int#to_s base must be an integer", node)
+                    end
+                    value.to_s(base)
+                elsif args.empty?
+                    value.to_s
+                else
+                    runtime_error(InterpreterError, "Int#to_s expects 0 or 1 arguments, got #{args.size}", node)
+                end
+
+            when "to_i", "to_i64"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value
+
+            when "to_f", "to_f64"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.to_f64
+
+            when "chr"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.chr
+
+            when "abs"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.abs
+
+            when "even?"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.even?
+
+            when "odd?"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.odd?
+
+            when "zero?"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value.zero?
+
+            when "positive?"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value > 0
+
+            when "negative?"
+                reject_block(block_value, "Int##{name}", node)
+                reject_args(args, "Int##{name}", node)
+                value < 0
+
+            when "times"
+                unless block_value
+                    runtime_error(InterpreterError, "Int#times requires a block", node)
+                end
+                reject_args(args, "Int#times", node)
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    i = 0_i64
+                    while i < value
+                        outcome = execute_loop_iteration(block, [i.as(RuntimeValue)], node)
+                        break if outcome[:state] == :break
+                        i += 1
+                    end
+                end
+                value
+
+            else
+                runtime_error(NameError, "Unknown method '#{name}' for Int", node)
+
+            end
+        end
+
+        # Float64 Methods
+        # 
+        private def call_float_method(value : Float64, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "to_s"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.to_s
+
+            when "to_i", "to_i64"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.to_i64
+
+            when "to_f", "to_f64"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value
+
+            when "abs"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.abs
+
+            when "floor"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.floor.to_i64
+
+            when "ceil"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.ceil.to_i64
+
+            when "round"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.round.to_i64
+
+            when "zero?"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.zero?
+
+            when "positive?"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value > 0.0
+
+            when "negative?"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value < 0.0
+
+            when "nan?"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.nan?
+
+            when "infinite?"
+                reject_block(block_value, "Float##{name}", node)
+                reject_args(args, "Float##{name}", node)
+                value.infinite? != nil
+
+            else
+                runtime_error(NameError, "Unknown method '#{name}' for Float", node)
+
+            end
+        end
+
+        # Char Methods
+        # 
+        private def call_char_method(value : Char, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "to_s"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.to_s
+
+            when "ord"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.ord.to_i64
+
+            when "upcase"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.upcase
+
+            when "downcase"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.downcase
+
+            when "letter?"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.letter?
+
+            when "number?"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.number?
+
+            when "alphanumeric?"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.alphanumeric?
+
+            when "whitespace?"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.whitespace?
+
+            when "ascii?"
+                reject_block(block_value, "Char##{name}", node)
+                reject_args(args, "Char##{name}", node)
+                value.ascii?
+
+            else
+                runtime_error(NameError, "Unknown method '#{name}' for Char", node)
+
+            end
+        end
+
+        # Bool Methods
+        # 
+        private def call_bool_method(value : Bool, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
+            case name
+
+            when "to_s"
+                reject_block(block_value, "Bool##{name}", node)
+                reject_args(args, "Bool##{name}", node)
+                value.to_s
+
+            else
+                runtime_error(NameError, "Unknown method '#{name}' for Bool", node)
+
+            end
         end
 
         private def call_range_method(range : RangeValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
