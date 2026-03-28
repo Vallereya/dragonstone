@@ -15,13 +15,13 @@
     manage input/output streams. Returns
     an integer exit code upon completion.
 
-    !#[ 
+    #[ 
         
         There is an easier way to do this, 
         but this is more explicit and easier 
         to understand.
 
-    !]#
+    ]#
     
 ]#
 
