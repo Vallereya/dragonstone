@@ -1,0 +1,4 @@
+[metadata]
+name = "net/socket"
+entry = "module.ds"
+requires = "shared"

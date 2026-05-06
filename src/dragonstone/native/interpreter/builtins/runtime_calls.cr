@@ -135,7 +135,23 @@ module Dragonstone
                     else
                         runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
                     end
-                elsif final_args.size != expected_params
+                end
+
+                # Fill in default parameter values for any missing trailing arguments.
+                if final_args.size < expected_params
+                    required_count = method_def.typed_parameters.index { |p| !!p.default_value } || expected_params
+                    if final_args.size < required_count
+                        runtime_error(TypeError, "Method #{method_def.name} expects at least #{required_count} arguments, got #{final_args.size}", call_location)
+                    end
+                    (final_args.size...expected_params).each do |i|
+                        param = method_def.typed_parameters[i]
+                        if default_node = param.default_value
+                            final_args << default_node.accept(self).as(RuntimeValue)
+                        else
+                            runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
+                        end
+                    end
+                elsif final_args.size > expected_params
                     runtime_error(TypeError, "Method #{method_def.name} expects #{expected_params} arguments, got #{args.size}", call_location)
                 end
 
@@ -271,6 +287,11 @@ module Dragonstone
         private def reject_block(block_value : Function?, feature : String, node : AST::MethodCall)
             return unless block_value
             runtime_error(InterpreterError, "#{feature} does not accept a block", node)
+        end
+
+        private def reject_args(args : Array(RuntimeValue), feature : String, node : AST::MethodCall)
+            return if args.empty?
+            runtime_error(InterpreterError, "#{feature} does not take arguments", node)
         end
 
         private def coerce_range_element(element)

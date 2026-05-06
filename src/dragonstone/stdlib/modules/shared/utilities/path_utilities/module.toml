@@ -1,0 +1,4 @@
+[metadata]
+name = "utilities/path_utilities"
+entry = "module.ds"
+requires = "shared"

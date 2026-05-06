@@ -1,4 +1,8 @@
-class ParseException < Exception
+#! Error thrown when inheriting from superclass on bootstrap here.
+# class ParseException < Exception
+
+class ParseException
+    property message
     property line_number
     property column_number
 

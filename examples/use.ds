@@ -1,21 +1,42 @@
 #[ 
+
     Use Example
+
 ]#
 
 #[
-    The file that's actually 
-    with the logic, is taken
-    from ./test_use.ds example.
 
-    As well as ./raise.ds for 
-    divide and two examples 
-    directly from GitHub via
+    This is an example of the dragonstone
+    import system, in this example the 
+    file that's actually with the logic, 
+    is taken from the `./test_use.ds` example.
+    As well as from `./raise.ds` for divide 
+    and two examples directly from GitHub via
     jsdelivr.
+
+    When using imports via `use` you can either
+    use the file name with or without the
+    extension.
+
+    Example:
+        use "./test_use"
+
+        or
+
+        use "./test_use.ds"
+    
+    Also you can selectively use something
+    specific from that import by specifying 
+    the name of the class, etc. by placing
+    it within `{}` brackets.
+
 ]#
 
+# Local Imports
 use "./test_use"
 use { divide } from "./raise"
 
+# Imports from a URL
 use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
 use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
 

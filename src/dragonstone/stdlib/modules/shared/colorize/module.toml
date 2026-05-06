@@ -1,0 +1,4 @@
+[metadata]
+name = "colorize"
+entry = "module.ds"
+requires = "shared"

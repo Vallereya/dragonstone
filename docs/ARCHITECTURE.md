@@ -33,10 +33,10 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     ├── .github/
     │   ├── CONTRIBUTING.md
     │   └── FUNDING.yml
+    ├── bootstrap/                      -> dragonstone bootstrap build
     ├── examples/                       -> example .ds files
     ├── scripts/                        -> auto scripts
     ├── spec/                           -> spec testing files
-    ├── tests/                          -> benchmark and unimportant test files 
     ├── docs/                           -> documentation
     │   ├── 0. Index/                   -> project assets
     │   ├── 1. Getting Started/         -> language quickstart guides
@@ -44,25 +44,28 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── 3. Specification/           -> basic language usage
     │   ├── 4. Advanced Specification/  -> advanced language usage
     │   ├── 5. Guides/                  -> misc. language guides
-    │   ├── README.md                   -> documentation overview
+    │   ├── README.md                   -> documentation overview/table of contents
     │   ├── ARCHITECTURE.md         -> *you are here*
     │   └── ROADMAP.md                  -> project roadmap
     ├── bin/                            -> **BUILD**
-    │   ├── resources/
-    │   │   └── dragonstone.rc
+    │   ├── payloads/                   -> 
+    │   ├── dev/                        -> dev builds
+    │   ├── build/                      -> dragonstone builds
+    │   ├── resources/                  -> resources files needed for builds
+    │   │   └── dragonstone.rc          -> icon resource file
     │   ├── dragonstone                 -> main entry
-    │   ├── dragonstone.ps1             -> .ps1 script for env
-    │   └── dragonstone.bat             -> add to path and handoff to .ps1
+    │   ├── dragonstone.sh              -> .sh script for path, env and building (Linux and MacOS)
+    │   ├── dragonstone.ps1             -> .ps1 script for env and building (Windows)
+    │   └── dragonstone.bat             -> add to path and handoff to .ps1 (Windows)
     ├── src/                            -> **SOURCE**
     │   ├── dragonstone/
-    │   │   ├── eden/                   -> native provider for eden
     │   │   ├── cli/                    -> command line interface
-    │   │   ├── shared/                 -> shared front-end + runtime commons
-    │   │   ├── native/                 -> interpreter runtime (env, evaluator, builtins, REPL)
     │   │   ├── core/                   -> compiler + VM (frontend, IR, codegen, targets, runtime helpers)
     │   │   ├── hybrid/                 -> runtime engine, importer, backend cache/orchestration
-    │   │   ├── stdlib/                 -> dragonstone standard lib (`modules/{shared,native}` + data) & lib for C, Crystal and Ruby
-    │   │   ├── tools/                  -> language tooling
+    │   │   ├── native/                 -> interpreter runtime (env, evaluator, builtins, REPL)
+    │   │   ├── shared/                 -> shared front-end + runtime commons
+    │   │   ├── stdlib/                 -> dragonstone standard lib (`modules/{shared,native}` + data)
+    │   │   ├── syslib/                 -> dragonstone system lib
     │   │   └── backend_mode.cr         -> backend flag/env helpers
     │   ├── version.cr                  -> version control
     │   └── dragonstone.cr              -> orchestrator
