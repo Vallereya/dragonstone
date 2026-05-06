@@ -1,12 +1,12 @@
 [PACKAGE]
 name        =   "dragonstone"
-version     =   "0.1.7"
+version     =   "0.1.8"
 authors     =   "Vallereya <v@vallereya.com>"
 license     =   "Apache-2.0"
 description =   "The Dragonstone Programming Language and its Standard Library"
 
 [DRAGONSTONE_VERSION_REQUIRED]
-require     =   "0.1.6"
+require     =   "0.1.7"
 
 [TARGET]
 name        =   "dragonstone"
