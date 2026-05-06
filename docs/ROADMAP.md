@@ -224,8 +224,8 @@
 + Updated the optional Garbage Collection; Is now using hybrid-like system, with boehm fallback via vendor.
 + Completion of LLVM Backend. 
 + Completion of C Backend.
-- Hotfix optional typing system.
-- Freeze current grammar subset if needed on C side.
++ Added syslib, these will allow easy extension of core language features.
++ Freeze current grammar subset if needed on C side.
 ```
 
 ###     <h2 align="center">         Phase Three
@@ -236,7 +236,7 @@
 - Implement support for concurrency.
 - Update Garbage Collection? Currently implicit but add optional .allocate/.deallocate? 
 - Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
-+ Added syslib, these will allow easy extension of core language features.
+- Hotfix optional typing system.
 ```
 
 ###     <h2 align="center">         Phase Four
