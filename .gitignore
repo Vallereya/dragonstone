@@ -31,14 +31,14 @@ bootstrap/
 
 # Ignore any Output/Build Files and Directories.
 install-dragonstone.iss
-bin/build/
-bin/payloads/
-bin/dev/
 dragonstone-dev
 dragonstone.res
 dragonstone.o
 version.h
 NUL
+bin/build/
+bin/dev/
+bin/payloads/
 
 # Unicode Vendor Build/Data Artifacts/Files.
 src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
