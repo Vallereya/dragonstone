@@ -20,16 +20,8 @@ run_type() {
 }
 
 FILES=(
+    # ADD EXAMPLES HERE!
     ./bootstrap/examples/statements/hello_world.ds
-    ./bootstrap/examples/statements/multi_statements.ds
-    ./bootstrap/examples/statements/newline_statements.ds
-    ./bootstrap/examples/statements/reassignments.ds
-    ./bootstrap/examples/statements/typeof.ds
-
-    ./bootstrap/examples/comments/comments.ds
-
-    ./bootstrap/examples/imports/use.ds
-
 )
 
 for file in "${FILES[@]}"; do

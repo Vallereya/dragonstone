@@ -20,15 +20,10 @@ function Run-Type([string]$file, [string]$runtype) {
 }
 
 $files = @(
+    # ADD EXAMPLES HERE!
+    # Last file cannot have a comma at the end.
     ".\bootstrap\examples\statements\hello_world.ds",
-    ".\bootstrap\examples\statements\multi_statements.ds",
-    ".\bootstrap\examples\statements\newline_statements.ds",
-    ".\bootstrap\examples\statements\reassignments.ds",
-    ".\bootstrap\examples\statements\typeof.ds",
-
-    ".\bootstrap\examples\comments\comments.ds",
-
-    ".\bootstrap\examples\imports\use.ds"
+    ".\bootstrap\examples\statements\multi_statements.ds"
 )
 
 foreach ($f in $files) {
