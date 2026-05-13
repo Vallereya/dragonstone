@@ -6,15 +6,15 @@ $ErrorActionPreference = "Stop"
 function Run-Type([string]$file, [string]$runtype) {
     Write-Host ""
     Write-Host "============================================================"
-    Write-Host "FILE   : $file"
+    Write-Host "FILE    : $file"
 
     if ([string]::IsNullOrWhiteSpace($runtype)) {
-        Write-Host "RUNTYPE: run"
-        Write-Host "CMD    : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file"
+        Write-Host "RUNTYPE : run"
+        Write-Host "CMD     : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file"
         & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file
     } else {
-        Write-Host "RUNTYPE: $runtype"
-        Write-Host "CMD    : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file"
+        Write-Host "RUNTYPE : $runtype"
+        Write-Host "CMD     : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file"
         & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file
     }
 }
@@ -24,8 +24,8 @@ $files = @(
     # Last file cannot have a comma at the end.
 
     # TIER 0
-    # ".\examples\variables\hello_world.ds",
-    # ".\examples\variables\echo.ds"
+    ".\examples\variables\hello_world.ds",
+    ".\examples\variables\echo.ds"
     
     # TIER 1
     # ".\examples\variables\variables.ds",
