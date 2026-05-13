@@ -232,9 +232,9 @@
 #####   <h6 align="center">         `v0.1.7 -> v0.1.8`
 
 ```diff
-- Finish basic implementation of the optional Borrow Checker/Ownership.
-- Implement support for concurrency.
-- Update Garbage Collection? Currently implicit but add optional .allocate/.deallocate? 
+- Wire and Expand Bootstrap Native, Hybrid, and Core.
+- Expand Stage1 Bootstrap run suite with Examples.
+- Bootstrap Spec in Stage0.
 - Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
 - Hotfix optional typing system.
 ```
@@ -243,11 +243,11 @@
 #####   <h6 align="center">         `v0.1.8 -> v0.1.9`
 
 ```diff
-- Completion of Ruby Backend.
-- Completion of Crystal Backend.
-- Extension of C FFI Bridge.
-- Extension of Ruby FFI Bridge.
-- Extension of Crystal FFI Bridge.
+- Finish basic implementation of the optional Borrow Checker/Ownership.
+- Update Garbage Collection? Currently implicit but add optional .allocate/.deallocate? 
+- C bindings for Bullet.
+- Python bindings for PyTorch.
+- 
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -257,8 +257,8 @@
 - The `Great Refactor`: (Part Four)             Beta Refactor.
 - Finish Bootstrapping.
 - Port validator.cpp to Dragonstone FFI.
-- Python bindings for PyTorch.
-- C bindings for Bullet.
+- Test performance overhead (<10% target).
+- Fix `--backend` flags.
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>
@@ -270,10 +270,10 @@
 
 ```diff
 - Beta Update ->        Documentation, Examples, Tutorials, and ChangeLog.
-- create stdlib's or syslib's for: channel, time, event, math (basic), and tensor.
-- create stdlib's or syslib's for: state, proto, log, config, and test.
-- create stdlib's or syslib's for: math/linalg, math/stats, database, config, and test.
-- 
+- Remove donors so everything runs on dragonstone.
+- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
+- Expand the stdlib/syslib and port any to dragonstone if there is any not.
+- Completion of Ruby & Crystal Backends.
 ```
 
 ###     <h2 align="center">         Phase Two
@@ -291,11 +291,11 @@
 #####   <h6 align="center">         `v0.4.0 -> v0.5.0`
 
 ```diff
-- Remove donors so everything runs on dragonstone.
-- No Ruby or Crystal in build, runtime, or tooling (C is fine, especially for FFI/ABI).
-- Expand the stdlib/syslib and port any to dragonstone if there is any not.
-- Start work on embedded functionality.
-- Start work for the `forge` package manager.
+- create stdlib's or syslib's for: channel, time, event, math (basic), and tensor.
+- create stdlib's or syslib's for: state, proto, log, config, and test.
+- create stdlib's or syslib's for: math/linalg, math/stats, database, config, and test.
+- Implement support for concurrency
+- Extension of C, Ruby, and Crystal FFI Bridges.
 ```
 
 ###     <h2 align="center">         Phase Four
@@ -316,8 +316,8 @@
 + Start building the main website (quickstart, language tour, FFI roadmap, reference to the docs, etc.).
 + Start building a VSCode extension for language syntax support and running files.
 + Start building a NeoVim extension for language syntax support and running files.
-- Fix `--backend` flags and fix `--backend` flags.
-- Work on performance optimizations.
+- Start work on embedded functionality.
+- Start work for the `forge` package manager.
 ```
 
 ###     <h2 align="center">         Phase Six
@@ -367,4 +367,5 @@
 - Extension of JavaScript FFI Bridge?
 - Finish Python compile target/backend?
 - Finish JavaScript compile target/backend?
+- Work on performance optimizations.
 ```
