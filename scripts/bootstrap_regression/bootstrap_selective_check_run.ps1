@@ -24,8 +24,8 @@ $files = @(
     # Last file cannot have a comma at the end.
 
     # TIER 0
-    ".\examples\variables\hello_world.ds",
-    ".\examples\variables\echo.ds"
+    # ".\examples\variables\hello_world.ds",
+    # ".\examples\variables\echo.ds",
     
     # TIER 1
     # ".\examples\variables\variables.ds",
