@@ -230,14 +230,14 @@ module Dragonstone
 
         def visit_instance_variable(node : AST::InstanceVariable) : RuntimeValue?
             instance = current_self_instance(node)
-            instance.ivars[node.name]? || nil
+            instance.ivars[node.name]?
         end
 
         def visit_instance_variable_assignment(node : AST::InstanceVariableAssignment) : RuntimeValue?
             instance = current_self_instance(node)
 
             value = if operator = node.operator
-                current_value = instance.ivars[node.name]? || nil
+                current_value = instance.ivars[node.name]?
                 evaluate_compound_assignment(current_value, operator, node.value, node)
             else
                 node.value.accept(self)

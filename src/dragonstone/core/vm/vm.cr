@@ -1791,7 +1791,7 @@ module Dragonstone
 
         private def load_instance_variable(name : String) : Bytecode::Value
             ivars = ensure_instance_ivars
-            ivars[name]? || nil
+            ivars[name]?
         end
 
         private def store_instance_variable(name : String, value : Bytecode::Value) : Nil
@@ -2779,7 +2779,7 @@ module Dragonstone
 
             when Array
                 idx = ensure_integer_index(index, "Array")
-                obj[idx]? || nil
+                obj[idx]?
 
             when String
                 idx = ensure_integer_index(index, "String")
@@ -2787,7 +2787,7 @@ module Dragonstone
                 char ? char.to_s : nil
             when Bytecode::TupleValue
                 idx = ensure_integer_index(index, "Tuple")
-                obj.elements[idx]? || nil
+                obj.elements[idx]?
             when Bytecode::NamedTupleValue
                 key = named_tuple_key(index)
                 obj.entries[key]?

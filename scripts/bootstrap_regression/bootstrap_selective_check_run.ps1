@@ -3,6 +3,16 @@ $ErrorActionPreference = "Stop"
 # Selective run examples in bootstrap for regression testing.
 # This is for run only, no backends.
 
+# Throwing everything to a timestamped log under ./logs/ so long outputs are
+# can be reviewed. The console still shows the run live though.
+$logDir = Join-Path $PSScriptRoot "..\..\logs"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir | Out-Null
+}
+$logStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$logFile  = Join-Path $logDir "bootstrap_selective_$logStamp.txt"
+Start-Transcript -Path $logFile -Force | Out-Null
+
 function Run-Type([string]$file, [string]$runtype) {
     Write-Host ""
     Write-Host "============================================================"
@@ -11,11 +21,11 @@ function Run-Type([string]$file, [string]$runtype) {
     if ([string]::IsNullOrWhiteSpace($runtype)) {
         Write-Host "RUNTYPE : run"
         Write-Host "CMD     : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file"
-        & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file
+        & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds run $file 2>&1
     } else {
         Write-Host "RUNTYPE : $runtype"
         Write-Host "CMD     : .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file"
-        & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file
+        & .\bin\build\dragonstone.exe run .\bootstrap\bin\main.ds $runtype $file 2>&1
     }
 }
 
@@ -93,30 +103,36 @@ $files = @(
     # ".\examples\handling\retry.ds",
     # ".\examples\handling\yield.ds",
     # ".\examples\raise.ds",
-    
+
     # TIER 9
-    # ".\examples\types\types.ds",
     # ".\examples\types\types_math.ds",
-    # ".\examples\types\type_casting.ds",
     # ".\examples\cli\argv.ds",
     # ".\examples\cli\io.ds",
     # ".\examples\other\display.ds",
     # ".\examples\other\inspect.ds",
     # ".\examples\other\strip.ds",
     # ".\examples\other\slice.ds",
-    
+
     # TIER 10
-    # ".\examples\rosetta\caesar_cipher.ds",
     # ".\examples\math\fibonacci.ds",
     # ".\examples\math\bounce.ds",
-    # ".\examples\math\particles.ds"
+    # ".\examples\math\particles.ds",
 
     # TIER 10+
-    # 
+    # ".\examples\rosetta\caesar_cipher.ds",
+    # ".\examples\types\type_casting.ds",
+    # ".\examples\types\types.ds"
 )
 
-foreach ($f in $files) {
-    Run-Type $f "parse"
-    Run-Type $f "lex"
-    Run-Type $f ""
+try {
+    foreach ($f in $files) {
+        Run-Type $f "parse"
+        Run-Type $f "lex"
+        Run-Type $f ""
+    }
+}
+finally {
+    Stop-Transcript | Out-Null
+    Write-Host ""
+    Write-Host "Log written to: $logFile"
 }

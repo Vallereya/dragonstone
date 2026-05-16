@@ -23,7 +23,7 @@ module Dragonstone
 
             when TupleValue
                 idx = index_to_int(index, node)
-                object.elements[idx]? || nil
+                object.elements[idx]?
 
             when NamedTupleValue
                 key = coerce_named_tuple_key(index, node)
@@ -31,7 +31,7 @@ module Dragonstone
 
             when Array(RuntimeValue)
                 idx = index_to_int(index, node)
-                object[idx]? || nil
+                object[idx]?
 
             when MapValue
                 key = index.as(RuntimeValue)
@@ -39,7 +39,7 @@ module Dragonstone
 
             when String
                 idx = index_to_int(index, node)
-                object[idx]? || nil
+                object[idx]?
             else
                 runtime_error(TypeError, "Cannot index #{object.class}", node)
             end

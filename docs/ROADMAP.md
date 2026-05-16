@@ -233,8 +233,8 @@
 
 ```diff
 - Wire and Expand Bootstrap Native, Hybrid, and Core.
-- Expand Stage1 Bootstrap run suite with Examples.
-- Bootstrap Spec in Stage0.
++ Expand Stage1 Bootstrap run suite with Examples.
++ Bootstrap Specs and Scripts for testing.
 - Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
 - Hotfix optional typing system.
 ```
