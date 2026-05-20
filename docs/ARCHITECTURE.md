@@ -36,6 +36,7 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     ├── bootstrap/                      -> dragonstone bootstrap build
     ├── examples/                       -> example .ds files
     ├── scripts/                        -> auto scripts
+    ├── log/                            -> log dump from some `spec` files.
     ├── spec/                           -> spec testing files
     ├── docs/                           -> documentation
     │   ├── 0. Index/                   -> project assets

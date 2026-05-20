@@ -232,11 +232,11 @@
 #####   <h6 align="center">         `v0.1.7 -> v0.1.8`
 
 ```diff
-- Wire and Expand Bootstrap Native, Hybrid, and Core.
++ Wire and Expand Bootstrap Native, Hybrid, and Core; Stage1 Subset Passes.
 + Expand Stage1 Bootstrap run suite with Examples.
 + Bootstrap Specs and Scripts for testing.
-- Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
-- Hotfix optional typing system.
+- Update optional Garbage Collection adding the .allocate/.deallocate.
++ Fix `--backend` flags.
 ```
 
 ###     <h2 align="center">         Phase Four
@@ -244,10 +244,10 @@
 
 ```diff
 - Finish basic implementation of the optional Borrow Checker/Ownership.
-- Update Garbage Collection? Currently implicit but add optional .allocate/.deallocate? 
 - C bindings for Bullet.
 - Python bindings for PyTorch.
-- 
+- Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
+- Hotfix optional typing system.
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -258,7 +258,7 @@
 - Finish Bootstrapping.
 - Port validator.cpp to Dragonstone FFI.
 - Test performance overhead (<10% target).
-- Fix `--backend` flags.
+- 
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>

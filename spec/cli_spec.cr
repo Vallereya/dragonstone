@@ -114,6 +114,25 @@ describe Dragonstone::CLI do
         end
     end
 
+    it "rejects --backend core when the program imports a native-only stdlib module" do
+        File.tempfile("dragonstone-native-only", suffix: ".ds") do |file|
+            file.print(<<-DS)
+            use "net"
+            echo "unreachable"
+            DS
+            file.flush
+
+            stdout = IO::Memory.new
+            stderr = IO::Memory.new
+            status = Dragonstone::CLI.run(["run", "--backend", "core", file.path], stdout, stderr)
+
+            status.should eq(1)
+            stderr.to_s.should contain("net/net")
+            stderr.to_s.should contain("core backend")
+            stdout.to_s.should_not contain("unreachable")
+        end
+    end
+
     it "returns an error code when run raises a syntax error" do
         File.tempfile("dragonstone", suffix: ".ds") do |file|
             file.print("def broken(\n")

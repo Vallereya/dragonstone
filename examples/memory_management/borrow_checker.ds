@@ -16,7 +16,6 @@
 
 ]#
 
-#[
 @[Garbage(enable) && Ownership(enable)]
 def process(data: &mut Buffer)  # borrowed mutably
     temp = data.slice(0, 100)   # temp borrows from data
@@ -61,4 +60,3 @@ def Load(area: Area): Level
     doc.drop()
     return level
 end
-]#
