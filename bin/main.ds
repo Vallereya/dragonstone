@@ -27,7 +27,7 @@
     
 ]#
 
-use "../src/dragonstone/cli/cli"
+use "../src/dragonstone/cli/sh_cli"
 
 module Dragonstone
     extend self 

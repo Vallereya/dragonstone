@@ -80,16 +80,18 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
 
 ## 3. Backend Architecture & Selection Flow
 ### Layer Overview
-- **Shared front-end (`src/dragonstone/shared/*`)**
+- **Shared front-end (`src/dragonstone/shared/*`)** # During and after Self-Hosting it will be located under `src/dragonstone/hybrid/shared/*`.
     - owns lexing, parsing, AST, semantic analysis, IR construction, and the runtime contracts (values/ABI/FFI) that both engines consume.
 - **Native interpreter (`src/dragonstone/native/*`)**
     - evaluates IR/AST directly with the dynamic runtime. This is the compatibility floor and the REPL implementation.
 - **Core compiler + VM (`src/dragonstone/core/*`)**
     - lowers IR to bytecode/targets via a dedicated frontend/IR/codegen pipeline and executes bytecode inside the VM runtime.
-- **Hybrid orchestration (`src/dragonstone/hybrid/*`)**
+- **Hybrid orchestration (`src/dragonstone/hybrid/*`)** # During and after Self-Hosting it will be located under `src/dragonstone/hybrid/runtime/*`.
     - `Runtime::Engine` plus the importer/cache that decides which backend to use per module, exports namespaces, and persists compiled units, once bootstrap/self-host is completed this will be moved into the shared front-end and the hybrid section will be for embedded dragonstone.
 - **Stdlib modules (`src/dragonstone/stdlib/modules/shared or native/*`)**
-    - expose metadata that declares backend requirements so the resolver can prevent incompatible mixes up front.
+    - standard library and exposes metadata that declares backend requirements so the resolver can prevent incompatible mixes up front.
+- **Syslib modules (`src/dragonstone/syslib/modules/*`)**
+    - system libraries that extend the language natively.
 
 ### Backend Selection Flow
 1. `Dragonstone::CLI` resolves a `BackendMode` from CLI flags or the `DRAGONSTONE_BACKEND` env var (`backend_mode.cr`).
@@ -133,39 +135,39 @@ a programmer, initially a Game Developer.
 
 ```css
     Dragonstone Primary Color:
-        --DS-Primary:               oklch(0.442 0.2547 285.27);         /* #5406D5 */
+        --DS-Primary:               oklch(0.442 0.2547 285.27);         /* #5406D5      RGB: 84, 6, 213     */
 
-        --DS-Secondary-Lighter:     oklch(0.4793 0.2774 285.03);        /* #5E06EE */
-        --DS-Secondary-Darker:      oklch(0.3732 0.2141 285.73);        /* #4204A9 */
+        --DS-Secondary-Lighter:     oklch(0.4793 0.2774 285.03);        /* #5E06EE      RGB: 94, 6, 238     */
+        --DS-Secondary-Darker:      oklch(0.3732 0.2141 285.73);        /* #4204A9      RGB: 66, 4, 169     */
 
-        --DS-Text-Accent:           oklch(0.442 0.2547 285.27);         /* #5406D5 */
+        --DS-Text-Accent:           oklch(0.442 0.2547 285.27);         /* #5406D5      RGB: 84, 6, 213     */
 
     Dragonstone Primary Color Gradient:
-        --DS-Base-100:              oklch(0.5085 0.2825 287.47);        /* #6B15F9 */
-        --DS-Base-200:              oklch(0.4793 0.2774 285.03);        /* #5E06EE */
-        --DS-Base-300:              oklch(0.442 0.2547 285.27);         /* #5406D5 */
-        --DS-Base-400:              oklch(0.3732 0.2141 285.73);        /* #4204A9 */
-        --DS-Base-500:              oklch(0.3438 0.1956 286.38);        /* #3B0496 */
+        --DS-Base-100:              oklch(0.5085 0.2825 287.47);        /* #6B15F9      RGB: 107, 21, 249   */
+        --DS-Base-200:              oklch(0.4793 0.2774 285.03);        /* #5E06EE      RGB: 94, 6, 238     */
+        --DS-Base-300:              oklch(0.442 0.2547 285.27);         /* #5406D5      RGB: 84, 6, 213     */
+        --DS-Base-400:              oklch(0.3732 0.2141 285.73);        /* #4204A9      RGB: 66, 4, 169     */
+        --DS-Base-500:              oklch(0.3438 0.1956 286.38);        /* #3B0496      RGB: 59, 4, 150     */
 
     Dragonstone Light Mode Alternate Color:
-        --Light-Base:               oklch(0.9581 0 0);                  /* #F1F1F1 */
-        --Light-Primary:            oklch(0.9157 0 0);                  /* #E3E3E3 */
-        --Light-Secondary:          oklch(0.8767 0 0);                  /* #D6D6D6 */
-        --Light-Accent:             oklch(0.8373 0 0);                  /* #C9C9C9 */
+        --Light-Base:               oklch(0.9581 0 0);                  /* #F1F1F1      RGB: 241, 241, 241  */
+        --Light-Primary:            oklch(0.9157 0 0);                  /* #E3E3E3      RGB: 227, 227, 227  */
+        --Light-Secondary:          oklch(0.8767 0 0);                  /* #D6D6D6      RGB: 214, 214, 214  */
+        --Light-Accent:             oklch(0.8373 0 0);                  /* #C9C9C9      RGB: 201, 201, 201  */
         --Text-Light-Primary:       var(--Dark-Secondary);
-        --Text-Light-Secondary:     oklch(0.5192 0 0);                  /* #696969 */
+        --Text-Light-Secondary:     oklch(0.5192 0 0);                  /* #696969      RGB: 105, 105, 105  */
 
     Dragonstone Dark Mode Alternate Color:
-        --Dark-Base:                oklch(0.1638 0 0);                  /* #0E0E0E */
-        --Dark-Primary:             oklch(0.2267 0 0);                  /* #1D1D1D */
-        --Dark-Secondary:           oklch(0.2801 0 0);                  /* #292929 */
-        --Dark-Accent:              oklch(0.3311 0 0);                  /* #363636 */
+        --Dark-Base:                oklch(0.1638 0 0);                  /* #0E0E0E      RGB: 14, 14, 14     */
+        --Dark-Primary:             oklch(0.2267 0 0);                  /* #1D1D1D      RGB: 28, 28, 28     */
+        --Dark-Secondary:           oklch(0.2801 0 0);                  /* #292929      RGB: 41, 41, 41     */
+        --Dark-Accent:              oklch(0.3311 0 0);                  /* #363636      RGB: 54, 54, 54     */
         --Text-Dark-Primary:        var(--Light-Secondary);
-        --Text-Dark-Secondary:      oklch(0.6746 0 0);                  /* #969696 */
+        --Text-Dark-Secondary:      oklch(0.6746 0 0);                  /* #969696      RGB: 150, 150, 150  */
 
     Other Colors (maybe, might change):
-        --State-Positive            oklch(0.5842 0.1418 146.12);        /* #379144 */
-        --State-Negative            oklch(0.9062 0.1927 105.48);        /* #BC002D */
-        --State-Focus               oklch(0.5625 0.2405 270.2);         /* #455CFF */
-        --State-Signal              oklch(0.5028 0.2021 20.72);         /* #F3E600 */
+        --State-Positive            oklch(0.5842 0.1418 146.12);        /* #379144      RGB: 55, 145, 68    */
+        --State-Negative            oklch(0.5028 0.2021 20.72);         /* #BC002D      RGB: 188, 0, 45     */
+        --State-Focus               oklch(0.5625 0.2405 270.2);         /* #455CFF      RGB: 69, 92, 255    */
+        --State-Signal              oklch(0.9062 0.1927 105.48);        /* #F3E600      RGB: 243, 230, 0    */
 ```

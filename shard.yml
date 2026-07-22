@@ -5,12 +5,12 @@ authors:
   - Vallereya <v@vallereya.com>
 
 description: |
-  The Dragonstone Programming Language and its Standard Library
+  The Dragonstone Programming Language
 
 # dependencies:
-#   [NAME]:
-#     github: [REPO/NAME]
-#     version: "[VERSION]"
+#   dragonstone:
+#     github: Vallereya/dragonstone
+#     version: "0.1.7"
 
 # development_dependencies:
 #   [NAME]:

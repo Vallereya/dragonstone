@@ -1,0 +1,29 @@
+module Dragonstone
+    module CLI
+        module ProcOptions
+            extend self
+
+            define handle_missing_file(filename, ex)
+                stderr.echo "ERROR: File '#{filename}' not found!"
+                return 1
+            end
+
+            define warn_if_unknown_extension(filename, ex)
+                len = filename.length
+                has_ds_extension = len >= 3 && filename.slice(len - 3, 3) == ".ds"
+                has_dragonstone_extension = len >= 12 && filename.slice(len - 12, 12) == ".dragonstone"
+
+                if has_ds_extension || has_dragonstone_extension
+                    return 0
+                end
+
+                stderr.echo "WARNING: File '#{filename}' doesn't have any dragonstone extensions."
+                return 0
+            end
+
+            define read_source(filename)
+                return File.read(filename)
+            end
+        end
+    end
+end

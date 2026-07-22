@@ -1,0 +1,21 @@
+#[
+    -------------------------------------
+    ------ SELF-HOSTED DRAGONSTONE ------
+    -------------------------------------
+    ----------- ORCHESTRATOR ------------
+    -------------------------------------
+]#
+
+#[
+    
+    #! Placeholder, needs wired up.
+
+]#
+
+use "./sh_version"
+use "./sh_mode"
+
+module Dragonstone
+    extend self
+
+end

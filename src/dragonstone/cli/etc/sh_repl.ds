@@ -1,0 +1,109 @@
+use "../proc/sh_common"
+
+module Dragonstone
+    module CLI
+        module EtcRepl
+            extend self
+
+            PROMPT = "dragonstone> "
+            
+            EXIT_COMMANDS = {
+                "exit"
+            }
+
+            define start_repl(args, out, ex, in)
+                typed = false
+                log_to_stdout = false
+
+                args.each do |arg|
+                    case arg
+
+                    when "--typed"
+                        typed = true
+                    when "--log"
+                        log_to_stdout = true
+                    when "--help", "--h"
+                        ProcCommon.print_usage(stdout)
+                        return 0
+                    else
+                        stderr.echo "Unknown REPL option: #{arg}"
+                        return 1
+                    end
+                end
+
+                ds_msgc1 = "'exit' "
+                ds_msgc2 = "Ctrl + C "
+
+                stdout.echo Color.new("Dragonstone REPL v#{Version.get_version}").foreground_rgb(84, 6, 213).to_display
+                stdout.echo "Type " + Color.new(ds_msgc1).foreground_rgb(243, 230, 0).to_display + "or use " + Color.new(ds_msgc2).foreground_rgb(243, 230, 0).to_display + "to quit."
+                stdout.echo " "
+
+                while true
+                    # stdout.eecho PROMPT
+                    stdout.eecho Color.new(PROMPT).foreground_rgb(84, 6, 213).to_display
+                    stdout.flush
+
+                    line = stdin.read
+
+                    if line.nil?
+                        stdout.echo
+                        break
+                    end
+
+                    # I don't currently have a way to 
+                    # check for the line terminator, so I 
+                    # will just check for the last 
+                    # character(s) and remove them if they 
+                    # are line terminators aka manually  
+                    # doing a `chomp`.
+                    input = line
+
+                    if input.ends_with?("\r\n")
+                        input = input.slice(0, input.size - 2)
+                    elsif input.ends_with?("\n")
+                        input = input.slice(0, input.size - 1)
+                    elsif input.ends_with?("\r")
+                        input = input.slice(0, input.size - 1)
+                    end
+
+                    trimmed = input.strip
+
+                    # Since EXIT_COMMANDS is a Tuple, we 
+                    # have to use each to iterate over its 
+                    # elements aka "exit" for now.
+                    is_exit = false
+
+                    EXIT_COMMANDS.each do |cmd|
+                        if trimmed == cmd
+                            is_exit = true
+                        end
+                    end
+
+                    if is_exit
+                        break
+                    end
+
+                    if trimmed.empty?
+                        next
+                    end
+
+                    begin
+                        result = Dragonstone.run(input, log_to_stdout: log_to_stdout, typed: typed)
+                        output = result.output
+
+                        unless output.empty?
+                            stdout.echo(output)
+                        end
+                    rescue ex: Dragonstone::Error
+                        stderr.echo "ERROR: #{ex.message}"
+                    rescue ex
+                        stderr.echo "UNEXPECTED ERROR: #{ex.message}"
+                    end
+                end
+
+                stdout.echo "Dragonstone REPL Closed."
+                return 0
+            end
+        end
+    end
+end

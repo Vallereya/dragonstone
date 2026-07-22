@@ -32,7 +32,7 @@ module Dragonstone
             end
 
             stdout.puts "Dragonstone REPL v#{Dragonstone::VERSION}"
-            stdout.puts "Type 'exit' or press Ctrl + D to quit"
+            stdout.puts "Type 'exit' or press Ctrl + C to quit"
             stdout.puts
 
             loop do

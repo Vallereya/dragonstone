@@ -35,6 +35,9 @@ dragonstone-dev
 dragonstone.res
 dragonstone.o
 version.h
+sh_version.h
+VERSION
+sh_VERSION
 NUL
 bin/build/
 bin/dev/

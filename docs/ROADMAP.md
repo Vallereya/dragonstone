@@ -235,8 +235,8 @@
 + Wire and Expand Bootstrap Native, Hybrid, and Core; Stage1 Subset Passes.
 + Expand Stage1 Bootstrap run suite with Examples.
 + Bootstrap Specs and Scripts for testing.
-- Update optional Garbage Collection adding the .allocate/.deallocate.
 + Fix `--backend` flags.
+- Mirror bootstrap files with Stage0 Crystal.
 ```
 
 ###     <h2 align="center">         Phase Four
@@ -247,7 +247,7 @@
 - C bindings for Bullet.
 - Python bindings for PyTorch.
 - Extend annotations via `@[...]`, to be able to use other meaningful things, and working in backends.
-- Hotfix optional typing system.
+- Update optional Garbage Collection adding the .allocate/.deallocate.
 ```
 
 ###     <h2 align="center">         Phase Five
@@ -258,7 +258,7 @@
 - Finish Bootstrapping.
 - Port validator.cpp to Dragonstone FFI.
 - Test performance overhead (<10% target).
-- 
+- Hotfix optional typing system.
 ```
 
 <h1 align="center">                     Transition to Beta              </h1>
