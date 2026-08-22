@@ -9,51 +9,38 @@
 .idea
 .nvim
 
-# Testing ROADMAP.
-docs/OVERALL_ROADMAP.md
-
-# Ignore any caches from testing.
+# Ignore any caches from testing, and spec outputs.
 cache
 cache/
 .cache
 .cache/
+
+# Various notes, temporary files, and other artifacts.
 .dragonstone
 
-# Ignore `bootstrap` Build Files & Directories.
-# This is for self-hosting/bootstrap builds, and
-# will eventually be un-ignored when nearing
-# completion.
-bootstrap/
-!bootstrap/README.md
-!bootstrap/forge.toml
-!bootstrap/bin/
-!bootstrap/bin/main.ds
-
-# Ignore any Output/Build Files and Directories.
+# Ignore any output/build artifacts, directories, and logs.
 install-dragonstone.iss
 dragonstone-dev
 dragonstone.res
 dragonstone.o
 version.h
-sh_version.h
 VERSION
-sh_VERSION
 NUL
 bin/build/
 bin/dev/
 bin/payloads/
+bin/logs/
 
-# Unicode Vendor Build/Data Artifacts/Files.
+# Unicode vendored build/data artifacts.
 src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/DerivedCoreProperties.txt
 !src/dragonstone/stdlib/modules/shared/unicode/proc/UCD/emoji/emoji-data.txt
-
 src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/*
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.c
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc_data.c
 !src/dragonstone/stdlib/modules/shared/unicode/proc/vendor/utf8proc.h
 
-# GC Vendor Build/Data Artifacts/Files.
+# Boehm GC vendored build/data artifacts.
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include/
