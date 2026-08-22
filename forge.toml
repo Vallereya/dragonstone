@@ -1,22 +1,26 @@
 [PACKAGE]
-name        =   "dragonstone"
-version     =   "0.1.8"
-authors     =   "Vallereya <v@vallereya.com>"
-license     =   "Apache-2.0"
-description =   "The Dragonstone Programming Language"
+name            =   "dragonstone"
+version         =   "0.1.8"
+authors         =   "Vallereya <v@vallereya.com>"
+license         =   "Apache-2.0"
+description     =   "The Dragonstone Programming Language"
 
 [DRAGONSTONE_VERSION_REQUIRED]
-require     =   "0.1.7"
+require         =   "0.1.7"
 
 [TARGET]
-name        =   "dragonstone"
-main        =   "bin/main"
+name            =   "dragonstone"
+main            =   "bin/main"
 
 # [DEPENDENCIES]
-# 
+# name            =   "dragonstone"
+# source          =   "github"
+# repository      =   "Vallereya/dragonstone"
+# repo_version    =   "0.1.7"
 
 # [DEVELOPMENT_DEPENDENCIES]
-# 
+# name            =   "[NAME]"
+# source          =   "[LOCATION]"
 
 # [REGISTRY]
-# 
+# key             =   "[KEY]"
