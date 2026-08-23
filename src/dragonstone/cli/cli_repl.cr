@@ -9,25 +9,18 @@ module Dragonstone
 
         def start_repl(args : Array(String), stdout : IO, stderr : IO, stdin : IO = STDIN) : Int32
             typed = false
-            log_to_stdout = false
 
             args.each do |arg|
                 case arg
 
                 when "--typed"
                     typed = true
-
-                when "--log"
-                    log_to_stdout = true
-
                 when "--help", "--h"
                     ProcCommon.print_usage(stdout)
                     return 0
-
                 else
                     stderr.puts "Unknown REPL option: #{arg}"
                     return 1
-
                 end
             end
 
@@ -52,17 +45,17 @@ module Dragonstone
                 break if EXIT_COMMANDS.includes?(trimmed)
                 next if trimmed.empty?
 
+                # The REPL writes each result itself (and skips a blank
+                # line when the entry produced nothing), so it captures
+                # rather than streaming.
                 begin
-                    result = Dragonstone.run(input, log_to_stdout: log_to_stdout, typed: typed)
+                    result = Dragonstone.run(input, typed: typed)
                     output = result.output
-                    stdout.puts(output) unless output.empty?
-
+                    stdout.print(output) unless output.empty?
                 rescue e : Dragonstone::Error
                     stderr.puts "ERROR: #{e.message}"
-
                 rescue e
                     stderr.puts "UNEXPECTED ERROR: #{e.message}"
-
                 end
             end
 
