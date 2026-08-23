@@ -1,6 +1,6 @@
-# ---------------------------------
-# ------------ Version ------------
-# ---------------------------------
+# -------------------------------------
+# -------------- Version --------------
+# -------------------------------------
 module Dragonstone
     # Grabs the version from the shard.yml file.
     VERSION = {{`shards version #{__DIR__}`.chomp.stringify}}
