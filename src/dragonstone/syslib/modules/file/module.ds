@@ -22,6 +22,55 @@ module File
     define delete(path: str) -> bool
         ffi.call("file_delete", [path])
     end
+
+    define exists?(path: str) -> bool
+        ffi.call("file_exists", [path])
+    end
+
+    define file?(path: str) -> bool
+        ffi.call("file_is_file", [path])
+    end
+
+    define join(segments: arr(str)) -> str
+        out = ""
+        i   = 0
+
+        while i < segments.length
+            part = segments[i]
+
+            unless part.empty?
+                if out.empty?
+                    out = part
+                else
+                    if out.slice(out.length - 1, 1) == "/"
+                        out = out.slice(0, out.length - 1)
+                    end
+                    if part.slice(0, 1) == "/"
+                        part = part.slice(1, part.length - 1)
+                    end
+                    out = out + "/" + part
+                end
+            end
+
+            i = i + 1
+        end
+
+        return out
+    end
+
+    define extname(path: str) -> str
+        base = Path.base(path)
+        i    = base.length - 1
+
+        while i > 0
+            if base.slice(i, 1) == "."
+                return base.slice(i, base.length - i)
+            end
+            i = i - 1
+        end
+
+        return ""
+    end
 end
 
 # define file

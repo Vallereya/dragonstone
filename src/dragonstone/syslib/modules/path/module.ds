@@ -15,8 +15,44 @@ module Path
         ffi.call("path_base", [value])
     end
 
-    define expand(value: str) -> str
-        ffi.call("path_expand", [value])
+    # The basename with its extension removed, so 
+    # `"a/b/mod.ds"` -> `"mod"`. A dotfile keeps its name 
+    # (`".gitignore"` -> `".gitignore"`), since the leading 
+    # dot marks it hidden rather than starting an extension.
+    define stem(value: str) -> str
+        name = base(value)
+        ext  = File.extname(name)
+
+        if ext.empty?
+            return name
+        end
+
+        return name.slice(0, name.length - ext.length)
+    end
+
+    define expand(value: str, base = nil) -> str
+        if base == nil || absolute?(value)
+            return ffi.call("path_expand", [value])
+        end
+
+        return ffi.call("path_expand", [File.join([base, value])])
+    end
+
+    define absolute?(value: str) -> bool
+        if value.empty?
+            return false
+        end
+
+        head = value.slice(0, 1)
+        if head == "/" || head == "\\"
+            return true
+        end
+
+        if value.length >= 2 && value.slice(1, 1) == ":"
+            return true
+        end
+
+        return false
     end
 
     define delete(value: str) -> str
