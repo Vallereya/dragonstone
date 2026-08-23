@@ -18,9 +18,9 @@ EXE_PATH="$BUILD_DIR/dragonstone"
 SOURCE_ENTRY="$PROJECT_ROOT/bin/dragonstone"
 
 VERSION_H="$PROJECT_ROOT/src/dragonstone/core/runtime/include/dragonstone/core/version.h"
-SH_VERSION_H="$PROJECT_ROOT/src/dragonstone/core/runtime/include/dragonstone/core/sh_version.h"
+SH_VERSION_H="$PROJECT_ROOT/bootstrap/src/dragonstone/core/runtime/include/dragonstone/core/version.h"
 VERSION_FILE="$PROJECT_ROOT/src/VERSION"
-SH_VERSION_FILE="$PROJECT_ROOT/src/sh_VERSION"
+SH_VERSION_FILE="$PROJECT_ROOT/bootstrap/src/VERSION"
 RESOURCE_OBJ="$SCRIPT_ROOT/resources/dragonstone.o"
 ABI_SRC_DIR="$PROJECT_ROOT/src/dragonstone/shared/runtime/abi"
 ABI_SOURCES=(
@@ -76,7 +76,7 @@ clean_artifacts() {
 
     if [[ -f "$SH_VERSION_H" ]]; then
         rm -f -- "$SH_VERSION_H"
-        echo "  Removed: sh_version.h"
+        echo "  Removed: bootstrap version.h"
         cleaned=$((cleaned+1))
     fi
 
@@ -88,7 +88,7 @@ clean_artifacts() {
 
     if [[ -f "$SH_VERSION_FILE" ]]; then
         rm -f -- "$SH_VERSION_FILE"
-        echo "  Removed: sh_VERSION"
+        echo "  Removed: bootstrap VERSION"
         cleaned=$((cleaned+1))
     fi
 

@@ -168,9 +168,9 @@ function Clean-DragonstoneArtifacts {
             Description = 'version.h'
         },
         @{
-            Path = (Join-Path $projectRoot 'src/dragonstone/core/runtime/include/dragonstone/core/sh_version.h')
+            Path = (Join-Path $projectRoot 'bootstrap/src/dragonstone/core/runtime/include/dragonstone/core/version.h')
             Type = 'File'
-            Description = 'sh_version.h'
+            Description = 'bootstrap version.h'
         },
         @{
             Path = (Join-Path $projectRoot 'src/VERSION')
@@ -178,9 +178,9 @@ function Clean-DragonstoneArtifacts {
             Description = 'VERSION'
         },
         @{
-            Path = (Join-Path $projectRoot 'src/sh_VERSION')
+            Path = (Join-Path $projectRoot 'bootstrap/src/VERSION')
             Type = 'File'
-            Description = 'sh_VERSION'
+            Description = 'bootstrap VERSION'
         },
         @{
             Path = (Join-Path $projectRoot 'src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord')
