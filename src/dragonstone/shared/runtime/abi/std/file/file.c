@@ -22,12 +22,14 @@
 #define DS_RMDIR rmdir
 #endif
 
-int dragonstone_file_exists(const char *path) {
+int dragonstone_file_exists(const char *path)
+{
     DS_STAT_STRUCT st;
     return path && DS_STAT(path, &st) == 0;
 }
 
-int dragonstone_file_is_file(const char *path) {
+int dragonstone_file_is_file(const char *path)
+{
     DS_STAT_STRUCT st;
     if (!path || DS_STAT(path, &st) != 0) return 0;
 #ifdef _WIN32
@@ -37,52 +39,67 @@ int dragonstone_file_is_file(const char *path) {
 #endif
 }
 
-int64_t dragonstone_file_size(const char *path) {
+int64_t dragonstone_file_size(const char *path)
+{
     DS_STAT_STRUCT st;
     if (!path || DS_STAT(path, &st) != 0) return -1;
     return (int64_t)st.st_size;
 }
 
-char *dragonstone_file_read(const char *path) {
+char *dragonstone_file_read(const char *path)
+{
     if (!path) return NULL;
     FILE *fp = fopen(path, "rb");
     if (!fp) return NULL;
-    if (fseek(fp, 0, SEEK_END) != 0) {
+
+    if (fseek(fp, 0, SEEK_END) != 0)
+    {
         fclose(fp);
         return NULL;
     }
+
     long fsize = ftell(fp);
-    if (fsize < 0) {
+
+    if (fsize < 0)
+    {
         fclose(fp);
         return NULL;
     }
     rewind(fp);
+
     size_t size = (size_t)fsize;
     char *buf = (char *)malloc(size + 1);
-    if (!buf) {
+
+    if (!buf)
+    {
         fclose(fp);
         return NULL;
     }
+
     size_t read = fread(buf, 1, size, fp);
     buf[read] = '\0';
     fclose(fp);
     return buf;
 }
 
-int64_t dragonstone_file_write(const char *path, const uint8_t *bytes, size_t len, int append) {
+int64_t dragonstone_file_write(const char *path, const uint8_t *bytes, size_t len, int append)
+{
     if (!path) return -1;
     const char *mode = append ? "ab" : "wb";
     FILE *fp = fopen(path, mode);
     if (!fp) return -1;
     size_t written = 0;
-    if (bytes && len > 0) {
+
+    if (bytes && len > 0)
+    {
         written = fwrite(bytes, 1, len, fp);
     }
     fclose(fp);
     return (int64_t)written;
 }
 
-int dragonstone_file_delete(const char *path) {
+int dragonstone_file_delete(const char *path)
+{
     if (!path) return 0;
     if (DS_UNLINK(path) == 0) return 1;
     if (DS_RMDIR(path) == 0) return 1;

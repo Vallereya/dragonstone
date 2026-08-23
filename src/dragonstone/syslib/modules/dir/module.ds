@@ -1,0 +1,33 @@
+#[
+
+    Directory Operations
+    
+    This is backed by the same C ABI as `File` and `Path`.
+
+    Kept separate from `File` because these are for 
+    directories rather than about a file's contents. 
+    So, `Path.create` still owns directory creation, since 
+    it is the path shaped part of the job.
+
+]#
+
+module Dir
+    # The process working directory.
+    define current -> str
+        ffi.call("dir_current", [])
+    end
+
+    # Does a directory exist at this path? 
+    # A regular file answers false.
+    define exists?(path: str) -> bool
+        ffi.call("dir_exists", [path])
+    end
+
+    # Paths matching a glob pattern, sorted. `*` matches 
+    # within one segment and `**` spans segments, which 
+    # is what the module resolver needs to expand 
+    # `use "modules/*"`.
+    define glob(pattern: str) -> arr(str)
+        ffi.call("dir_glob", [pattern])
+    end
+end

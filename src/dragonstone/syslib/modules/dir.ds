@@ -1,0 +1,5 @@
+use "./dir/module.ds"
+
+# Dir.current
+# Dir.exists?("./src")
+# Dir.glob("./src/**/*.ds")

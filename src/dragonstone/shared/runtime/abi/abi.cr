@@ -42,6 +42,7 @@ lib DragonstoneABI
     fun dragonstone_path_base(path : UInt8*) : UInt8*
     fun dragonstone_path_expand(path : UInt8*) : UInt8*
     fun dragonstone_path_delete(path : UInt8*) : UInt8*
+    fun dragonstone_path_cwd : UInt8*
 
     # Garbage Collector functions.
     # Opaque pointer types

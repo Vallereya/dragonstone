@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 // Boxing and tagged unions is simpler to start.
-typedef enum {
+typedef enum
+{
     dragonstone_VAL_NIL,
     dragonstone_VAL_BOOL,
     dragonstone_VAL_INT,
@@ -18,9 +19,11 @@ typedef enum {
     dragonstone_VAL_CHANNEL,
 } DsValueType;
 
-typedef struct DsValue {
+typedef struct DsValue
+{
     DsValueType type;
-    union {
+    union
+    {
         bool boolean;
         int64_t integer;
         double floating;
