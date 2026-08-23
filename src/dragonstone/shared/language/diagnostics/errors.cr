@@ -88,4 +88,9 @@ module Dragonstone
     # Raised when attempting to access elements outside valid bounds.
     class OutOfBounds < InterpreterError
     end
+
+    # Raised by `not_nil!` when the receiver turned out to be nil. Its own class
+    # so the assertion can be rescued apart from other runtime errors.
+    class NilAssertionError < InterpreterError
+    end
 end
