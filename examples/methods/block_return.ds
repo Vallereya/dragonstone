@@ -1,0 +1,55 @@
+#[
+    Block Return Example
+]#
+
+#[
+    A `return` inside a block is "non-local": it unwinds 
+    to the frame that "wrote" the block, not the one that 
+    called it.
+]#
+
+# Example One
+# A block that returns unwinds the intervening frame, so
+# the `intervening` method never completes normally, and
+# the `creator` method sees the block's return value.
+define intervening
+    r = yield 1
+    return "intervening-saw-#{r}"
+end
+
+define creator
+    v = intervening do |x|
+        return "returned-from-block-#{x}"
+    end
+    return "creator-fell-through-#{v}"
+end
+
+echo creator()
+
+# Example Two
+# The block's `return` carries a computed value, not a 
+# literal, an implementation that unwinds correctly but 
+# drops the payload prints an empty tail here rather 
+# than 42.
+define compute_creator
+    v = intervening do |x|
+        return "carried-#{x * 42}"
+    end
+    return "creator-fell-through-#{v}"
+end
+
+echo compute_creator()
+
+# Example Three
+# A block that does NOT return falls through normally, so 
+# the intervening frame's own return value is what 
+# surfaces. This is the control: it proves the non-local 
+# path is selective, not a blanket "block always unwinds".
+define no_return_creator
+    v = intervening do |x|
+        x + 100
+    end
+    return "creator-fell-through-#{v}"
+end
+
+echo no_return_creator()

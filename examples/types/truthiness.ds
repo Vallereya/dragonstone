@@ -1,0 +1,49 @@
+#[
+    Truthiness Example
+]#
+
+#[
+    Only `nil` and `false` are falsy. Zero, the empty 
+    string and the empty array are all TRUTHY, like with 
+    Ruby/Crystal ones.
+]#
+
+def show(label, value)
+    if value
+        echo "#{label}: truthy"
+    else
+        echo "#{label}: falsy"
+    end
+end
+
+# The three that surprise people, and the whole reason for this file.
+show("zero", 0)
+show("empty string", "")
+show("empty array", [])
+
+# The only two falsy values within dragonstone.
+show("nil", nil)
+show("false", false)
+
+# Ordinary truthy values, so a backend that answered 
+# "truthy" to everything would still have to get the 
+# two above right to pass.
+show("true", true)
+show("one", 1)
+show("space", " ")
+show("array", [1])
+
+# Negation has to agree with the same rule, a separate code 
+# path in both runtimes, and the one a `truthy?` helper is 
+# most often called from.
+if !0
+    echo "!0: truthy"
+else
+    echo "!0: falsy"
+end
+
+if !nil
+    echo "!nil: truthy"
+else
+    echo "!nil: falsy"
+end

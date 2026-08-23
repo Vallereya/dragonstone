@@ -23,8 +23,8 @@
     data that can be discarded all at once.
 
     ## Function-level GC disable.
-    @[Garbage(disable)] = GC will not run inside this function. 
-    You’re responsible for not blowing RAM.
+    @[Garbage(disable)] = GC will not run inside this function.
+
     Turn GC off for this function, use an Area for scratch work, 
     explicitly copy anything that needs to live on the GC heap, and 
     then free the area-owned data. This is inherently UNSAFE: you

@@ -1,0 +1,45 @@
+#[
+    Yield Value Example
+]#
+
+#[
+    The `yield` is an expression: its value is whatever
+    the block returns, and that value can be assigned, 
+    passed on, or used in arithmetic, etc.
+]#
+
+# Example One
+# The simplest shape: assign the block's result.
+define apply_once
+    result = yield 1
+    return result
+end
+
+echo apply_once do |x|
+    x + 10
+end
+
+# Example Two
+# The yielded value used in arithmetic, not just bound.
+define doubled
+    return (yield 3) * 2
+end
+
+echo doubled do |x|
+    x + 1
+end
+
+# Example Three
+# Successive yields accumulate, so a block returning nil
+# would collapse this to an error rather than 33.
+define accumulate
+    total = 0
+    total = total + (yield 1)
+    total = total + (yield 2)
+    total = total + (yield 3)
+    return total
+end
+
+echo accumulate do |x|
+    x * 5
+end

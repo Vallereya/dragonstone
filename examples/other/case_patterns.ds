@@ -1,0 +1,71 @@
+#[
+    Case Patterns Example
+]#
+
+#[
+    A `when` matches by case equality, not `==`.
+
+    A class pattern tests membership and a range
+    pattern tests containment, so neither can be
+    compiled to a plain equality check.
+]#
+
+class Animal
+end
+
+class Dog < Animal
+end
+
+# Class pattern: `value` is a Dog instance, 
+# never `==` the Dog class itself.
+value = Dog.new
+
+case value
+
+when Dog
+    echo "dog"
+when Animal
+    echo "animal"
+else
+    echo "other"
+end
+
+# The superclass still matches, by membership.
+plain = Animal.new
+
+case plain
+
+when Dog
+    echo "dog"
+when Animal
+    echo "animal"
+else
+    echo "other"
+end
+
+# Range pattern: containment, not equality.
+n = 42
+
+case n
+
+when 1..10
+    echo "small"
+when 11..100
+    echo "medium"
+else
+    echo "large"
+end
+
+# A literal alongside patterns, to confirm the
+# path still works.
+label = "b"
+
+case label
+
+when "a"
+    echo "first"
+when "b"
+    echo "second"
+else
+    echo "neither"
+end

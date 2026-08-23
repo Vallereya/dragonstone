@@ -1,0 +1,78 @@
+#[
+    Closures Example
+]#
+
+#[
+    A block shares the scope it was written in, so 
+    assigning to a variable from the enclosing method 
+    is visible after the block finishes.
+]#
+
+# Example One
+# Rebinding a local from inside a block.
+total = 0
+numbers = [1, 2, 3, 4]
+
+numbers.each do |n|
+    total = total + n
+end
+
+echo total
+
+# A boolean set inside a block survives too.
+found = false
+
+numbers.each do |n|
+    if n == 3
+        found = true
+    end
+end
+
+echo found
+
+# Example Two
+# Mutating through a captured reference.
+collected = []
+
+numbers.each do |n|
+    collected.push(n * 10)
+end
+
+e! collected
+
+# Example Three
+# Blocks nest, and each level still writes to what it captured.
+pairs = []
+outer_count = 0
+factors = [10, 20]
+
+numbers.each do |a|
+    outer_count = outer_count + 1
+
+    factors.each do |b|
+        pairs.push(a * b)
+    end
+end
+
+echo outer_count
+echo pairs.length
+
+# Example Four
+# A method's own locals and ivars are both reachable from a block.
+class Tally
+    def initialize
+        @sum = 0
+    end
+
+    define add_all(values)
+        seen = 0
+        
+        values.each do |v|
+            @sum = @sum + v
+            seen = seen + 1
+        end
+        return "#{@sum} over #{seen}"
+    end
+end
+
+echo Tally.new.add_all(numbers)

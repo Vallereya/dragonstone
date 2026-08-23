@@ -46,3 +46,48 @@ person: Hash(str, int) = {
 
 echo person["name"]                                             # -> Jalyn
 echo person["age"]                                              # -> 30
+
+# Example Six
+# The block taking half of a `Map`.
+scores = {
+    "a" -> 1,
+    "b" -> 2,
+    "c" -> 3 
+}
+
+# `map` yields (key, value) and gives back an array.
+e! scores.map do |key, value|
+    "#{key}=#{value}"
+end
+
+# `map_keys` yields just the key, `map_values` just the
+# value.
+e! scores.map_keys do |key|
+    key.upcase
+end
+e! scores.map_values do |value|
+    value * 10
+end
+
+# `each_key` and `each_value` walk one side and hand back 
+# the map.
+scores.each_key do |key|
+    echo key
+end
+
+scores.each_value do |value|
+    echo value
+end
+
+# `until` answers the first matching pair as a tuple.
+e! scores.until do |key, value|
+    value == 2
+end
+
+# Membership by value, and removal by key.
+echo scores.has_value?(3)
+echo scores.has_value?(9)
+
+scores.delete("a")
+
+e! scores.keys

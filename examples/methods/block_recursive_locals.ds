@@ -1,0 +1,35 @@
+#[
+    Block Recursive Locals Example
+]#
+
+#[
+    A block resolves locals against the frame that wrote 
+    it, and when the same method is on the stack several 
+    times, that means the "right" one, not merely one of 
+    them.
+
+    So `walk(n)` binds its own `mine`, then recurses 
+    passing a "new literal block" closing over that 
+    frame's `mine`. No block forwarding is needed, each 
+    level supplies its own, so while `walk(2)` is 
+    executing, the block it yields to belongs to `walk(3)`.
+]#
+
+define walk(n)
+    mine = n * 100
+
+    if n <= 0
+        return 0
+    end
+
+    got = yield n
+    
+    deeper = walk(n - 1) do |x|
+        mine + x
+    end
+    return got + deeper
+end
+
+echo walk(3) do |x|
+    x
+end

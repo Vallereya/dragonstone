@@ -1,0 +1,72 @@
+#[
+    Operator Overloading Example
+]#
+
+#[
+    A class can define an operator as a method, so `+`, 
+    `==`, `<<` and the comparison operators work on your 
+    own types.
+]#
+
+class Vec
+    getter x
+    getter y
+
+    def initialize(x, y)
+        @x = x
+        @y = y
+    end
+
+    define +(other)
+        return Vec.new(@x + other.x, @y + other.y)
+    end
+
+    define -(other)
+        return Vec.new(@x - other.x, @y - other.y)
+    end
+
+    define *(factor)
+        return Vec.new(@x * factor, @y * factor)
+    end
+
+    define ==(other)
+        return @x == other.x && @y == other.y
+    end
+
+    define show
+        return "(#{@x}, #{@y})"
+    end
+end
+
+a = Vec.new(1, 2)
+b = Vec.new(3, 4)
+
+echo (a + b).show
+echo (b - a).show
+echo (a * 3).show
+echo a == Vec.new(1, 2)
+echo a == b
+
+# `<<` is overloadable too, which is how a builder appends.
+class Builder
+    def initialize
+        @text = ""
+    end
+
+    define <<(part)
+        @text = @text + "#{part}"
+        return self
+    end
+
+    define result
+        return @text
+    end
+end
+
+builder = Builder.new
+
+builder << "one"
+builder << " "
+builder << "two"
+
+echo builder.result
