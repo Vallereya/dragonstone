@@ -9,7 +9,6 @@
 ]#
 
 use "strings_build"
-use "file_utilities"
 
 module Colorize
     extend self
