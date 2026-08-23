@@ -58,15 +58,15 @@ module Unicode
     end
 
     def xid_start?(codepoint: int): bool
-        return range_in?(XID_START_RANGES, codepoint: codepoint)
+        return range_in?(XID_START_RANGES, codepoint)
     end
 
     def xid_continue?(codepoint: int): bool
-        return range_in?(XID_CONTINUE_RANGES, codepoint: codepoint)
+        return range_in?(XID_CONTINUE_RANGES, codepoint)
     end
 
     def extended_pictographic?(codepoint: int): bool
-        return range_in?(EXTENDED_PICTOGRAPHIC_RANGES, codepoint: codepoint)
+        return range_in?(EXTENDED_PICTOGRAPHIC_RANGES, codepoint)
     end
 
     def normalize(value: str, form: str = "NFC"): str

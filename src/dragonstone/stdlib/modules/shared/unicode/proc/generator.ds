@@ -2,8 +2,6 @@
     This module provides Unicode-related procedural generators.
 ]#
 
-use "file_utilities"
-use "path_utilities"
 use "strings_build"
 use "./unicode_version.ds"
 
