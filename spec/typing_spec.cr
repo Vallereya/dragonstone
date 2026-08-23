@@ -16,11 +16,11 @@ DS
         source = <<-DS
 #! typed
 def greet(name: str | nil) -> str
-  if name == nil
-    "hi"
-  else
-    "hi \#{name}"
-  end
+    if name == nil
+        "hi"
+    else
+        "hi \#{name}"
+    end
 end
 
 greet(nil)
@@ -43,7 +43,7 @@ DS
 alias Data = Array(str) | Hash(str, int)
 
 def process(data: Data)
-  data
+    data
 end
 
 process(["first", "second"])
@@ -56,7 +56,7 @@ DS
 alias Names = Array(str)
 
 def handle(names: Names)
-  names
+    names
 end
 
 handle([1, 2, 3])
