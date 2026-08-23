@@ -1,0 +1,20 @@
+#[
+    -------------------------------------
+    --------------- API -----------------
+    ------------------------------------- 
+]#
+
+#! Placeholder for future "First-Class" API providers.
+
+module Dragonstone
+    module API
+        extend self
+
+        # API provider for Dragonstone. This is a 
+        # placeholder for future API providers that will be
+        # implemented in the future. The API provider will 
+        # be responsible for providing a set of functions 
+        # and types that can be used by the Dragonstone 
+        # runtime and other components.
+    end
+end
