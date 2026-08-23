@@ -32,12 +32,15 @@ describe "Dragonstone standard library" do
     it "loads bundled modules without DS_PATH" do
         with_tmpdir do |dir|
             script = File.join(dir, "main.ds")
+            # `levenshtein` is a real bundled module under
+            # stdlib/modules/shared/. The old `strings_length` module this
+            # spec used was added into the language as `String#length`.
             File.write(script, <<-DS)
-use "strings_length"
-echo strings.length("Dragonstone")
+use "levenshtein"
+echo Levenshtein.distance("Dragonstone", "Dragonstone")
 DS
             result = Dragonstone.run_file(script)
-            result.output.should contain("11")
+            result.output.should contain("0")
         end
     end
 
@@ -46,21 +49,21 @@ DS
             lib_dir = File.join(dir, "lib")
             Dir.mkdir(lib_dir)
 
-            shim_dir = File.join(lib_dir, "strings")
-            Dir.mkdir_p(shim_dir) # kept for compatibility; not used by stdlib resolver anymore.
-            shim = File.join(lib_dir, "strings_length.ds")
+            # Shadow a module that really is bundled, so this asserts an
+            # actual override rather than just "DS_PATH modules resolve".
+            shim = File.join(lib_dir, "levenshtein.ds")
             File.write(shim, <<-DS)
-module strings
-    def length(str)
+module Levenshtein
+    def distance(a, b)
         echo "custom"
-        str.size
+        0
     end
 end
 DS
             script = File.join(dir, "main.ds")
             File.write(script, <<-DS)
-use "strings_length"
-echo strings.length("Dragonstone")
+use "levenshtein"
+echo Levenshtein.distance("Dragonstone", "Dragonstone")
 DS
             previous = ENV["DS_PATH"]?
             begin

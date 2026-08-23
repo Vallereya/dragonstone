@@ -328,7 +328,7 @@ DS
     end
 
     it "loads modules via use declarations on the core backend" do
-        base_tmp = File.join(Dir.current, "tmp")
+        base_tmp = File.join(Dir.current, "bin/logs")
         FileUtils.mkdir_p(base_tmp)
         dir = File.join(base_tmp, "core_use_#{Time.utc.to_unix}_#{Process.pid}")
         FileUtils.rm_rf(dir)

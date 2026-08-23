@@ -144,9 +144,9 @@ DS
     end
 
     it "supports argf.read in the core backend" do
-        tmp_dir = File.join(Dir.current, "tmp")
-        Dir.mkdir_p(tmp_dir)
-        path = File.join(tmp_dir, "argf_vm.txt")
+        logs_dir = File.join(Dir.current, "bin/logs")
+        Dir.mkdir_p(logs_dir)
+        path = File.join(logs_dir, "argf_vm.txt")
         File.write(path, "ARGF")
 
         source = "stdout.echo argf.read\n"
@@ -196,7 +196,9 @@ DS
         DS
 
         bytecode = compile_bytecode(source)
-        vm = Dragonstone::VM.new(bytecode)
+
+        # stdout_io defaults to STDOUT now; capture so specs stay quiet.
+        vm = Dragonstone::VM.new(bytecode, stdout_io: IO::Memory.new)
 
         expect_raises(Dragonstone::TypeError) do
             vm.run

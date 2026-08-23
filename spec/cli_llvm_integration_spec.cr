@@ -10,6 +10,14 @@ rescue File::NotFoundError
     false
 end
 
+# These specs execute a linked native binary, so the 
+# text they capture uses the platform's line ending; CRLF 
+# on Windows. Compare on normalized LF so the expectations 
+# stay platform-independent.
+private def normalized(io : IO::Memory) : String
+    io.to_s.gsub("\r\n", "\n")
+end
+
 private module LLVMIntegration
     @@available : Bool? = nil
 
@@ -21,7 +29,7 @@ private module LLVMIntegration
             unless clang_available?
                 false
             else
-                dir = File.join("dev", "build", "spec", "llvm_probe_#{Random::Secure.hex(8)}")
+                dir = File.join("bin", "dev", "build", "spec", "llvm_probe_#{Random::Secure.hex(8)}")
                 FileUtils.mkdir_p(dir)
                 begin
                     source = File.join(dir, "probe.ds")
@@ -44,7 +52,7 @@ describe Dragonstone::CLIBuild do
     it "links LLVM artifacts into an executable when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM linking integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "sample.ds")
@@ -64,7 +72,7 @@ describe Dragonstone::CLIBuild do
     it "executes user-defined iterator methods that yield when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM iterator integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_iterator_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_iterator_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "iterator.ds")
@@ -96,7 +104,7 @@ DS
             stderr = IO::Memory.new
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
-            stdout.to_s.should eq("3\n2\n1\nBlastoff!\n")
+            normalized(stdout).should eq("3\n2\n1\nBlastoff!\n")
         ensure
             FileUtils.rm_rf(dir)
         end
@@ -105,7 +113,7 @@ DS
     it "executes super calls when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM super integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_super_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_super_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "super.ds")
@@ -130,7 +138,7 @@ DS
             stderr = IO::Memory.new
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
-            stdout.to_s.should eq("Hello, everyone\nHello, again\n")
+            normalized(stdout).should eq("Hello, everyone\nHello, again\n")
         ensure
             FileUtils.rm_rf(dir)
         end
@@ -139,7 +147,7 @@ DS
     it "executes overloaded operators when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM operator overloading integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_overloading_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_overloading_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "overloading.ds")
@@ -231,7 +239,7 @@ DS
             stderr = IO::Memory.new
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
-            stdout.to_s.should eq("8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n")
+            normalized(stdout).should eq("8\n2\n20\n25\n2.5\n2\n2\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\n20\n2\n")
         ensure
             FileUtils.rm_rf(dir)
         end
@@ -240,7 +248,7 @@ DS
     it "executes boxed arithmetic inside loops when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM loop arithmetic integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_loop_arithmetic_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_loop_arithmetic_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "sum_array.ds")
@@ -265,7 +273,7 @@ DS
             stderr = IO::Memory.new
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
-            stdout.to_s.should eq("15\n")
+            normalized(stdout).should eq("15\n")
         ensure
             FileUtils.rm_rf(dir)
         end
@@ -274,7 +282,7 @@ DS
     it "executes record declarations when clang is available" do
         pending!("LLVM toolchain not available; skipping LLVM record integration test") unless LLVMIntegration.available?
 
-        dir = File.join("dev", "build", "spec", "cli_llvm_record_spec_#{Random::Secure.hex(8)}")
+        dir = File.join("bin", "dev", "build", "spec", "cli_llvm_record_spec_#{Random::Secure.hex(8)}")
         FileUtils.mkdir_p(dir)
         begin
             source = File.join(dir, "record.ds")
@@ -293,7 +301,7 @@ DS
             stderr = IO::Memory.new
             Dragonstone::CLIBuild.build_and_run_command(["--target", "llvm", "--output", dir, source], stdout, stderr).should eq(0)
             stderr.to_s.should_not contain("ERROR:")
-            stdout.to_s.should eq("1\n2\n")
+            normalized(stdout).should eq("1\n2\n")
         ensure
             FileUtils.rm_rf(dir)
         end

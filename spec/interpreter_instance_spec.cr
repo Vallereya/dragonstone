@@ -5,14 +5,20 @@ require "../src/dragonstone/shared/language/resolver/resolver"
 require "../src/dragonstone/shared/language/sema/type_checker"
 require "../src/dragonstone/native/interpreter/interpreter"
 
-private def run_program(source : String, typing : Bool = false)
+private def run_program(source : String, typing : Bool = false) : String
     tokens = Dragonstone::Lexer.new(source).tokenize
     ast = Dragonstone::Parser.new(tokens).parse
-    interpreter = Dragonstone::Interpreter.new(log_to_stdout: false, typing_enabled: typing)
+
+    # The interpreter streams to its stdout rather than 
+    # accumulating a string; hand it an IO::Memory to 
+    # capture what the program echoed.
+    output = IO::Memory.new
+    interpreter = Dragonstone::Interpreter.new(stdout: output, typing_enabled: typing)
     analysis = Dragonstone::Language::Sema::TypeChecker.new.analyze(ast, typed: typing)
     graph = Dragonstone::ModuleGraph.new
     graph.add(Dragonstone::ModuleNode.new("<spec>", ast, typing))
     interpreter.interpret(ast, graph, analysis)
+    output.to_s
 end
 
 describe "Case and select control flow" do

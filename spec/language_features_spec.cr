@@ -127,9 +127,9 @@ DS
     end
 
     it "supports argf.read in the native backend" do
-        tmp_dir = File.join(Dir.current, "tmp")
-        Dir.mkdir_p(tmp_dir)
-        path = File.join(tmp_dir, "argf_native.txt")
+        logs_dir = File.join(Dir.current, "bin/logs")
+        Dir.mkdir_p(logs_dir)
+        path = File.join(logs_dir, "argf_native.txt")
         File.write(path, "ARGF_NATIVE")
 
         result = Dragonstone.run("stdout.echo argf.read\n", argv: [path])
@@ -167,58 +167,58 @@ DS
     end
 
     it "imports modules without executing top-level statements" do
-        tmp_dir = File.join(Dir.current, "tmp", "use_spec_#{Random::Secure.hex(8)}")
-        FileUtils.mkdir_p(tmp_dir)
+        logs_dir = File.join(Dir.current, "bin/logs", "use_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(logs_dir)
         begin
-            lib_path = File.join(tmp_dir, "lib.ds")
+            lib_path = File.join(logs_dir, "lib.ds")
             File.write(lib_path, "echo \"SIDE_EFFECT\"\ncon MAGIC = 42\n")
 
-            entry = File.join(tmp_dir, "entry.ds")
+            entry = File.join(logs_dir, "entry.ds")
             File.write(entry, "use \"./lib\"\necho MAGIC\n")
 
             Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "42\n"
             Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "42\n"
         ensure
-            FileUtils.rm_rf(tmp_dir)
+            FileUtils.rm_rf(logs_dir)
         end
     end
 
     it "supports use globs for directories" do
-        tmp_dir = File.join(Dir.current, "tmp", "use_glob_spec_#{Random::Secure.hex(8)}")
-        FileUtils.mkdir_p(tmp_dir)
+        logs_dir = File.join(Dir.current, "bin/logs", "use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(logs_dir)
         begin
-            mods_dir = File.join(tmp_dir, "mods")
+            mods_dir = File.join(logs_dir, "mods")
             FileUtils.mkdir_p(mods_dir)
             File.write(File.join(mods_dir, "a.ds"), "con A = 1\n")
             FileUtils.mkdir_p(File.join(mods_dir, "sub"))
             File.write(File.join(mods_dir, "sub", "b.ds"), "con B = 2\n")
 
-            entry_star = File.join(tmp_dir, "entry_star.ds")
+            entry_star = File.join(logs_dir, "entry_star.ds")
             File.write(entry_star, "use \"./mods/*\"\necho A\necho B\n")
             expect_raises(Dragonstone::NameError) do
                 Dragonstone.run_file(entry_star, backend: Dragonstone::BackendMode::Native)
             end
 
-            entry_globstar = File.join(tmp_dir, "entry_globstar.ds")
+            entry_globstar = File.join(logs_dir, "entry_globstar.ds")
             File.write(entry_globstar, "use \"./mods/**\"\necho A\necho B\n")
             Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Native).output.should eq "1\n2\n"
             Dragonstone.run_file(entry_globstar, backend: Dragonstone::BackendMode::Core).output.should eq "1\n2\n"
         ensure
-            FileUtils.rm_rf(tmp_dir)
+            FileUtils.rm_rf(logs_dir)
         end
     end
 
     it "supports use globs inside stdlib modules" do
-        tmp_dir = File.join(Dir.current, "tmp", "stdlib_use_glob_spec_#{Random::Secure.hex(8)}")
-        FileUtils.mkdir_p(tmp_dir)
+        logs_dir = File.join(Dir.current, "bin/logs", "stdlib_use_glob_spec_#{Random::Secure.hex(8)}")
+        FileUtils.mkdir_p(logs_dir)
         begin
-            entry = File.join(tmp_dir, "entry.ds")
+            entry = File.join(logs_dir, "entry.ds")
             File.write(entry, "use \"unicode\"\necho UnicodeVersion\n")
 
             Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Native).output.should eq "17.0.0\n"
             Dragonstone.run_file(entry, backend: Dragonstone::BackendMode::Core).output.should eq "17.0.0\n"
         ensure
-            FileUtils.rm_rf(tmp_dir)
+            FileUtils.rm_rf(logs_dir)
         end
     end
 
