@@ -1,0 +1,130 @@
+#[
+    -------------------------------------
+    ------ SELF-HOSTED DRAGONSTONE ------
+    -------------------------------------
+    -------------- VERSION --------------
+    -------------------------------------
+]#
+
+#[
+    
+    #! This is a temporary workaround for getting the 
+    #! Dragonstone version for some files. Later I'm going 
+    #! to change how it works.
+
+]#
+
+use "toml"
+
+module Dragonstone
+    module Version
+        
+        # During bootstrap, we have mirrored the directory 
+        # with the Stage0 version of Dragonstone. The 
+        # normal root path for Dragonstone is the root of 
+        # the project, this is because the bootstrap 
+        # process is responsible for generating its own 
+        # version files, and it needs a consistent location 
+        # to read from and write to. The generated version 
+        # file and header can be used by the rest of the 
+        # Dragonstone project, regardless of where it is 
+        # located on the filesystem.
+        
+        con DS_ROOT_PATH = "."
+        con ROOT_PATH = "./bootstrap"
+
+        #! USE AFTER MOVING TO MAIN DRAGONSTONE REPO
+        # con ROOT_PATH = "."
+
+        # Reads the version out of forge.toml and returns it.
+        # The value is returned and bound at module scope.
+        define get_version
+            package_file = "#{DS_ROOT_PATH}/forge.toml"
+            config = TOML.parse_file(package_file)
+            table = config["PACKAGE"].as_h
+            return table["version"].as_s
+        end
+
+        con VERSION = get_version()
+
+        #! USE AFTER MOVING TO MAIN DRAGONSTONE REPO
+        # define get_version
+        #     package_file = "#{ROOT_PATH}/forge.toml"
+        #     config = TOML.parse_file(package_file)
+        #     table = config["PACKAGE"].as_h
+        #     return table["version"].as_s
+        # end
+        #
+        # con VERSION = get_version()
+
+        # This function generates a header file that 
+        # contains the version number of Dragonstone. It 
+        # creates a header file with a macro definition 
+        # for the version number, which can be included in 
+        # the C runtime.
+        define generate_header
+            version_quoted = "\"#{VERSION}\""
+
+            # Gets and creates the location 
+            # for the version header file.
+            header_location = "#{ROOT_PATH}/src/dragonstone/core/runtime/include/dragonstone/core"
+            Path.create(header_location)
+
+            # Generates the version header file.
+            header_file = "#{header_location}/version.h"
+            header_contents = "#pragma once\n#define DRAGONSTONE_VERSION #{version_quoted}\n"
+            File.create(header_file, "#{header_contents}", true)
+        end
+        generate_header()
+
+        #! USE AFTER MOVING TO MAIN DRAGONSTONE REPO
+        # define generate_header
+        #     version_quoted = "\"#{VERSION}\""
+
+        #     # Gets and creates the location 
+        #     # for the version header file.
+        #     header_location = "#{ROOT_PATH}/src/dragonstone/core/runtime/include/dragonstone/core"
+        #     Path.create(header_location)
+
+        #     # Generates the version header file.
+        #     header_file = "#{header_location}/sh_version.h"
+        #     header_contents = "#pragma once\n#define DRAGONSTONE_VERSION #{version_quoted}\n"
+        #     File.create(header_file, "#{header_contents}", true)
+        # end
+        # generate_header()
+
+        # This function generates a version file that  
+        # contains the version number of Dragonstone. It 
+        # creates a simple text file with the version 
+        # number, which can be read by other parts of the 
+        # project or by external tools.
+        define generate_version
+
+            # Gets and creates the location for the 
+            # version file.
+            version_location = "#{ROOT_PATH}/src"
+            Path.create(version_location)
+
+            # Generates the version file.
+            version_file = "#{version_location}/VERSION"
+            version_contents = "#{VERSION}\n"
+            File.create(version_file, "#{version_contents}", true)
+        end
+        generate_version()
+
+        #! USE AFTER MOVING TO MAIN DRAGONSTONE REPO
+        # define generate_version
+
+        #     # Gets and creates the location for the 
+        #     # version file.
+        #     version_location = "#{ROOT_PATH}/src"
+        #     Path.create(version_location)
+
+        #     # Generates the version file.
+        #     version_file = "#{version_location}/sh_VERSION"
+        #     version_contents = "#{VERSION}\n"
+        #     File.create(version_file, "#{version_contents}", true)
+        # end
+        # generate_version()
+    end
+end
