@@ -36,6 +36,7 @@ module Dragonstone
             io.puts "   version, --version, --v                     Show Version"
             io.puts "   help, --help, --h                           Show Help"
             io.puts "   capability, --capability, --c               Show Backend Capabilities"
+            io.puts "   --sh [options] <file>                       Lex, Parse, or Run a file via bootstrap"
             io.puts "   repl                                        Starts REPL"
             io.puts "   lex <file>                                  Tokenize a File"
             io.puts "   parse <file>                                Parse a File & Show AST"

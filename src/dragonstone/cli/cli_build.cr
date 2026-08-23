@@ -361,7 +361,7 @@ module Dragonstone
 	      if linked_path && File.exists?(linked_path)
 	        run_process(linked_path, argv, stdout, stderr, lookup: false)
 	      else
-	        stderr.puts "C artifact could not be linked — ensure a C compiler (cc, gcc, or clang) is installed"
+	        stderr.puts "The C artifact could not be linked! Ensure that a C compiler (cc, gcc, or clang) is installed."
 	        false
 	      end
 	    end

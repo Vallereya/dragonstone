@@ -9,6 +9,7 @@ require "../../dragonstone"
 require "./proc/common"
 require "./proc/file_ops"
 require "./proc/inspect"
+require "./proc/bootstrap"
 
 require "./cli_run"
 require "./cli_build"
@@ -26,6 +27,8 @@ module Dragonstone
             return ProcCommon.show_usage(stdout)            if argv.empty?
 
             return CLIBackend.capability_command(stdout)    if CLIBackend.capability_command?(argv)
+
+            return ProcBootstrap.return_bootstrap(stdout)   if ProcBootstrap.bootstrap_command?(argv)
 
             command = argv[0]
             args    = argv[1..-1]
