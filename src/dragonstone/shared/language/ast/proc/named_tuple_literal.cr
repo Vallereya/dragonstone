@@ -14,11 +14,16 @@ module Dragonstone
             end
 
             def to_source : String
-                if type_annotation
-                    "#{name}: #{type_annotation.not_nil!.to_source} = #{value.to_source}"
-                else
-                    "#{name}: #{value.to_source}"
+                String.build { |io| to_source(io) }
+            end
+
+            def to_source(io : IO)
+                io << name << ": "
+                if type = type_annotation
+                    type.to_source(io)
+                    io << " = "
                 end
+                value.to_source(io)
             end
         end
 
@@ -34,9 +39,13 @@ module Dragonstone
                 visitor.visit_named_tuple_literal(self)
             end
 
-            def to_source : String
-                inner = entries.map(&.to_source).join(", ")
-                "{#{inner}}"
+            def to_source(io : IO)
+                io << "{"
+                entries.each_with_index do |entry, index|
+                    io << ", " if index > 0
+                    entry.to_source(io)
+                end
+                io << "}"
             end
         end
     end

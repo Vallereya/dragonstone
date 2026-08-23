@@ -12,9 +12,16 @@ module Dragonstone
                 visitor.visit_with_expression(self)
             end
 
-            def to_source : String
-                body_source = body.map(&.to_source).join("; ")
-                "with #{receiver.to_source} do #{body_source} end"
+            def to_source(io : IO)
+                io << "with "
+                receiver.to_source(io)
+                io << "\n"
+                body.each do |statement|
+                    io << "  "
+                    statement.to_source(io)
+                    io << "\n"
+                end
+                io << "end"
             end
         end
     end

@@ -38,16 +38,18 @@ module Dragonstone
                 abstract?
             end
 
-            def to_source : String
-                prefix = visibility == :public ? "" : "#{visibility} "
-                header = abstract? ? "#{prefix}abstract class #{name}" : "#{prefix}class #{name}"
-                header += " < #{superclass}" if superclass
-                body_source = body.map(&.to_source).join("; ")
-                if body_source.empty?
-                    "#{header}\nend"
-                else
-                    "#{header}\n  #{body_source}\nend"
+            def to_source(io : IO)
+                io << visibility << " " unless visibility == :public
+                io << "abstract " if abstract?
+                io << "class " << name
+                io << " < " << superclass if superclass
+                io << "\n"
+                body.each do |stmt|
+                    io << "  "
+                    stmt.to_source(io)
+                    io << "\n"
                 end
+                io << "end"
             end
         end
     end

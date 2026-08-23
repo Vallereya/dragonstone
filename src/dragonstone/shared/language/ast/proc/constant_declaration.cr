@@ -24,13 +24,15 @@ module Dragonstone
                 visitor.visit_constant_declaration(self)
             end
 
-            def to_source : String
-                type_str = ""
+            def to_source(io : IO)
+                io << visibility << " " unless visibility == :public
+                io << "con " << name
                 if type = type_annotation
-                    type_str = " : #{type.to_source}"
+                    io << " : "
+                    type.to_source(io)
                 end
-                prefix = visibility == :public ? "" : "#{visibility} "
-                "#{prefix}con #{name}#{type_str} = #{value.to_source}"
+                io << " = "
+                value.to_source(io)
             end
         end
     end

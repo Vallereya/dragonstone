@@ -16,9 +16,14 @@ module Dragonstone
                 visitor.visit_conditional_expression(self)
             end
 
-            def to_source : String
-                "#{condition.to_source} ? #{then_branch.to_source} : #{else_branch.to_source}"
+            def to_source(io : IO)
+                @condition.to_source(io)
+                io << " ? "
+                @then_branch.to_source(io)
+                io << " : "
+                @else_branch.to_source(io)
             end
+
         end
     end
 end

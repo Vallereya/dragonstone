@@ -22,8 +22,10 @@ module Dragonstone
 
             def to_source(io : IO)
                 io << "@@" << @name
-                io << " " << @operator if @operator
-                io << " = "
+                # `@@x += 1`, not `@@x + = 1`.
+                io << " "
+                io << @operator if @operator
+                io << "= "
                 @value.to_source(io)
             end
         end

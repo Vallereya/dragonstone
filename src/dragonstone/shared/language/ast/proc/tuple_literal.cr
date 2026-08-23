@@ -12,8 +12,13 @@ module Dragonstone
                 visitor.visit_tuple_literal(self)
             end
 
-            def to_source : String
-                "{#{elements.map(&.to_source).join(", ")}}"
+            def to_source(io : IO)
+                io << "{"
+                elements.each_with_index do |element, index|
+                    io << ", " if index > 0
+                    element.to_source(io)
+                end
+                io << "}"
             end
         end
     end

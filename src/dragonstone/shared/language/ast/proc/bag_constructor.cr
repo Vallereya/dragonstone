@@ -11,9 +11,10 @@ module Dragonstone
                 visitor.visit_bag_constructor(self)
             end
 
-            def to_source : String
-                "bag(#{element_type.to_source})"
+            def to_source(io : IO)
+                io << "bag(" << @element_type.to_source << ")"
             end
+
         end
     end
 end

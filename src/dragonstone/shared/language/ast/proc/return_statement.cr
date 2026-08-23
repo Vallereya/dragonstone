@@ -12,11 +12,11 @@ module Dragonstone
                 visitor.visit_return_statement(self)
             end
 
-            def to_source : String
-                if value
-                    "return #{value.not_nil!.to_source}"
-                else
-                    "return"
+            def to_source(io : IO)
+                io << "return"
+                if node = value
+                    io << " "
+                    node.to_source(io)
                 end
             end
         end

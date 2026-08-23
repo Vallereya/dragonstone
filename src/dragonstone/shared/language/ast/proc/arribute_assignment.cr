@@ -17,6 +17,16 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_attribute_assignment(self)
             end
+
+            def to_source(io : IO)
+                receiver.to_source(io)
+                io << "." << name
+                # `x.y += 1`, not `x.y + = 1`.
+                io << " "
+                io << operator if operator
+                io << "= "
+                value.to_source(io)
+            end
         end
     end
 end

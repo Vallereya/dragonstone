@@ -16,13 +16,13 @@ module Dragonstone
                 visitor.visit_instance_variable_assignment(self)
             end
 
-            def to_source : String
-                lhs = "@#{@name}"
-                if operator
-                    "#{lhs} #{operator} = #{value.to_source}"
-                else
-                    "#{lhs} = #{value.to_source}"
-                end
+            def to_source(io : IO)
+                io << "@" << @name
+                # `@x += 1`, not `@x + = 1`.
+                io << " "
+                io << operator if operator
+                io << "= "
+                value.to_source(io)
             end
         end
     end

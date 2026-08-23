@@ -12,11 +12,11 @@ module Dragonstone
                 visitor.visit_quit_statement(self)
             end
 
-            def to_source : String
-                if status
-                    "quit #{status.not_nil!.to_source}"
-                else
-                    "quit"
+            def to_source(io : IO)
+                io << "quit"
+                if node = status
+                    io << " "
+                    node.to_source(io)
                 end
             end
         end

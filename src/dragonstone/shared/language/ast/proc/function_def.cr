@@ -32,21 +32,31 @@ module Dragonstone
                 visitor.visit_function_def(self)
             end
 
-            def to_source : String
-                header = "def #{name}"
+            def to_source(io : IO)
+                io << "abstract " if abstract?
+                io << "def " << name
                 unless typed_parameters.empty?
-                    params = typed_parameters.map(&.to_source).join(", ")
-                    header += "(#{params})"
+                    io << "("
+                    typed_parameters.each_with_index do |param, index|
+                        io << ", " if index > 0
+                        param.to_source(io)
+                    end
+                    io << ")"
                 end
+                
                 if type = return_type
-                    header += " : #{type.to_source}"
+                    io << " : "
+                    type.to_source(io)
                 end
-                if abstract?
-                    "#{header}; end"
-                else
-                    body_source = body.map(&.to_source).join("; ")
-                    "#{header}\n  #{body_source}\nend"
+
+
+                io << "\n"
+                body.each do |stmt|
+                    io << "  "
+                    stmt.to_source(io)
+                    io << "\n"
                 end
+                io << "end"
             end
 
             def abstract? : Bool

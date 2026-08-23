@@ -8,8 +8,15 @@ module Dragonstone
             end
 
             def to_source : String
-                return name unless type_annotation
-                "#{name}: #{type_annotation.not_nil!.to_source}"
+                String.build { |io| to_source(io) }
+            end
+
+            def to_source(io : IO)
+                io << name
+                if type = type_annotation
+                    io << ": "
+                    type.to_source(io)
+                end
             end
         end
 
@@ -29,10 +36,15 @@ module Dragonstone
                 visitor.visit_accessor_macro(self)
             end
 
-            def to_source : String
-                entry_source = @entries.map(&.to_source).join(", ")
-                prefix = visibility == :public ? "" : "#{visibility} "
-                "#{prefix}#{kind} #{entry_source}".strip
+            def to_source(io : IO)
+                io << visibility << " " unless visibility == :public
+                io << kind
+                return if @entries.empty?
+                io << " "
+                @entries.each_with_index do |entry, index|
+                    io << ", " if index > 0
+                    entry.to_source(io)
+                end
             end
         end
     end

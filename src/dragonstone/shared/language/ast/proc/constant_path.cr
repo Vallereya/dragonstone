@@ -20,9 +20,6 @@ module Dragonstone
                 names[1..] || [] of String
             end
 
-            def to_source : String
-                names.join("::")
-            end
 
             def to_source(io : IO)
                 io << names.join("::")

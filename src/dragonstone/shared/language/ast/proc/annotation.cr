@@ -14,6 +14,23 @@ module Dragonstone
             )
             end
 
+            def to_source : String
+                String.build { |io| to_source(io) }
+            end
+
+            def to_source(io : IO)
+                io << "@[" << name
+                unless arguments.empty?
+                    io << "("
+                    arguments.each_with_index do |argument, index|
+                        io << ", " if index > 0
+                        argument.to_source(io)
+                    end
+                    io << ")"
+                end
+                io << "]"
+            end
+
             enum MemoryOperator
                 And  # &&
                 Or   # ||

@@ -14,17 +14,6 @@ module Dragonstone
                 visitor.visit_block_literal(self)
             end
 
-            # def to_source : String
-            #     params = if typed_parameters.empty?
-            #         ""
-            #     else
-            #         "| #{typed_parameters.map(&.to_source).join(", ")} | "
-            #     end
-
-            #     body_source = body.map(&.to_source).join("; ")
-            #     "{ #{params}#{body_source} }"
-            # end
-
             def to_source(io : IO)
                 io << "{ "
                 
@@ -37,12 +26,19 @@ module Dragonstone
                     io << " | "
                 end
 
-                @body.each_with_index do |node, index|
-                    io << "; " if index > 0
-                    node.to_source(io)
+                if @body.size <= 1
+                    @body.each(&.to_source(io))
+                    io << " }"
+                    return
                 end
-                
-                io << " }"
+
+                io << "\n"
+                @body.each do |node|
+                    io << "  "
+                    node.to_source(io)
+                    io << "\n"
+                end
+                io << "}"
             end
         end
     end

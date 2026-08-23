@@ -24,14 +24,15 @@ module Dragonstone
                 visitor.visit_module_definition(self)
             end
 
-            def to_source : String
-                body_source = body.map(&.to_source).join("; ")
-                header = visibility == :public ? "module #{name}" : "#{visibility} module #{name}"
-                if body_source.empty?
-                    "#{header}\nend"
-                else
-                    "#{header}\n  #{body_source}\nend"
+            def to_source(io : IO)
+                io << visibility << " " unless visibility == :public
+                io << "module " << name << "\n"
+                body.each do |stmt|
+                    io << "  "
+                    stmt.to_source(io)
+                    io << "\n"
                 end
+                io << "end"
             end
         end
     end

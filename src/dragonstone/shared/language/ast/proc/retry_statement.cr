@@ -17,7 +17,7 @@ module Dragonstone
             def to_source(io : IO)
                 io << "retry"
                 if cond = @condition
-                    io << " if "
+                    io << " " << (@condition_type || :if) << " "
                     cond.to_source(io)
                 end
             end

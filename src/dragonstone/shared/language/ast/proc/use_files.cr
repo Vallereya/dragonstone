@@ -49,15 +49,27 @@ module Dragonstone
                 # no op
             end
 
-            def to_source : String
-                return "use " + items.map { |it|
-                    case it.kind
+            # The `io` form, so this composes when nested. A no-arg-only renderer works
+            # standalone and raises the moment something renders it via `io`.
+            def to_source(io : IO)
+                io << "use "
+                items.each_with_index do |item, index|
+                    io << ", " if index > 0
+                    case item.kind
                     when UseItemKind::Paths
-                        it.specs.map(&.inspect).join(", ")
+                        item.specs.each_with_index do |spec, spec_index|
+                            io << ", " if spec_index > 0
+                            io << spec.inspect
+                        end
                     when UseItemKind::From
-                        "{ " + it.imports.map(&.to_source).join(", ") + " } from " + it.from.not_nil!.inspect
+                        io << "{ "
+                        item.imports.each_with_index do |import, import_index|
+                            io << ", " if import_index > 0
+                            io << import.to_source
+                        end
+                        io << " } from " << item.from.not_nil!.inspect
                     end
-                }.join(", ")
+                end
             end
         end
     end

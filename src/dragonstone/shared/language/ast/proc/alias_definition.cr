@@ -13,6 +13,11 @@ module Dragonstone
             def accept(visitor)
                 visitor.visit_alias_definition(self)
             end
+
+            def to_source(io : IO)
+                io << "alias " << name << " = "
+                type_expression.to_source(io)
+            end
         end
     end
 end

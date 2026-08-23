@@ -27,25 +27,19 @@ module Dragonstone
                 visitor.visit_assignment(self)
             end
 
-            def to_source : String
-                lhs = if type_annotation
-                    "#{name}: #{type_annotation.not_nil!.to_source}"
-                else
-                    name
-                end
-
-                if operator
-                    "#{lhs} #{operator} = #{value.to_source}"
-                else
-                    prefix = visibility == :public ? "" : "#{visibility} "
-                    "#{prefix}#{lhs} = #{value.to_source}"
-                end
-            end
-
             def to_source(io : IO)
+                io << visibility << " " unless operator || visibility == :public
                 io << name
-                io << " " << operator if operator
-                io << " = "
+                if type = type_annotation
+                    io << ": "
+                    type.to_source(io)
+                end
+
+                if op = operator
+                    io << " " << op << "= "
+                else
+                    io << " = "
+                end
                 value.to_source(io)
             end
         end

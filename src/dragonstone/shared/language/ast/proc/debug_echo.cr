@@ -13,8 +13,8 @@ module Dragonstone
                 visitor.visit_debug_echo(self)
             end
 
-            def to_source : String
-                expression.to_source
+            def to_source(io : IO)
+                expression.to_source(io)
             end
         end
     end

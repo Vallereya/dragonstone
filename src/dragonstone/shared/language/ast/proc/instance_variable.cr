@@ -12,8 +12,8 @@ module Dragonstone
                 visitor.visit_instance_variable(self)
             end
 
-            def to_source : String
-                "@#{@name}"
+            def to_source(io : IO)
+                io << "@" << @name
             end
         end
     end

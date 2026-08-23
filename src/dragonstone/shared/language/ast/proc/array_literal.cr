@@ -13,14 +13,19 @@ module Dragonstone
                 visitor.visit_array_literal(self)
             end
 
-            def to_source : String
-                rendered = "[#{elements.map(&.to_source).join(", ")}]"
+            def to_source(io : IO)
+                io << "["
+                @elements.each_with_index do |element, index|
+                    io << ", " if index > 0
+                    element.to_source(io)
+                end
+                io << "]"
+
                 if t = @element_type
-                    "#{rendered} as #{t.to_source}"
-                else
-                    rendered
+                    io << " as " << t.to_source
                 end
             end
+
         end
     end
 end

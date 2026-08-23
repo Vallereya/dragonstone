@@ -22,17 +22,20 @@ module Dragonstone
 
             def to_source(io : IO)
                 io << "rescue"
-                if !exceptions.empty?
+
+                if v = exception_variable
+                    io << " " << v
+                end
+
+                unless exceptions.empty?
+                    io << ":" if exception_variable
                     io << " "
                     exceptions.each_with_index do |type, i|
                         io << ", " if i > 0
                         io << type
                     end
                 end
-                if v = exception_variable
-                    io << " => "
-                    io << v
-                end
+
                 io << "\n"
                 body.each do |stmt|
                     stmt.to_source(io)

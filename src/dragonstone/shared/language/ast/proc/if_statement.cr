@@ -18,25 +18,29 @@ module Dragonstone
                 visitor.visit_if_statement(self)
             end
 
-            def to_source : String
-                String.build do |io|
-                    io << "if " << condition.to_source << "\n"
-                    emit_block_source(io, then_block)
-                    elsif_blocks.each do |clause|
-                        io << "elsif " << clause.condition.to_source << "\n"
-                        emit_block_source(io, clause.block)
-                    end
-                    if else_block
-                        io << "else\n"
-                        emit_block_source(io, else_block.not_nil!)
-                    end
-                    io << "end"
+            def to_source(io : IO)
+                io << "if "
+                condition.to_source(io)
+                io << "\n"
+                emit_block_source(io, then_block)
+                elsif_blocks.each do |clause|
+                    io << "elsif "
+                    clause.condition.to_source(io)
+                    io << "\n"
+                    emit_block_source(io, clause.block)
                 end
+                if block = else_block
+                    io << "else\n"
+                    emit_block_source(io, block)
+                end
+                io << "end"
             end
 
             private def emit_block_source(io : IO, nodes : Array(Node))
                 nodes.each do |node|
-                    io << "  " << node.to_source << "\n"
+                    io << "  "
+                    node.to_source(io)
+                    io << "\n"
                 end
             end
         end

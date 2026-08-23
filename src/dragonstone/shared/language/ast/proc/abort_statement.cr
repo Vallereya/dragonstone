@@ -12,11 +12,11 @@ module Dragonstone
                 visitor.visit_abort_statement(self)
             end
 
-            def to_source : String
-                if message
-                    "abort #{message.not_nil!.to_source}"
-                else
-                    "abort"
+            def to_source(io : IO)
+                io << "abort"
+                if node = message
+                    io << " "
+                    node.to_source(io)
                 end
             end
         end

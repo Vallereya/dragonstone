@@ -22,14 +22,28 @@ module Dragonstone
                 visitor.visit_para_literal(self)
             end
 
-            def to_source : String
-                params = typed_parameters.map(&.to_source).join(", ")
-                body_source = body.map(&.to_source).join("; ")
-                arrow = params.empty? ? "-> { #{body_source} }" : "->(#{params}) { #{body_source} }"
-                if return_type
-                    "#{arrow} : #{return_type.not_nil!.to_source}"
-                else
-                    arrow
+            def to_source(io : IO)
+                io << "->"
+                unless typed_parameters.empty?
+                    io << "("
+                    typed_parameters.each_with_index do |param, index|
+                        io << ", " if index > 0
+                        param.to_source(io)
+                    end
+                    io << ")"
+                end
+
+                io << " {\n"
+                body.each do |statement|
+                    io << "  "
+                    statement.to_source(io)
+                    io << "\n"
+                end
+                
+                io << "}"
+                if type = return_type
+                    io << " : "
+                    type.to_source(io)
                 end
             end
         end

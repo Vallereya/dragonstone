@@ -11,9 +11,14 @@ module Dragonstone
                 visitor.visit_yield_expression(self)
             end
 
-            def to_source : String
-                args = arguments.map(&.to_source).join(", ")
-                args.empty? ? "yield" : "yield #{args}"
+            def to_source(io : IO)
+                io << "yield"
+                return if arguments.empty?
+                io << " "
+                arguments.each_with_index do |argument, index|
+                    io << ", " if index > 0
+                    argument.to_source(io)
+                end
             end
         end
     end
