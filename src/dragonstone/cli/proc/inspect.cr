@@ -9,7 +9,7 @@ module Dragonstone
             filename = args[0]
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
-            handle_lex(filename, stdout)
+            handle_lex(filename, stdout, stderr)
         end
 
         def handle_parse_command(args : Array(String), stdout : IO, stderr : IO) : Int32
@@ -17,31 +17,51 @@ module Dragonstone
             filename = args[0]
             return ProcFileOps.handle_missing_file(filename, stderr) unless File.exists?(filename)
             ProcFileOps.warn_if_unknown_extension(filename, stderr)
-            handle_parse(filename, stdout)
+            handle_parse(filename, stdout, stderr)
         end
 
-        def handle_lex(filename : String, stdout : IO) : Int32
+        def handle_lex(filename : String, stdout : IO, stderr : IO = STDERR) : Int32
             source = ProcFileOps.read_source(filename)
             lexer  = Dragonstone::Lexer.new(source, source_name: filename)
             tokens = lexer.tokenize
             stdout.puts "------- Tokens for #{filename} -------"
             tokens.each { |t| stdout.puts t.to_s }
             return 0
+        rescue e : Dragonstone::Error
+            report_error(e, stderr)
+        rescue e
+            stderr.puts "UNEXPECTED ERROR: #{e.message}"
+            return 1
         end
 
-        def handle_parse(filename : String, stdout : IO) : Int32
+        def handle_parse(filename : String, stdout : IO, stderr : IO = STDERR) : Int32
             source = ProcFileOps.read_source(filename)
             lexer  = Dragonstone::Lexer.new(source, source_name: filename)
             tokens = lexer.tokenize
             parser = Dragonstone::Parser.new(tokens)
             ast    = parser.parse
-            stdout.puts "------- AST for #{filename} -------"
+            stdout.puts "-------- AST for #{filename} --------"
             print_ast(ast, 0, stdout)
             return 0
+        rescue e : Dragonstone::Error
+            report_error(e, stderr)
+        rescue e
+            stderr.puts "UNEXPECTED ERROR: #{e.message}"
+            return 1
+        end
+
+        # The `lex` and `parse` previously let parse/lex 
+        # errors escape as unhandled Crystal exceptions, 
+        # so a bad file produced a raw backtrace instead 
+        # of the actual diagnostic tag that `run` emits. 
+        private def report_error(error : Dragonstone::Error, stderr : IO) : Int32
+            stderr.puts "ERROR: #{error.message}"
+            return 1
         end
 
         def print_ast(node : Dragonstone::AST::Node, indent = 0, io : IO = STDOUT)
             prefix = "  " * indent
+
             case node
 
             when Dragonstone::AST::Program
@@ -55,7 +75,6 @@ module Dragonstone
                 else
                     io.puts "#{prefix}MethodCall: #{node.name}"
                 end
-                
                 node.arguments.each { |arg| print_ast(arg, indent + 1, io) }
 
             when Dragonstone::AST::DebugEcho
@@ -106,6 +125,7 @@ module Dragonstone
 
             when Dragonstone::AST::NamedTupleLiteral
                 io.puts "#{prefix}NamedTupleLiteral:"
+
                 node.entries.each do |entry|
                     entry_label = "#{entry.name}:"
                     entry_label += " #{entry.type_annotation.not_nil!.to_source}" if entry.type_annotation
@@ -212,7 +232,6 @@ module Dragonstone
                 else
                     io.puts "#{prefix}FunctionDef: #{sig}"
                 end
-
                 node.body.each { |stmt| print_ast(stmt, indent + 1, io) }
 
             when Dragonstone::AST::FunctionLiteral
@@ -228,21 +247,40 @@ module Dragonstone
                 if value = node.value
                     print_ast(value, indent + 1, io)
                 end
+
             when Dragonstone::AST::QuitStatement
                 io.puts "#{prefix}QuitStatement:"
 
                 if status = node.status
                     print_ast(status, indent + 1, io)
                 end
+
             when Dragonstone::AST::AbortStatement
                 io.puts "#{prefix}AbortStatement:"
 
                 if message = node.message
                     print_ast(message, indent + 1, io)
                 end
+
             else
-                io.puts "#{prefix}Unknown: #{node.class}"
+                # Bare type name, which is identical in 
+                # both stage0 and stage1.
+                #
+                # The stage1 reaches this same fallback for 
+                # node types neither inspector formats yet, 
+                # but its AST lives under 
+                # Dragonstone::Hybrid::Shared::AST rather 
+                # than Dragonstone::AST. Printing the 
+                # actual name would make the two stages be 
+                # different on every such node for a reason 
+                # that says nothing about the parse.
+                io.puts "#{prefix}Unknown: #{node_type_name(node)}"
             end
+        end
+
+        # "Dragonstone::AST::ClassDefinition" -> "ClassDefinition"
+        def node_type_name(node : Dragonstone::AST::Node) : String
+            node.class.to_s.split("::").last
         end
     end
 end
