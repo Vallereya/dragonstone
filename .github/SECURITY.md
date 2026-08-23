@@ -24,5 +24,4 @@ please _do not share them openly_ in the issue
 tracker. We have a dedicated mailbox where we 
 keep track of them:
 
-<issues@dragonstone-lang.org>
-
+[issues@dragonstone-lang.org](mailto:issues@dragonstone-lang.org)
