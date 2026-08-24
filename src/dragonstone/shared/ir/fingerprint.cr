@@ -28,6 +28,14 @@ module Dragonstone
                 case node
                 when AST::Program
                     io << "Program("
+                    unless node.use_decls.empty?
+                        io << "uses:["
+                        node.use_decls.each_with_index do |use_decl, index|
+                            io << "," if index > 0
+                            describe_node(use_decl, io)
+                        end
+                        io << "],"
+                    end
                     describe_sequence(node.statements, io)
                     io << ")"
                 when AST::Literal
@@ -145,7 +153,7 @@ module Dragonstone
                 when AST::UseDecl
                     io << "Use(" << node.to_source << ")"
                 else
-                    io << node.class.name
+                    io << node.class.name.split("::").last
                 end
             end
 
