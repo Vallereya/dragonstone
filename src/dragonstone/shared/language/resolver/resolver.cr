@@ -97,6 +97,11 @@ module Dragonstone
       topo_sort
     end
 
+    def resolve_parsed(entry_path : String, ast : AST::Program, typed : Bool = false) : Array(String)
+      visit_parsed(entry_path, ast, typed, metadata_for_entry(entry_path), parents: [] of String)
+      topo_sort
+    end
+
     def base_directory(path : String) : String
       remote_path?(path) ? remote_directory_name(path) : File.dirname(path)
     end
@@ -142,6 +147,16 @@ module Dragonstone
       ast = parse(processed_source, path)
       metadata = metadata_for_entry(path)
       ensure_metadata_supports_backend!(metadata) if metadata
+      visit_parsed(path, ast, typed, metadata, parents)
+    end
+
+    private def visit_parsed(
+      path : String,
+      ast : AST::Program,
+      typed : Bool,
+      metadata : Stdlib::ModuleMetadata?,
+      parents : Array(String)
+    )
       node = ModuleNode.new(path, ast, typed, metadata)
       graph.add(node)
       cache.set(path, ast)
