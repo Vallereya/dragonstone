@@ -12,7 +12,6 @@ module Dragonstone
 
         private def set_variable(name : String, value, location : Location? = nil, type_descriptor : Typing::Descriptor? = nil)
             binding_info = find_binding_with_scope(name)
-
             target_scope = current_scope
             scope_index = @scopes.size - 1
 
@@ -37,16 +36,17 @@ module Dragonstone
             end
 
             target_scope[name] = value
-
             assign_type_to_scope(scope_index, name, type_descriptor || descriptor) if typing_enabled?
             value
         end
 
         private def set_constant(name : String, value, location : Location? = nil)
             binding_info = find_binding_with_scope(name)
+
             if binding_info
                 runtime_error(ConstantError, "Constant #{name} already defined", location)
             end
+
             current_scope[name] = ConstantBinding.new(value)
             value
         end
@@ -55,6 +55,7 @@ module Dragonstone
             if container.constant?(name)
                 runtime_error(ConstantError, "Constant #{name} already defined in #{container.name}", node)
             end
+
             container.define_constant(name, value)
             value
         end
@@ -62,7 +63,6 @@ module Dragonstone
         private def lookup_constant_value(name : String)
             constant_info = lookup_container_constant(name)
             return constant_info[:value] if constant_info[:found]
-
             binding = find_binding(name)
             unwrap_binding(binding) if binding
         end
@@ -72,18 +72,43 @@ module Dragonstone
                 if name == "self"
                     return {found: true, value: container}
                 end
-                if container.constant?(name)
-                    return {found: true, value: container.fetch_constant(name)}
+
+                enclosing = container
+                while enclosing
+                    if enclosing.constant?(name)
+                        return {found: true, value: enclosing.fetch_constant(name)}
+                    end
+                    enclosing = enclosing.lexical_parent
                 end
             end
             {found: false, value: nil}
         end
 
+        private def current_scope_floor : Int32
+            @scope_floors.last? || 0
+        end
+
+        private def push_scope_floor(floor : Int32)
+            @scope_floors << floor
+        end
+
+        private def pop_scope_floor
+            @scope_floors.pop?
+        end
+
         private def find_binding_with_scope(name : String)
-            (@scopes.size - 1).downto(0) do |index|
+            floor = current_scope_floor
+
+            (@scopes.size - 1).downto(floor) do |index|
                 scope = @scopes[index]
                 return {index: index, scope: scope, value: scope[name]?} if scope.has_key?(name)
             end
+
+            if floor > 0
+                scope = @scopes[0]
+                return {index: 0, scope: scope, value: scope[name]?} if scope.has_key?(name)
+            end
+
             nil
         end
 
@@ -313,7 +338,7 @@ module Dragonstone
         end
 
         private def current_self_instance(node : AST::Node) : DragonInstance
-            self_value = current_scope["self"]?
+            self_value = unwrap_binding(find_binding("self"))
             unless self_value && self_value.is_a?(DragonInstance)
                 runtime_error(InterpreterError, "Instance variables can only be accessed inside instance methods", node)
             end
@@ -403,7 +428,7 @@ module Dragonstone
                 end
 
                 owner_class = owner.as(DragonClass)
-                caller_self = current_scope["self"]?
+                caller_self = unwrap_binding(find_binding("self"))
                 unless caller_self && caller_self.is_a?(DragonInstance)
                     runtime_error(InterpreterError, "Protected method '#{method.name}' can only be called from within #{owner_class.name} or its subclasses", node)
                 end
