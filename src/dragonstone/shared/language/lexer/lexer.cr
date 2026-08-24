@@ -117,8 +117,8 @@ module Dragonstone
         getter source_name : String
 
         def initialize(source : String, source_name : String = "<source>")
-            @source = source
             @source_name = source_name
+            @chars = source.chars
             @pos = 0
             @line = 1
             @column = 1
@@ -431,14 +431,14 @@ module Dragonstone
         end
 
         private def current_char : Char?
-            return nil if @pos >= @source.size
-            @source[@pos]
+            return nil if @pos >= @chars.size
+            @chars.unsafe_fetch(@pos)
         end
 
         private def peek_char(offset = 1) : Char?
             index = @pos + offset
-            return nil if index >= @source.size
-            @source[index]
+            return nil if index < 0 || index >= @chars.size
+            @chars.unsafe_fetch(index)
         end
 
         private def advance(count = 1)
@@ -573,7 +573,7 @@ module Dragonstone
             trailing = current_char
             if trailing && trailing_identifier_char?(trailing)
                 if trailing == '=' && (peek_char == '=' || peek_char == '>')
-                    # Treat as operator token instead of identifier suffix
+                    # Treat as operator token instead of identifier suffix.
                 else
                     identifier << trailing
                     advance
@@ -602,8 +602,8 @@ module Dragonstone
                     when "end" then :END
                     when "while" then :WHILE
                     when "do" then :DO
-                    when "def", "define" then :DEF
-                    when "fun", "function" then :FUN
+                    when "def", "define" then :DEFINE
+                    when "fun", "function" then :FUNCTION
                     when "abstract", "abs" then :ABSTRACT
                     when "module", "mod" then :MODULE
                     when "class", "cls" then :CLASS
@@ -668,7 +668,7 @@ module Dragonstone
         private def scan_instance_variable
             start_line = @line
             start_col = @column
-            advance # consume first '@'
+            advance
 
             at_count = 1
             while current_char == '@'
@@ -706,26 +706,100 @@ module Dragonstone
         private def scan_number
             start_line = @line
             start_col = @column
-            number = String::Builder.new
 
-            while (char = current_char) && char.ascii_number?
-                number << char
-                advance
+            if current_char == '0'
+                radix = case peek_char
+                    when 'x', 'X' then 16
+                    when 'b', 'B' then 2
+                    when 'o', 'O' then 8
+                    else nil
+                    end
+
+                if radix && radix_digit?(peek_char(2), radix)
+                    return scan_prefixed_number(radix, start_line, start_col)
+                end
             end
+
+            number = String::Builder.new
+            scan_digits(number, 10)
+            is_float = false
 
             if current_char == '.' && peek_char.try(&.ascii_number?)
+                is_float = true
                 number << '.'
                 advance
-                while (char = current_char) && char.ascii_number?
-                    number << char
-                    advance
-                end
-                number_str = number.to_s  # Convert to String first
-                add_token(:FLOAT, number_str.to_f64, start_line, start_col, number_str.size)
-            else
-                number_str = number.to_s  # Convert to String first
-                add_token(:INTEGER, number_str.to_i64, start_line, start_col, number_str.size)
+                scan_digits(number, 10)
             end
+
+            marker = current_char
+            if marker == 'e' || marker == 'E'
+                sign = peek_char
+                signed = sign == '+' || sign == '-'
+
+                if peek_char(signed ? 2 : 1).try(&.ascii_number?)
+                    is_float = true
+                    number << 'e'
+                    advance
+
+                    if signed
+                        number << sign
+                        advance
+                    end
+
+                    scan_digits(number, 10)
+                end
+            end
+
+            text = number.to_s
+            length = @column - start_col
+
+            if is_float
+                add_token(:FLOAT, text.to_f64, start_line, start_col, length)
+            else
+                value = text.to_i64?
+                unless value
+                    raise error_at(start_line, start_col, "Integer literal #{text} is out of range for Int")
+                end
+                add_token(:INTEGER, value, start_line, start_col, length)
+            end
+        end
+
+        private def scan_prefixed_number(radix : Int32, start_line : Int32, start_col : Int32)
+            advance(2)
+
+            digits = String::Builder.new
+            scan_digits(digits, radix)
+            text = digits.to_s
+
+            value = text.to_i64?(radix)
+            unless value
+                raise error_at(start_line, start_col, "Integer literal is out of range for Int")
+            end
+
+            add_token(:INTEGER, value, start_line, start_col, @column - start_col)
+        end
+
+        private def scan_digits(builder : String::Builder, radix : Int32) : Nil
+            loop do
+                char = current_char
+
+                if radix_digit?(char, radix)
+                    builder << char
+                    advance
+                elsif char == '_'
+                    unless radix_digit?(peek_char, radix)
+                        raise error_at(@line, @column, "Trailing '_' in number literal")
+                    end
+                    advance
+                else
+                    break
+                end
+            end
+        end
+
+        private def radix_digit?(char : Char?, radix : Int32) : Bool
+            return false unless char
+            !char.to_i?(radix).nil?
         end
 
         private def scan_char
@@ -782,7 +856,7 @@ module Dragonstone
 
             return true if @pos.zero?
             previous_index = @pos - 1
-            previous_char = @source[previous_index]?
+            previous_char = @chars[previous_index]?
             return true unless previous_char && identifier_part?(previous_char)
             false
         end
@@ -891,7 +965,7 @@ module Dragonstone
             end
 
             value = digits.to_s.to_i(16)
-            advance # consume closing brace
+            advance
             value
         end
 
