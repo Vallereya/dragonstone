@@ -12,22 +12,17 @@ module Dragonstone
             @debug_inline_sources.clear
             @debug_inline_values.clear
 
-            @output += "#{source} # -> #{value}"
-            @output += "\n"
-            puts "#{source} # -> #{value}" if @log_to_stdout
+            @stdout.puts "#{source} # -> #{value}"
         end
 
         private def append_output(text : String)
             flush_debug_inline
-            @output += text
-            @output += "\n"
-            puts text if @log_to_stdout
+            @stdout.puts text
         end
 
         private def append_output_inline(text : String)
             flush_debug_inline
-            @output += text
-            print text if @log_to_stdout
+            @stdout.print text
         end
 
         private def append_debug_inline(source : String, value : String)
