@@ -174,9 +174,9 @@ module Dragonstone
             constant_info = lookup_container_constant(node.name)
             return constant_info[:value] if constant_info[:found]
 
-            if self_value = current_scope["self"]?
+            if self_value = find_binding("self")
                 method_call = AST::MethodCall.new(node.name, [] of AST::Node, nil, location: node.location)
-                return call_receiver_method(self_value, method_call, [] of AST::Node, nil, implicit_self: true)
+                return call_receiver_method(unwrap_binding(self_value), method_call, [] of AST::Node, nil, implicit_self: true)
             end
 
             runtime_error(NameError, "Undefined variable or constant: #{node.name}", node)
@@ -323,7 +323,15 @@ module Dragonstone
         end
 
         def visit_block_literal(node : AST::BlockLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, current_scope, current_type_scope)
+            Function.new(
+                nil,
+                node.typed_parameters,
+                node.body,
+                current_scope,
+                current_type_scope,
+                is_block: true,
+                owner_frame: current_return_target
+            )
         end
 
         def visit_interpolated_string(node : AST::InterpolatedString) : RuntimeValue?
@@ -589,7 +597,7 @@ module Dragonstone
         end
 
         def visit_function_literal(node : AST::FunctionLiteral) : RuntimeValue?
-            Function.new(nil, node.typed_parameters, node.body, @scopes.first, @type_scopes.first, node.rescue_clauses, node.return_type)
+            Function.new(nil, node.typed_parameters, node.body, @scopes.first, @type_scopes.first, node.rescue_clauses, node.return_type, non_capturing: true)
         end
 
         private def define_singleton_method(target, node : AST::FunctionDef, closure : Scope, type_closure : TypeScope)
@@ -703,12 +711,14 @@ module Dragonstone
 
         def visit_return_statement(node : AST::ReturnStatement) : RuntimeValue?
             value = node.value ? node.value.not_nil!.accept(self) : nil
-            raise ReturnValue.new(value)
+            raise ReturnValue.new(value, current_return_target)
         end
 
         def visit_quit_statement(node : AST::QuitStatement) : RuntimeValue?
             status_value = node.status ? node.status.not_nil!.accept(self) : 0
             status = coerce_int64(status_value, node).to_i64
+            flush_debug_inline
+            @stdout.flush
             DragonstoneABI.dragonstone_io_quit(status)
             nil
         end
@@ -716,6 +726,8 @@ module Dragonstone
         def visit_abort_statement(node : AST::AbortStatement) : RuntimeValue?
             message_value = node.message ? node.message.not_nil!.accept(self) : nil
             message = message_value.nil? ? "Aborted" : message_value.to_s
+            flush_debug_inline
+            @stdout.flush
             DragonstoneABI.dragonstone_io_abort(message.to_unsafe)
             nil
         end
@@ -746,6 +758,7 @@ module Dragonstone
             else
                 new_module = DragonModule.new(node.name)
                 if container
+                    new_module.lexical_parent = container
                     define_container_constant(container, node.name, new_module, node)
                 else
                     set_constant(node.name, new_module, location: node.location)
@@ -802,6 +815,7 @@ module Dragonstone
                 end
                 new_class = DragonClass.new(node.name, superclass, node.abstract)
                 if container
+                    new_class.lexical_parent = container
                     define_container_constant(container, node.name, new_class, node)
                 else
                     set_constant(node.name, new_class, location: node.location)
@@ -858,6 +872,7 @@ module Dragonstone
             else
                 new_struct = DragonStruct.new(node.name)
                 if container
+                    new_struct.lexical_parent = container
                     define_container_constant(container, node.name, new_struct, node)
                 else
                     set_constant(node.name, new_struct, location: node.location)
@@ -897,6 +912,7 @@ module Dragonstone
 
             enum_type = DragonEnum.new(node.name, accessor_name, node.value_type)
             if container
+                enum_type.lexical_parent = container
                 define_container_constant(container, node.name, enum_type, node)
             else
                 set_constant(node.name, enum_type, location: node.location)
