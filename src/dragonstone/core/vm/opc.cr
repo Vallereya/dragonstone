@@ -110,5 +110,10 @@ module Dragonstone
         MAKE_PARA       = 108   # [MAKE_PARA, signature_const, chunk_const]                 -> push capturing para literal
         QUIT            = 109   # QUIT                                                      -> pop exit status and terminate process
         ABORT           = 110   # ABORT                                                     -> pop message and terminate process
+        RET_BLOCK       = 111   # RET_BLOCK                                                 -> explicit `return` inside a |...| block: non-local, unwinds to the method that wrote the block
+        INVOKE_NAMED    = 112   # [INVOKE_NAMED, name_index, argc, names_const]             -> invoke method on receiver, trailing args carry names
+        CALL_NAMED      = 113   # [CALL_NAMED, argc, name_index, names_const]               -> call function, trailing args carry names
+        CASE_EQ         = 114   # CASE_EQ                                                   -> pop pattern, pop value, push `pattern === value` (case equality)
+        DECLARE_IVAR    = 115   # [DECLARE_IVAR, name_index]                                -> record a declared instance variable on the current container
     end
 end
