@@ -36,10 +36,12 @@ module Dragonstone
 
         class ParameterSpec
             getter name_index : Int32
+            getter name : String
             getter type_expression : AST::TypeExpression?
             getter ivar_name : String?
+            getter default_code : CompiledCode?
 
-            def initialize(@name_index : Int32, @type_expression : AST::TypeExpression?, @ivar_name : String? = nil)
+            def initialize(@name_index : Int32, @name : String, @type_expression : AST::TypeExpression?, @ivar_name : String? = nil, @default_code : CompiledCode? = nil)
             end
         end
 
@@ -78,8 +80,9 @@ module Dragonstone
         class BlockValue
             getter signature : FunctionSignature
             getter code : CompiledCode
+            getter owner_frame_id : UInt64?
 
-            def initialize(@signature : FunctionSignature, @code : CompiledCode)
+            def initialize(@signature : FunctionSignature, @code : CompiledCode, @owner_frame_id : UInt64? = nil)
             end
         end
 
@@ -155,6 +158,14 @@ module Dragonstone
                 @entries.delete(key)
             end
 
+            def has_key?(key : Value) : Bool
+                @entries.has_key?(key)
+            end
+
+            def has_value?(value : Value) : Bool
+                @entries.has_value?(value)
+            end
+
             def each
                 @entries.each do |key, value|
                     yield key, value
@@ -182,11 +193,16 @@ module Dragonstone
             getter constants : Hash(String, Value)
             getter ivars : Hash(String, Value)
             getter methods : Hash(String, FunctionValue)
+            getter singleton_methods : Hash(String, FunctionValue)
+
+            property lexical_parent : ModuleValue?
 
             def initialize(@name : String)
                 @constants = {} of String => Value
                 @ivars = {} of String => Value
                 @methods = {} of String => FunctionValue
+                @singleton_methods = {} of String => FunctionValue
+                @lexical_parent = nil
             end
 
             def define_constant(name : String, value : Value)
@@ -204,15 +220,48 @@ module Dragonstone
             def lookup_method(name : String)
                 @methods[name]?
             end
+
+            def define_singleton_method(name : String, fn : FunctionValue)
+                @singleton_methods[name] = fn
+            end
+
+            def lookup_singleton_method(name : String) : FunctionValue?
+                @singleton_methods[name]?
+            end
+
+            def merge_from!(other : ModuleValue) : Nil
+                other.methods.each do |name, method|
+                    @methods[name] = method
+                end
+
+                other.singleton_methods.each do |name, method|
+                    @singleton_methods[name] = method
+                end
+
+                other.constants.each do |name, value|
+                    existing = @constants[name]?
+                    if existing.is_a?(ModuleValue) && value.is_a?(ModuleValue)
+                        existing.as(ModuleValue).merge_from!(value.as(ModuleValue))
+                    else
+                        @constants[name] = value
+                    end
+                end
+            end
         end
 
         class ClassValue < ModuleValue
             getter superclass : ClassValue?
             getter? abstract : Bool
+            getter ivar_names : Array(String)
 
             def initialize(name : String, @superclass : ClassValue? = nil, is_abstract : Bool = false)
                 super(name)
                 @abstract = is_abstract
+                @ivar_names = @superclass.try(&.ivar_names.dup) || [] of String
+            end
+
+            def register_ivar(name : String) : Nil
+                @ivar_names << name unless @ivar_names.includes?(name)
             end
 
             def lookup_method(name : String)
@@ -358,5 +407,7 @@ module Dragonstone
         code : Array(Int32),
         consts : Array(Bytecode::Value),
         names : Array(String),
-        locals_count : Int32
+        locals_count : Int32,
+        lines : Array(Int32) = [] of Int32,
+        cols : Array(Int32) = [] of Int32
 end
