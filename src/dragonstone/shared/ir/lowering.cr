@@ -17,7 +17,7 @@ module Dragonstone
                     extend self
                     @@last_failure : String?
 
-                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :"**", :"&**", :&, :|, :^, :<<, :>>, :==, :!=, :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
+                    SUPPORTED_BINARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :*, :"&*", :/, :"//", :%, :"**", :"&**", :&, :|, :^, :<<, :>>, :==, :!=, :"===", :<, :<=, :>, :>=, :"&&", :"||", :"<=>"}
                     SUPPORTED_RANGE_OPERATORS = Set{:"..", :"..."}
                     SUPPORTED_UNARY_OPERATORS = Set{:+, :"&+", :-, :"&-", :!, :~}
 
@@ -59,18 +59,25 @@ module Dragonstone
                         when AST::AliasDefinition
                             true
                         when AST::BinaryOp
-                            (SUPPORTED_BINARY_OPERATORS.includes?(node.operator) || SUPPORTED_RANGE_OPERATORS.includes?(node.operator)) &&
-                                node_supported?(node.left) &&
-                                node_supported?(node.right)
+                            if SUPPORTED_BINARY_OPERATORS.includes?(node.operator) || SUPPORTED_RANGE_OPERATORS.includes?(node.operator)
+                                node_supported?(node.left) && node_supported?(node.right)
+                            else
+                                unsupported_operator(node.operator)
+                            end
                         when AST::UnaryOp
-                            SUPPORTED_UNARY_OPERATORS.includes?(node.operator) &&
+                            if SUPPORTED_UNARY_OPERATORS.includes?(node.operator)
                                 node_supported?(node.operand)
+                            else
+                                unsupported_operator(node.operator)
+                            end
                         when AST::ConditionalExpression
                             node_supported?(node.condition) &&
                                 node_supported?(node.then_branch) &&
                                 node_supported?(node.else_branch)
                         when AST::SuperCall
                             nodes_supported?(node.arguments)
+                        when AST::NamedArgument
+                            node_supported?(node.value)
                         when AST::MethodCall
                             receiver_supported = node.receiver.nil? || node_supported?(node.receiver.not_nil!)
                             receiver_supported && nodes_supported?(node.arguments)
@@ -95,16 +102,21 @@ module Dragonstone
                         when AST::MapLiteral
                             node.entries.all? { |(key_node, value_node)| node_supported?(key_node) && node_supported?(value_node) }
                         when AST::IndexAccess
-                            !node.nil_safe && node_supported?(node.object) && node_supported?(node.index)
+                            node_supported?(node.object) && node_supported?(node.index)
                         when AST::IndexAssignment
-                            node.operator.nil? && !node.nil_safe &&
+                            if !node.operator.nil?
+                                unsupported_operator(node.operator.not_nil!)
+                            else
                                 node_supported?(node.object) &&
-                                node_supported?(node.index) &&
-                                node_supported?(node.value)
+                                    node_supported?(node.index) &&
+                                    node_supported?(node.value)
+                            end
                         when AST::AttributeAssignment
-                            (node.operator.nil? || SUPPORTED_BINARY_OPERATORS.includes?(node.operator)) &&
-                                node_supported?(node.receiver) &&
-                                node_supported?(node.value)
+                            if node.operator.nil? || SUPPORTED_BINARY_OPERATORS.includes?(node.operator)
+                                node_supported?(node.receiver) && node_supported?(node.value)
+                            else
+                                unsupported_operator(node.operator.not_nil!)
+                            end
                         when AST::ConstantPath
                             true
                         when AST::InstanceVariable, AST::InstanceVariableAssignment
@@ -175,8 +187,14 @@ module Dragonstone
                                 true
                             when :expression
                                 expression_node = interpolation_expression_node(content)
-                                expression_node && node_supported?(expression_node)
+                                if expression_node
+                                    node_supported?(expression_node)
+                                else
+                                    @@last_failure = "interpolation #{content.to_s.inspect}"
+                                    false
+                                end
                             else
+                                @@last_failure = "interpolation part #{type}"
                                 false
                             end
                         end
@@ -193,6 +211,18 @@ module Dragonstone
                         nil
                     end
 
+                    private def unsupported_feature(what : String) : Bool
+                        @@last_failure = what
+                        STDERR.puts "VM unsupported: #{what}" if ENV["DS_DEBUG_VM_SUPPORT"]?
+                        false
+                    end
+
+                    private def unsupported_operator(operator : Symbol) : Bool
+                        @@last_failure = "operator #{operator}"
+                        STDERR.puts "VM unsupported operator: #{operator}" if ENV["DS_DEBUG_VM_SUPPORT"]?
+                        false
+                    end
+
                     private def debug_unsupported(node : AST::Node) : Nil
                         @@last_failure = node.class.name
                         return unless ENV["DS_DEBUG_VM_SUPPORT"]?
@@ -203,8 +233,9 @@ module Dragonstone
                 module Interpreter
                     extend self
 
+                    # Interpreter backend currently serves as the fallback 
+                    # and accepts all AST nodes.
                     def supports?(program : AST::Program) : Bool
-                        # Interpreter backend currently serves as the fallback and accepts all AST nodes.
                         !program.nil?
                     end
                 end
