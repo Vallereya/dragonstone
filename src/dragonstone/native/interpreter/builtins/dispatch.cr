@@ -39,10 +39,26 @@ module Dragonstone
 
             when String
                 idx = index_to_int(index, node)
-                object[idx]?
+                string_char_at(object, idx)
             else
                 runtime_error(TypeError, "Cannot index #{object.class}", node)
             end
+        end
+
+        # Decoded characters for string.
+        private def string_chars(string : String) : Array(Char)
+            cached = @string_char_cache
+            return cached[1] if cached && cached[0].same?(string)
+
+            chars = string.chars
+            @string_char_cache = {string, chars}
+            chars
+        end
+
+        private def string_char_at(string : String, index : Int32) : Char?
+            # skip the cache so they cost no memory.
+            return string[index]? if string.ascii_only?
+            string_chars(string)[index]?
         end
 
         private def assign_index_value(object, index, value, node : AST::Node)
@@ -320,6 +336,19 @@ module Dragonstone
                 case operator
                 when :<<
                     append_output_inline(display_value(right))
+                    return left
+                when :>>
+                    runtime_error(TypeError, "Unsupported operands for >>", node)
+                end
+            end
+
+            # `array << value` appends and returns the array, so it chains.
+            # Handled here rather than as a method because `<<` reaches the
+            # runtime as a binary operator.
+            if left.is_a?(Array(RuntimeValue))
+                case operator
+                when :<<
+                    left.as(Array(RuntimeValue)) << right.as(RuntimeValue)
                     return left
                 when :>>
                     runtime_error(TypeError, "Unsupported operands for >>", node)
@@ -609,8 +638,8 @@ module Dragonstone
                         runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
                 else
-                    if self_value = current_scope["self"]?
-                        call_receiver_method(self_value, node, arg_nodes, block_value, implicit_self: true)
+                    if self_value = find_binding("self")
+                        call_receiver_method(unwrap_binding(self_value), node, arg_nodes, block_value, implicit_self: true)
                     else
                         runtime_error(NameError, "Unknown method or variable: #{node.name}", node)
                     end
@@ -622,6 +651,7 @@ module Dragonstone
         private def call_receiver_method(receiver, node : AST::MethodCall, arg_nodes : Array(AST::Node), block_value : Function?, implicit_self : Bool = false)
             receiver = receiver.value if receiver.is_a?(ConstantBinding)
             args = evaluate_arguments(arg_nodes)
+            arg_names = argument_names(arg_nodes)
             conversion_call = conversion_method?(node.name)
 
             if node.name == "nil?"
@@ -634,18 +664,48 @@ module Dragonstone
                 return receiver.nil?
             end
 
+            if node.name == "object_id"
+                if block_value
+                    runtime_error(InterpreterError, "object_id does not accept a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "object_id does not take arguments", node)
+                end
+                identity = singleton_identity(receiver)
+                return identity.nil? ? nil : identity.to_i64
+            end
+
+            if node.name == "not_nil!"
+                if block_value
+                    runtime_error(InterpreterError, "not_nil! does not accept a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "not_nil! does not take arguments", node)
+                end
+                if receiver.nil?
+                    runtime_error(NilAssertionError, "not_nil! called on nil", node)
+                end
+                return receiver
+            end
+
             if singleton_info = lookup_singleton_method(receiver, node.name)
                 method = singleton_info[:method]
                 owner = singleton_info[:owner]
                 ensure_method_visible!(receiver, method, node, implicit_self)
                 with_singleton_container(owner) do
-                    return call_bound_method(owner, method, args, block_value, node.location, self_object: receiver)
+                    return call_bound_method(owner, method, args, block_value, node.location, self_object: receiver, arg_names: arg_names)
                 end
             end
 
             if conversion_call && !supports_custom_methods?(receiver)
                 ensure_conversion_call_valid(args, block_value, node)
                 return conversion_result_for(receiver, node.name)
+            end
+
+            # `DragonModule`/`DragonInstance`/`DragonClass` fall through to
+            # `call_bound_method` and `instantiate_class`, which do the matching.
+            if arg_names && !supports_custom_methods?(receiver) && !receiver.is_a?(DragonClass)
+                reject_named_arguments!(arg_nodes, "#{get_type_name(receiver)}##{node.name}", node.location)
             end
 
             case receiver
@@ -815,7 +875,7 @@ module Dragonstone
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
                     with_container(receiver) do
-                        call_bound_method(receiver, method, args, block_value, node.location)
+                        call_bound_method(receiver, method, args, block_value, node.location, arg_names: arg_names)
                     end
                 end
 
@@ -824,11 +884,16 @@ module Dragonstone
                     if block_value
                         runtime_error(InterpreterError, "#{receiver.name}.new does not accept a block", node)
                     end
-                    instantiate_class(receiver, args, node)
+                    instantiate_class(receiver, args, node, arg_names)
 
                 else
                     method = receiver.lookup_method(node.name)
                     unless method
+                        # A class answers its own name unless it defines a
+                        # method called `name`.
+                        if node.name == "name" && args.empty? && block_value.nil?
+                            return receiver.name
+                        end
                         if conversion_call
                             ensure_conversion_call_valid(args, block_value, node)
                             return conversion_result_for(receiver, node.name)
@@ -838,7 +903,7 @@ module Dragonstone
                     method = method.not_nil!
                     ensure_method_visible!(receiver, method, node, implicit_self)
                     with_container(receiver) do
-                        call_bound_method(receiver, method, args, block_value, node.location)
+                        call_bound_method(receiver, method, args, block_value, node.location, arg_names: arg_names)
                     end
                 end
 
@@ -854,12 +919,18 @@ module Dragonstone
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
                 with_container(receiver) do
-                    call_bound_method(receiver, method, args, block_value, node.location)
+                    call_bound_method(receiver, method, args, block_value, node.location, arg_names: arg_names)
                 end
 
             when DragonInstance
                 method = receiver.klass.lookup_method(node.name)
                 unless method
+                    # `.class` answers the object's class, unless the class
+                    # defines its own. Now that the parser accepts `class`
+                    # after a dot this is reachable from source.
+                    if node.name == "class" && args.empty? && block_value.nil?
+                        return receiver.klass
+                    end
                     if conversion_call
                         ensure_conversion_call_valid(args, block_value, node)
                         return conversion_result_for(receiver, node.name)
@@ -869,7 +940,7 @@ module Dragonstone
                 method = method.not_nil!
                 ensure_method_visible!(receiver, method, node, implicit_self)
                 with_container(receiver.klass) do
-                    call_bound_method(receiver.klass, method, args, block_value, node.location, self_object: receiver)
+                    call_bound_method(receiver.klass, method, args, block_value, node.location, self_object: receiver, arg_names: arg_names)
                 end
 
             when DragonEnumMember
@@ -1454,10 +1525,348 @@ module Dragonstone
                 end
                 found
 
+            # `until` under its Ruby/Crystal name. The two are the same method;
+            # `find` is what callers reach for.
+            when "find"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                found_value : RuntimeValue = nil
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        if truthy?(outcome[:value])
+                            found_value = element.as(RuntimeValue)
+                            break
+                        end
+                    end
+                end
+                found_value
+
+            when "reject"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                result = [] of RuntimeValue
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        unless truthy?(outcome[:value])
+                            result << element.as(RuntimeValue)
+                        end
+                    end
+                end
+                result
+
+            # Flattens one level only, like Crystal and Ruby. A block returning
+            # a nested array keeps that nesting.
+            when "flat_map"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                result = [] of RuntimeValue
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        mapped = normalize_runtime_value(outcome[:value], node)
+                        if mapped.is_a?(Array(RuntimeValue))
+                            mapped.each { |inner| result << inner }
+                        else
+                            result << mapped
+                        end
+                    end
+                end
+                result
+
+            # `map` then drop the nils, in one pass.
+            when "compact_map"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                result = [] of RuntimeValue
+                run_enumeration_loop do
+                    array.each do |element|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                        mapped = normalize_runtime_value(outcome[:value], node)
+                        result << mapped unless mapped.nil?
+                    end
+                end
+                result
+
+            when "each_with_index"
+                unless block_value
+                    runtime_error(InterpreterError, "Array##{name} requires a block", node)
+                end
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                block = block_value.not_nil!
+                run_enumeration_loop do
+                    array.each_with_index do |element, index|
+                        outcome = execute_loop_iteration(block, [element.as(RuntimeValue), index.to_i64.as(RuntimeValue)], node)
+                        next if outcome[:state] == :next
+                    end
+                end
+                array
+
+            # With a block: does any element satisfy it. Without: is any element
+            # truthy, which is not the same as `!empty?`, since `[nil]` is
+            # non-empty but has nothing truthy in it.
+            when "any?"
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                matched = false
+                if block = block_value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                            next if outcome[:state] == :next
+                            if truthy?(outcome[:value])
+                                matched = true
+                                break
+                            end
+                        end
+                    end
+                else
+                    array.each do |element|
+                        if truthy?(element)
+                            matched = true
+                            break
+                        end
+                    end
+                end
+                matched
+
+            when "all?"
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                all_matched = true
+                if block = block_value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                            next if outcome[:state] == :next
+                            unless truthy?(outcome[:value])
+                                all_matched = false
+                                break
+                            end
+                        end
+                    end
+                else
+                    array.each do |element|
+                        unless truthy?(element)
+                            all_matched = false
+                            break
+                        end
+                    end
+                end
+                all_matched
+
+            when "none?"
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                none_matched = true
+                if block = block_value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                            next if outcome[:state] == :next
+                            if truthy?(outcome[:value])
+                                none_matched = false
+                                break
+                            end
+                        end
+                    end
+                else
+                    array.each do |element|
+                        if truthy?(element)
+                            none_matched = false
+                            break
+                        end
+                    end
+                end
+                none_matched
+
+            # No args is the size; one arg counts equal elements; a block counts
+            # the elements it accepts.
+            when "count"
+                if block = block_value
+                    unless args.empty?
+                        runtime_error(InterpreterError, "Array##{name} takes a block or an argument, not both", node)
+                    end
+                    total = 0_i64
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_loop_iteration(block, [element.as(RuntimeValue)], node)
+                            next if outcome[:state] == :next
+                            total += 1 if truthy?(outcome[:value])
+                        end
+                    end
+                    total
+                elsif args.size == 1
+                    needle = args.first
+                    array.count { |element| runtime_values_equal?(element, needle, node) }.to_i64
+                elsif args.empty?
+                    array.size.to_i64
+                else
+                    runtime_error(InterpreterError, "Array##{name} expects 0 or 1 argument, got #{args.size}", node)
+                end
+
+            when "includes?", "member?", "contains?"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Array##{name} expects 1 argument, got #{args.size}", node)
+                end
+                needle = args.first
+                array.any? { |element| runtime_values_equal?(element, needle, node) }
+
+            # The position of the first equal element, or nil.
+            when "index"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Array##{name} expects 1 argument, got #{args.size}", node)
+                end
+                needle = args.first
+                position = array.index { |element| runtime_values_equal?(element, needle, node) }
+                position ? position.to_i64 : nil
+
+            # First occurrence wins, order preserved. O(n^2), which is fine at
+            # the sizes this runs on and keeps `==` overloads honoured; a hash
+            # would need a hash function that agrees with them.
+            when "uniq"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                array.each do |element|
+                    already = result.any? { |seen| runtime_values_equal?(seen, element, node) }
+                    result << element.as(RuntimeValue) unless already
+                end
+                result
+
+            when "compact"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                result = [] of RuntimeValue
+                array.each { |element| result << element.as(RuntimeValue) unless element.nil? }
+                result
+
+            when "reverse"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                array.reverse
+
+            # A shallow copy: a new array holding the same elements, so
+            # appending to one does not show up in the other. The elements
+            # themselves are shared.
+            when "dup"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                array.dup
+
+            # Elements render with `display_value`, so `[1, 2].join("-")` is
+            # "1-2" and not the inspected form. Separator defaults to "".
+            when "join"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.size <= 1
+                    runtime_error(InterpreterError, "Array##{name} expects 0 or 1 argument, got #{args.size}", node)
+                end
+                separator = if args.empty?
+                    ""
+                else
+                    first_arg = args.first
+                    unless first_arg.is_a?(String)
+                        runtime_error(TypeError, "Array##{name} separator must be a String", node)
+                    end
+                    first_arg.as(String)
+                end
+                String.build do |io|
+                    array.each_with_index do |element, index|
+                        io << separator unless index == 0
+                        io << display_value(element)
+                    end
+                end
+
+            # Non-mutating, like Ruby's. Ordering goes through `compare_values`,
+            # so a mixed-type array raises rather than sorting arbitrarily.
+            when "sort"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.empty?
+                    runtime_error(InterpreterError, "Array##{name} does not take arguments", node)
+                end
+                array.dup.sort! do |left_element, right_element|
+                    ordering = compare_values(left_element, :<=>, right_element, node)
+                    unless ordering.is_a?(Int64) || ordering.is_a?(Int32)
+                        runtime_error(TypeError, "Array##{name} needs <=> to return an Integer", node)
+                    end
+                    ordering.to_i
+                end
+
+            # Mutating, like Ruby's; appends in place and returns the receiver.
+            when "concat"
+                reject_block(block_value, "Array##{name}", node)
+                unless args.size == 1
+                    runtime_error(InterpreterError, "Array##{name} expects 1 argument, got #{args.size}", node)
+                end
+                other = args.first
+                unless other.is_a?(Array(RuntimeValue))
+                    runtime_error(TypeError, "Array##{name} expects an Array, got #{get_type_name(other)}", node)
+                end
+                other.as(Array(RuntimeValue)).each { |element| array << element }
+                array
+
+            # `first`/`last` are already nil-safe here, so these are aliases
+            # rather than a stricter/looser pair as in Crystal.
+            when "first?"
+                reject_block(block_value, "Array##{name}", node)
+                array.first?
+
+            when "last?"
+                reject_block(block_value, "Array##{name}", node)
+                array.last?
+
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Array", node)
 
             end
+        end
+
+        # Equality as `==` sees it, custom overloads included, so `includes?`,
+        # `index`, `uniq` and `count` agree with the operator.
+        private def runtime_values_equal?(left, right, node : AST::Node) : Bool
+            return true if left == right
+            overload = invoke_operator_overload(left, :"==", right, node)
+            overload.nil? ? false : truthy?(overload)
         end
 
         private def call_map_method(map : MapValue, name : String, args : Array(RuntimeValue), block_value : Function?, node : AST::MethodCall)
@@ -1673,6 +2082,16 @@ module Dragonstone
             end
             map.delete(args.first)
 
+        # A shallow copy, like `Array#dup`: a new map with the same pairs.
+        when "dup"
+            reject_block(block_value, "Map##{name}", node)
+            unless args.empty?
+                runtime_error(InterpreterError, "Map##{name} does not take arguments", node)
+            end
+            copy = MapValue.new
+            map.each { |key, value| copy[key] = value }
+            copy
+
             else
                 runtime_error(InterpreterError, "Unknown method '#{name}' for Map", node)
 
@@ -1867,6 +2286,16 @@ module Dragonstone
                 reject_block(block_value, "String##{name}", node)
                 string.strip
 
+            # One-sided `strip`. Trimming only the tail matters when the head is
+            # meaningful; rendered source keeps its indentation.
+            when "rstrip"
+                reject_block(block_value, "String##{name}", node)
+                string.rstrip
+
+            when "lstrip"
+                reject_block(block_value, "String##{name}", node)
+                string.lstrip
+
             when "reverse"
                 reject_block(block_value, "String##{name}", node)
                 string.reverse
@@ -2011,7 +2440,7 @@ module Dragonstone
         private def slice_string_with_start_and_length(string : String, start_value, length_value, node : AST::MethodCall) : String
             start = slice_numeric_argument(start_value, "slice start index", node)
             length = slice_numeric_argument(length_value, "slice length", node)
-            slice_chars_with_bounds(string.chars, start, length, node)
+            slice_chars_with_bounds(string_chars(string), start, length, node)
         end
 
         private def slice_string_with_range(string : String, range_value, node : AST::MethodCall) : String
@@ -2031,7 +2460,7 @@ module Dragonstone
             end
 
             length = 0_i64 if length < 0
-            slice_chars_with_bounds(string.chars, start, length, node)
+            slice_chars_with_bounds(string_chars(string), start, length, node)
         end
 
         private def slice_chars_with_bounds(chars : Array(Char), start : Int64, length : Int64, node : AST::Node) : String
