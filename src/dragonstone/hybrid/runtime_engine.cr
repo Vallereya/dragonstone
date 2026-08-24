@@ -15,6 +15,7 @@ module Dragonstone
         module ValueConversion
             private def ensure_runtime_value(value : ExportValue) : RuntimeValue
                 case value
+
                 when ConstantBinding
                     ensure_runtime_value(value.value)
                 when ConstantBytecodeBinding
@@ -28,6 +29,7 @@ module Dragonstone
 
             private def ensure_bytecode_value(value : ExportValue) : Bytecode::Value
                 case value
+
                 when ConstantBinding
                     ensure_bytecode_value(value.value)
                 when ConstantBytecodeBinding
@@ -41,11 +43,13 @@ module Dragonstone
 
             private def runtime_to_bytecode(value : RuntimeValue) : Bytecode::Value
                 case value
+
                 when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, FFIModule
                     value
                 when Array
                     array = value.as(Array(RuntimeValue))
                     converted = [] of Bytecode::Value
+
                     array.each do |element|
                         converted << runtime_to_bytecode(element)
                     end
@@ -55,6 +59,7 @@ module Dragonstone
                     Bytecode::TupleValue.new(elements)
                 when NamedTupleValue
                     tuple = Bytecode::NamedTupleValue.new
+
                     value.entries.each do |key, entry_value|
                         tuple.entries[key] = runtime_to_bytecode(entry_value)
                     end
@@ -77,29 +82,34 @@ module Dragonstone
 
             private def bytecode_to_runtime(value : Bytecode::Value) : RuntimeValue
                 case value
+
                 when Nil, Bool, Int32, Int64, Float64, String, Char, SymbolValue, FFIModule
                     value
                 when Array(Bytecode::Value)
                     array = value.as(Array(Bytecode::Value))
                     converted = [] of RuntimeValue
+
                     array.each do |element|
                         converted << bytecode_to_runtime(element)
                     end
                     converted
                 when Bytecode::TupleValue
                     elements = [] of RuntimeValue
+
                     value.elements.each do |element|
                         elements << bytecode_to_runtime(element)
                     end
                     TupleValue.new(elements)
                 when Bytecode::NamedTupleValue
                     entries = {} of SymbolValue => RuntimeValue
+
                     value.entries.each do |key, entry_value|
                         entries[key] = bytecode_to_runtime(entry_value)
                     end
                     NamedTupleValue.new(entries)
                 when Bytecode::MapValue
                     map = MapValue.new
+
                     value.entries.each do |k, v|
                         map[bytecode_to_runtime(k)] = bytecode_to_runtime(v)
                     end
@@ -139,17 +149,21 @@ module Dragonstone
                 compiler = Compiler.new
                 chunk = compiler.compile_function_body(func.body)
                 name_lookup = {} of String => Int32
+
                 chunk.names.each_with_index do |candidate, index|
                     name_lookup[candidate] = index
                 end
                 param_specs = [] of Bytecode::ParameterSpec
+
                 func.typed_parameters.each do |param|
                     name = param.name
+
                     unless idx = name_lookup[name]?
                         raise "Parameter #{name} missing from compiled function names"
                     end
-                    param_specs << Bytecode::ParameterSpec.new(idx, param.type, param.instance_var_name)
+                    param_specs << Bytecode::ParameterSpec.new(idx, name, param.type, param.instance_var_name)
                 end
+
                 signature = Bytecode::FunctionSignature.new(param_specs, func.return_type, false)
                 name = func.name || "<lambda>"
                 Bytecode::FunctionValue.new(name, signature, chunk, signature.abstract?)
@@ -158,13 +172,14 @@ module Dragonstone
 
         class Backend
             include ValueConversion
+            property source_path : String? = nil
         end
 
         class InterpreterBackend < Backend
             getter interpreter : Interpreter
 
-            def initialize(interpreter : Interpreter, resolver : ModuleResolver, log_to_stdout : Bool)
-                super(log_to_stdout)
+            def initialize(interpreter : Interpreter, resolver : ModuleResolver, stdout : IO)
+                super(stdout)
                 @interpreter = interpreter
                 @resolver = resolver
             end
@@ -191,16 +206,20 @@ module Dragonstone
                 snapshot
             end
 
+            def stdout=(io : IO)
+                super
+                @interpreter.stdout = io
+            end
+
             def execute(program : IR::Program) : Nil
                 graph = @resolver.graph
                 @interpreter.interpret(program, graph)
-                @output = @interpreter.output
             end
         end
 
         class VMBackend < Backend
-            def initialize(log_to_stdout : Bool, @argv : Array(String) = [] of String)
-                super(log_to_stdout)
+            def initialize(stdout : IO, @argv : Array(String) = [] of String)
+                super(stdout)
                 @globals = {} of String => Bytecode::Value
                 @constant_names = Set(String).new
             end
@@ -210,17 +229,39 @@ module Dragonstone
             end
 
             def import_variable(name : String, value : ExportValue) : Nil
+                return if merge_namespace(name, value)
                 @globals[name] = ensure_bytecode_value(value)
                 @constant_names.delete(name)
             end
 
             def import_constant(name : String, value : ExportValue) : Nil
-                @globals[name] = ensure_bytecode_value(value)
+                unless merge_namespace(name, value)
+                    @globals[name] = ensure_bytecode_value(value)
+                end
                 @constant_names.add(name)
+            end
+
+            private def merge_namespace(name : String, value : ExportValue) : Bool
+                incoming = ensure_bytecode_value(value)
+                existing = @globals[name]?
+
+                return false unless existing.is_a?(Bytecode::ModuleValue) && incoming.is_a?(Bytecode::ModuleValue)
+
+                existing_mod = existing.as(Bytecode::ModuleValue)
+                incoming_mod = incoming.as(Bytecode::ModuleValue)
+
+                return true if existing_mod.same?(incoming_mod)
+
+                # Never fold a class into a plain module or the reverse.
+                return false unless existing_mod.is_a?(Bytecode::ClassValue) == incoming_mod.is_a?(Bytecode::ClassValue)
+
+                existing_mod.merge_from!(incoming_mod)
+                true
             end
 
             def export_namespace : Hash(String, ExportValue)
                 snapshot = {} of String => ExportValue
+
                 @globals.each do |name, value|
                     if @constant_names.includes?(name)
                         snapshot[name] = ConstantBytecodeBinding.new(value)
@@ -236,17 +277,15 @@ module Dragonstone
                 artifact = Core::Compiler.build(program, options)
                 compiled = artifact.bytecode
                 raise "Bytecode generation failed for target #{options.target}" unless compiled
-                stdout_io = IO::Memory.new
                 vm = VM.new(
                     compiled,
                     globals: @globals,
                     argv: @argv,
-                    stdout_io: stdout_io,
-                    log_to_stdout: @log_to_stdout,
-                    typing_enabled: program.typed?
+                    stdout_io: @stdout,
+                    typing_enabled: program.typed?,
+                    source_path: source_path
                 )
                 vm.run
-                @output = stdout_io.to_s
                 @globals = vm.export_globals
                 prune_constant_names
             end
@@ -265,12 +304,13 @@ module Dragonstone
 
             def initialize(
                 @resolver : ModuleResolver,
-                @log_to_stdout : Bool = false,
+                @stdout : IO = STDOUT,
                 @typing_enabled : Bool = false,
                 @backend_mode : BackendMode = BackendMode::Auto,
                 @argv : Array(String) = [] of String
             )
                 @unit_cache = {} of Tuple(String, BackendMode) => Unit
+                @singleton_classes = {} of UInt64 => Dragonstone::SingletonClass
             end
 
             def compile_or_eval(
@@ -307,15 +347,23 @@ module Dragonstone
                 last_error = nil
 
                 backends.each_with_index do |backend, index|
+                    final_candidate = index == backends.size - 1
+                    capture = final_candidate ? nil : DeferredIO.new(@stdout)
+                    backend.stdout = capture || @stdout
+                    backend.source_path = path
                     unit = Unit.new(path, backend)
                     importer = Importer.new(@resolver, self)
+
                     begin
                         preload_syslib(unit, importer, path, backend.backend_mode)
+
                         program.ast.use_decls.each do |use_decl|
                             importer.apply_imports(unit, use_decl, path)
                         end
+
                         unit.execute(program)
                         unit.capture_exports!
+                        capture.flush if capture
                         @unit_cache[{path, unit.backend.backend_mode}] = unit
                         return unit
                     rescue ex
@@ -334,10 +382,11 @@ module Dragonstone
                 core_only_modules = metadata_conflicts_for(BackendMode::Native)
 
                 case @backend_mode
+
                 when BackendMode::Core
                     ensure_core_supported!(program, typing_flag)
                     ensure_no_metadata_conflicts!(BackendMode::Core, native_only_modules)
-                    candidates << VMBackend.new(@log_to_stdout, @argv)
+                    candidates << VMBackend.new(@stdout, @argv)
                 when BackendMode::Native
                     ensure_no_metadata_conflicts!(BackendMode::Native, core_only_modules)
                     candidates << build_interpreter_backend(typing_flag)
@@ -348,9 +397,9 @@ module Dragonstone
                     # Reorder preference to keep imports on the same backend when possible.
                     if preferred_backend == BackendMode::Native
                         candidates << build_interpreter_backend(typing_flag) if allow_interpreter
-                        candidates << VMBackend.new(@log_to_stdout, @argv) if allow_vm
+                        candidates << VMBackend.new(@stdout, @argv) if allow_vm
                     else
-                        candidates << VMBackend.new(@log_to_stdout, @argv) if allow_vm
+                        candidates << VMBackend.new(@stdout, @argv) if allow_vm
                         candidates << build_interpreter_backend(typing_flag) if allow_interpreter
                     end
 
@@ -365,8 +414,8 @@ module Dragonstone
             private def preload_syslib(unit : Unit, importer : Importer, path : String, preferred_backend : BackendMode) : Nil
                 syslib_path = @resolver.syslib_entry_path
                 return unless syslib_path
-
                 syslib_root = @resolver.syslib_root_path
+
                 if syslib_root
                     expanded_root = File.expand_path(syslib_root)
                     expanded_path = File.expand_path(path)
@@ -384,8 +433,13 @@ module Dragonstone
             end
 
             private def build_interpreter_backend(typing_flag : Bool) : Backend
-                interpreter = Interpreter.new(@argv, log_to_stdout: @log_to_stdout, typing_enabled: typing_flag)
-                InterpreterBackend.new(interpreter, @resolver, @log_to_stdout)
+                interpreter = Interpreter.new(
+                    @argv,
+                    stdout: @stdout,
+                    typing_enabled: typing_flag,
+                    singleton_classes: @singleton_classes
+                )
+                InterpreterBackend.new(interpreter, @resolver, @stdout)
             end
 
             private def ensure_core_supported!(program : IR::Program, typing_flag : Bool)
@@ -401,6 +455,7 @@ module Dragonstone
 
             private def metadata_conflicts_for(backend : BackendMode) : Array(Stdlib::ModuleMetadata)
                 conflicts = [] of Stdlib::ModuleMetadata
+
                 @resolver.graph.nodes.each_value do |node|
                     metadata = node.metadata
                     next unless metadata
@@ -411,7 +466,9 @@ module Dragonstone
 
             private def ensure_no_metadata_conflicts!(backend : BackendMode, conflicts : Array(Stdlib::ModuleMetadata))
                 return if conflicts.empty?
+
                 names = conflicts.map(&.description).join(", ")
+
                 message = case backend
                     when BackendMode::Core
                         "Native-only stdlib module(s) detected: #{names}."
@@ -432,12 +489,15 @@ module Dragonstone
                 core_only : Array(Stdlib::ModuleMetadata)
             )
                 parts = [] of String
+
                 if native_only.any?
                     parts << "native-only modules: #{native_only.map(&.description).join(", ")}"
                 end
+
                 if core_only.any?
                     parts << "core-only modules: #{core_only.map(&.description).join(", ")}"
                 end
+                
                 detail = parts.join("; ")
                 raise RuntimeError.new(
                     "No compatible backend available for required stdlib modules (#{detail}).",
