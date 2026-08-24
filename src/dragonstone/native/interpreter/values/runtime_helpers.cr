@@ -176,11 +176,15 @@ module Dragonstone
 
             when Bool
                 value.to_s
+
             when Float64
-                format_float(value)
+                value.inspect
 
             when Float32
-                format_float(value.to_f64)
+                value.to_f64.inspect
+
+            when Char
+                value.inspect
 
             when FFIModule
                 "ffi"
@@ -196,6 +200,12 @@ module Dragonstone
 
             when DragonModule
                 value.name
+
+            when BagValue
+                "[#{value.elements.map { |element| format_value(element) }.join(", ")}]"
+
+            when BagConstructor
+                value.to_s
 
             else
                 value.to_s
