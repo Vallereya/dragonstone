@@ -7,10 +7,6 @@ require "../diagnostics/errors"
 module Dragonstone
     module Language
         module Transforms
-            # Lowers `let` and `fix` declarations into regular assignments by:
-            # - Mangling the declared name to simulate block scoping.
-            # - Rewriting references to point at the mangled name within the scope.
-            # - Rejecting reassignment of a `let`/`fix` binding (binding immutability).
             module LexicalBindings
                 extend self
 
@@ -36,14 +32,9 @@ module Dragonstone
                     AST::Program.new(rewritten, program.use_decls, location: program.location)
                 end
 
-                private def rewrite_node_array(
-                    nodes : Array(AST::Node),
-                    scopes : Array(Scope),
-                    counter : Counter,
-                    containers : Array(ContainerEntry),
-                    shadowed : Set(String)? = nil
-                ) : Array(AST::Node)
+                private def rewrite_node_array(nodes : Array(AST::Node), scopes : Array(Scope), counter : Counter, containers : Array(ContainerEntry), shadowed : Set(String)? = nil) : Array(AST::Node)
                     scopes << Scope.new(::Hash(String, String).new, ::Set(String).new, ::Set(String).new)
+                    
                     if shadowed_names = shadowed
                         shadowed_names.each { |name| scopes.last.shadowed.add(name) }
                     end
@@ -212,18 +203,7 @@ module Dragonstone
                         typed_parameters = rewrite_typed_parameters(node.typed_parameters, scopes, counter, containers)
                         rescues = node.rescue_clauses.map { |clause| rewrite_rescue_clause(clause, scopes, counter, containers) }
                         body = rewrite_node_array(node.body, scopes, counter, containers, shadowed: node.parameters.to_set)
-                        AST::FunctionDef.new(
-                            node.name,
-                            typed_parameters,
-                            body,
-                            rescues,
-                            node.return_type,
-                            visibility: node.visibility,
-                            receiver: receiver,
-                            is_abstract: node.abstract?,
-                            annotations: rewrite_annotations(node.annotations, scopes, counter, containers),
-                            location: node.location
-                        )
+                        AST::FunctionDef.new(node.name, typed_parameters, body, rescues, node.return_type, visibility: node.visibility, receiver: receiver, is_abstract: node.abstract?, annotations: rewrite_annotations(node.annotations, scopes, counter, containers), location: node.location)
                     when AST::FunctionLiteral
                         typed_parameters = rewrite_typed_parameters(node.typed_parameters, scopes, counter, containers)
                         rescues = node.rescue_clauses.map { |clause| rewrite_rescue_clause(clause, scopes, counter, containers) }
@@ -242,21 +222,14 @@ module Dragonstone
                         containers << ContainerEntry.new(:class, node.name)
                         body = [] of AST::Node
                         annotations = [] of AST::Annotation
+
                         begin
                             annotations = rewrite_annotations(node.annotations, scopes, counter, containers)
                             body = rewrite_node_array(node.body, scopes, counter, containers)
                         ensure
                             containers.pop
                         end
-                        AST::ClassDefinition.new(
-                            node.name,
-                            body,
-                            node.superclass,
-                            is_abstract: node.abstract?,
-                            annotations: annotations,
-                            visibility: node.visibility,
-                            location: node.location
-                        )
+                        AST::ClassDefinition.new(node.name, body, node.superclass, is_abstract: node.abstract?, annotations: annotations, visibility: node.visibility, location: node.location)
                     when AST::StructDefinition
                         body = rewrite_node_array(node.body, scopes, counter, containers)
                         AST::StructDefinition.new(node.name, body, rewrite_annotations(node.annotations, scopes, counter, containers), visibility: node.visibility, location: node.location)
@@ -264,6 +237,7 @@ module Dragonstone
                         containers << ContainerEntry.new(:module, node.name)
                         body = [] of AST::Node
                         annotations = [] of AST::Annotation
+
                         begin
                             annotations = rewrite_annotations(node.annotations, scopes, counter, containers)
                             body = rewrite_node_array(node.body, scopes, counter, containers)
@@ -276,15 +250,7 @@ module Dragonstone
                             value = member.value ? rewrite_node(member.value.not_nil!, scopes, counter, containers) : nil
                             AST::EnumMember.new(member.name, value, location: member.location)
                         end
-                        AST::EnumDefinition.new(
-                            node.name,
-                            members,
-                            value_name: node.value_name,
-                            value_type: node.value_type,
-                            annotations: rewrite_annotations(node.annotations, scopes, counter, containers),
-                            visibility: node.visibility,
-                            location: node.location
-                        )
+                        AST::EnumDefinition.new(node.name, members, value_name: node.value_name, value_type: node.value_type, annotations: rewrite_annotations(node.annotations, scopes, counter, containers), visibility: node.visibility, location: node.location)
                     when AST::InstanceVariableAssignment
                         value = rewrite_node(node.value, scopes, counter, containers)
                         AST::InstanceVariableAssignment.new(node.name, value, operator: node.operator, location: node.location)
@@ -298,12 +264,12 @@ module Dragonstone
                         AST::Assignment.new(resolved, value, operator: node.operator, location: node.location)
                     when AST::InterpolatedString
                         parts = node.parts.map do |type, content|
-                            if type == :expression
+                            if type == :string
+                                {type, content}
+                            else
                                 expr = parse_interpolation_expression(content)
                                 rewritten = rewrite_node(expr, scopes, counter, containers)
                                 {type, rewritten.to_source}
-                            else
-                                {type, content}
                             end
                         end
                         AST::InterpolatedString.new(parts, location: node.location)
@@ -342,12 +308,7 @@ module Dragonstone
                     AST::RescueClause.new(node.exceptions, node.exception_variable, body, location: node.location)
                 end
 
-                private def rewrite_typed_parameters(
-                    typed_parameters : Array(AST::TypedParameter),
-                    scopes : Array(Scope),
-                    counter : Counter,
-                    containers : Array(ContainerEntry)
-                ) : Array(AST::TypedParameter)
+                private def rewrite_typed_parameters(typed_parameters : Array(AST::TypedParameter), scopes : Array(Scope), counter : Counter, containers : Array(ContainerEntry)) : Array(AST::TypedParameter)
                     typed_parameters.map do |param|
                         default_value = param.default_value
                         rewritten_default = default_value ? rewrite_node(default_value.not_nil!, scopes, counter, containers) : nil
@@ -355,12 +316,7 @@ module Dragonstone
                     end
                 end
 
-                private def rewrite_annotations(
-                    annotations : Array(AST::Annotation),
-                    scopes : Array(Scope),
-                    counter : Counter,
-                    containers : Array(ContainerEntry)
-                ) : Array(AST::Annotation)
+                private def rewrite_annotations(annotations : Array(AST::Annotation), scopes : Array(Scope), counter : Counter, containers : Array(ContainerEntry)) : Array(AST::Annotation)
                     annotations.map do |ann|
                         args = ann.arguments.map { |arg| rewrite_node(arg, scopes, counter, containers) }
                         AST::Annotation.new(ann.name, args, ann.location)
@@ -369,8 +325,10 @@ module Dragonstone
 
                 private def resolve_binding_name(name : String, scopes : Array(Scope)) : String
                     return name if name == "self"
+
                     scopes.reverse_each do |scope|
                         return name if scope.shadowed.includes?(name)
+
                         if mangled = scope.bindings[name]?
                             return mangled
                         end
@@ -380,8 +338,10 @@ module Dragonstone
 
                 private def validate_mutation!(name : String, location : Location?, scopes : Array(Scope)) : Nil
                     return if name == "self"
+
                     scopes.reverse_each do |scope|
                         return if scope.shadowed.includes?(name)
+
                         if scope.immutable.includes?(name)
                             raise ::Dragonstone::ConstantError.new("Cannot reassign immutable binding #{name}", location)
                         end
@@ -395,6 +355,7 @@ module Dragonstone
 
                 private def resolve_container_variable(kind : Symbol, name : String, containers : Array(ContainerEntry), location : Location?) : String
                     idx = containers.rindex { |entry| entry.kind == kind }
+
                     unless idx
                         label = kind == :class ? "Class variables (@@)" : "Module variables (@@@)"
                         owner = kind == :class ? "classes" : "modules"
