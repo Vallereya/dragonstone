@@ -226,12 +226,18 @@ module Dragonstone
         getter rescue_clauses : Array(AST::RescueClause)
         getter return_type : AST::TypeExpression?
         getter gc_flags : ::Dragonstone::Runtime::GC::Flags
+        getter? block : Bool
+        getter owner_frame : UInt64?
+        getter? non_capturing : Bool
+
         @parameter_names : Array(String)
 
-        def initialize(@name : String?, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new)
+        def initialize(@name : String?, typed_parameters : Array(AST::TypedParameter), @body : Array(AST::Node), @closure : Scope, @type_closure : TypeScope, @rescue_clauses : Array(AST::RescueClause) = [] of AST::RescueClause, @return_type : AST::TypeExpression? = nil, gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new, is_block : Bool = false, @owner_frame : UInt64? = nil, non_capturing : Bool = false)
             @typed_parameters = typed_parameters
             @parameter_names = typed_parameters.map(&.name)
             @gc_flags = gc_flags
+            @block = is_block
+            @non_capturing = non_capturing
         end
 
         def parameters : Array(String)
@@ -284,10 +290,12 @@ module Dragonstone
 
     class DragonModule
         getter name : String
+        property lexical_parent : DragonModule?
 
         def initialize(@name : String)
             @methods = {} of String => MethodDefinition
             @constants = {} of String => RuntimeValue
+            @lexical_parent = nil
         end
 
         def define_method(name : String, method : MethodDefinition)
