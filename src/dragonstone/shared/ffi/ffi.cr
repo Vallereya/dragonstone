@@ -3,10 +3,6 @@ require "socket"
 require "http"
 require "../runtime/abi/abi"
 
-# ---------------------------------
-# -------------- FFI --------------
-# ---------------------------------
-
 module Dragonstone
     module FFI
         alias InteropValue = Nil | Bool | Int32 | Int64 | Float32 | Float64 | String | Char | Array(InteropValue)
@@ -206,6 +202,25 @@ module Dragonstone
                 Host.safe_io(function_name, path) do
                     DragonstoneABI.dragonstone_file_delete(path) != 0
                 end
+            when "file_exists"
+                path = expect_string(arguments, 0, function_name)
+                abi_file_exists?(path)
+            when "file_is_file"
+                path = expect_string(arguments, 0, function_name)
+                abi_file_is_file?(path)
+            when "dir_current"
+                abi_string(DragonstoneABI.dragonstone_path_cwd).gsub("\\", "/")
+            when "dir_glob"
+                pattern = expect_string(arguments, 0, function_name)
+                matches = [] of InteropValue
+                Host.safe_io(function_name, pattern) do
+                    Dir.glob(pattern).sort.each { |entry| matches << entry.gsub("\\", "/") }
+                end
+                matches
+            when "dir_exists"
+                path = expect_string(arguments, 0, function_name)
+                Dir.exists?(path)
+
             when "path_create"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
                 Host.display_path(abi_path_create(raw))
@@ -220,7 +235,7 @@ module Dragonstone
                 abi_path_base(raw)
             when "path_expand"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
-                Host.display_path(abi_path_expand(raw))
+                abi_path_expand(raw).gsub("\\", "/")
             when "path_delete"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
                 abi_path_delete(raw)
