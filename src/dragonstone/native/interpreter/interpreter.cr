@@ -21,27 +21,30 @@ require "./repl/session"
 
 module Dragonstone
     class Interpreter
-        getter output : String
+        getter stdout : IO
         getter argv : Array(String)
         getter argv_value : Array(RuntimeValue)
         getter builtin_stdout : BuiltinStream
         getter builtin_stderr : BuiltinStream
         getter builtin_stdin : BuiltinStdin
         getter builtin_argf : BuiltinArgf
+
         @type_scopes : Array(TypeScope)
         @typing_context : Typing::Context?
         @descriptor_cache : Typing::DescriptorCache
         @module_graph : ModuleGraph?
+        @string_char_cache : Tuple(String, Array(Char))?
 
-        def initialize(argv : Array(String) = [] of String, log_to_stdout : Bool = false, typing_enabled : Bool = false)
+        def initialize(argv : Array(String) = [] of String, stdout : IO = STDOUT, typing_enabled : Bool = false, singleton_classes : Hash(UInt64, SingletonClass)? = nil)
             @global_scope = Scope.new
             @scopes = [@global_scope]
             @type_scopes = [new_type_scope]
+            @scope_floors = [] of Int32
             @typing_enabled = typing_enabled
             @descriptor_cache = Typing::DescriptorCache.new
             @typing_context = nil
-            @output = String.new
-            @log_to_stdout = log_to_stdout
+            @string_char_cache = nil
+            @stdout = stdout
             @debug_inline_sources = [] of String
             @debug_inline_values = [] of String
             @argv = argv.dup
@@ -55,17 +58,22 @@ module Dragonstone
             @alias_descriptor_cache = {} of String => Typing::Descriptor
             @block_stack = [] of Function?
             @method_call_stack = [] of MethodCallFrame
-            @singleton_classes = {} of UInt64 => SingletonClass
+            @frame_seq = 0_u64
+            @return_targets = [] of UInt64?
+            @singleton_classes = singleton_classes || {} of UInt64 => SingletonClass
             @module_graph = nil
+
             set_variable("ffi", FFIModule.new)
             @gc_manager = Runtime::GC::Manager(RuntimeValue).new(
                 ->(value : RuntimeValue) : RuntimeValue { Runtime::GC.deep_copy_runtime(value) }
             )
             set_variable("gc", Runtime::GC::Host.new(@gc_manager))
+
             @builtin_stdout = BuiltinStream.new(BuiltinStream::Kind::Stdout)
             @builtin_stderr = BuiltinStream.new(BuiltinStream::Kind::Stderr)
             @builtin_stdin = BuiltinStdin.new
             @builtin_argf = BuiltinArgf.new
+
             ensure_root_object
         end
 
@@ -74,20 +82,23 @@ module Dragonstone
             set_constant("Object", DragonClass.new("Object"))
         end
 
+        def stdout=(io : IO)
+            @stdout = io
+        end
+
         def typing_enabled? : Bool
             @typing_enabled
         end
 
-        def interpret(program : IR::Program, graph : ModuleGraph) : String
+        def interpret(program : IR::Program, graph : ModuleGraph) : Nil
             interpret(program.ast, graph, program.analysis)
         end
 
-        def interpret(ast : AST::Program, graph : ModuleGraph, _analysis : Language::Sema::AnalysisResult? = nil) : String
+        def interpret(ast : AST::Program, graph : ModuleGraph, _analysis : Language::Sema::AnalysisResult? = nil) : Nil
             previous_graph = @module_graph
             @module_graph = graph
             ast.accept(self)
             flush_debug_inline
-            @output
         ensure
             @module_graph = previous_graph
         end
