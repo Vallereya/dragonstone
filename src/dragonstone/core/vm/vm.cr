@@ -18,6 +18,15 @@ module Dragonstone
         class BreakSignal < Exception; end
         class NextSignal < Exception; end
         class RedoSignal < Exception; end
+
+        class NonLocalReturn < Exception
+            getter value : Bytecode::Value
+            getter target_frame_id : UInt64
+
+            def initialize(@value : Bytecode::Value, @target_frame_id : UInt64)
+                super()
+            end
+        end
         class VMException < Exception
             getter value : Bytecode::Value?
 
@@ -37,6 +46,9 @@ module Dragonstone
             property method_owner : Bytecode::ClassValue?
             property para_env : Hash(String, Bytecode::Value)?
             property gc_flags : ::Dragonstone::Runtime::GC::Flags
+            property id : UInt64 = 0_u64
+            property block_owner : UInt64?
+            property shadowed : Array(Tuple(Int32, Bytecode::Value?, Bool))?
 
             def initialize(
                 @code : CompiledCode,
@@ -67,8 +79,8 @@ module Dragonstone
             end
         end
 
-        record Handler, rescue_ip : Int32?, ensure_ip : Int32?, body_ip : Int32?, stack_depth : Int32, frame_depth : Int32
-        record LoopContext, condition_ip : Int32, body_ip : Int32, exit_ip : Int32, stack_depth : Int32
+        record Handler, rescue_ip : Int32?, ensure_ip : Int32?, body_ip : Int32?, stack_depth : Int32, frame_depth : Int32, frame_id : UInt64
+        record LoopContext, condition_ip : Int32, body_ip : Int32, exit_ip : Int32, stack_depth : Int32, frame_depth : Int32, frame_id : UInt64
 
         @debug_inline_sources = [] of String
         @debug_inline_values = [] of String
@@ -94,7 +106,7 @@ module Dragonstone
             return unless @typing_enabled
             return unless type_expr
             unless type_matches?(value, type_expr, Set(String).new)
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}", current_location)
             end
         end
 
@@ -130,7 +142,7 @@ module Dragonstone
             when Float64
                 coerce_float_to_int32(value, context)
             else
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{describe_value(value)}", current_location)
             end
         end
 
@@ -145,7 +157,7 @@ module Dragonstone
             when Float64
                 coerce_float_to_int64(value, context)
             else
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{describe_value(value)}", current_location)
             end
         end
 
@@ -160,7 +172,7 @@ module Dragonstone
             when Int64
                 value.to_f32
             else
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float32, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float32, got #{describe_value(value)}", current_location)
             end
         end
 
@@ -175,33 +187,33 @@ module Dragonstone
             when Int64
                 value.to_f64
             else
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float64, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected float64, got #{describe_value(value)}", current_location)
             end
         end
 
         private def ensure_int32_range(value : Int64, context : String) : Nil
             return if value >= Int32::MIN && value <= Int32::MAX
-            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}", current_location)
         end
 
         private def coerce_float_to_int32(value : Float64, context : String) : Bytecode::Value
             if value.nan? || value.infinite?
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}", current_location)
             end
             int_value = value.to_i64
             ensure_int32_range(int_value, context)
             int_value.to_i32
         rescue OverflowError
-            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}")
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int32, got #{value}", current_location)
         end
 
         private def coerce_float_to_int64(value : Float64, context : String) : Bytecode::Value
             if value.nan? || value.infinite?
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}", current_location)
             end
             value.to_i64
         rescue OverflowError
-            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}")
+            raise ::Dragonstone::TypeError.new("Type error in #{context}: expected int64, got #{value}", current_location)
         end
 
         private def type_matches?(value : Bytecode::Value, expr : AST::TypeExpression, seen_aliases : Set(String)) : Bool
@@ -296,7 +308,7 @@ module Dragonstone
                 end
                 Bytecode::BagValue.new(constructor.element_type)
             else
-                raise "Unknown method '#{method}' for bag constructor"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for bag constructor", current_location)
             end
         end
 
@@ -404,7 +416,7 @@ module Dragonstone
                 raise ArgumentError.new("Bag##{method} does not take arguments") unless args.empty?
                 bag.elements.dup
             else
-                raise "Unknown method '#{method}' for Bag"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Bag", current_location)
             end
         end
 
@@ -488,7 +500,7 @@ module Dragonstone
                             pair = [] of Bytecode::Value
                             pair << key
                             pair << value
-                            found = pair
+                            found = Bytecode::TupleValue.new(pair)
                             raise BreakSignal.new
                         end
                     end
@@ -500,8 +512,74 @@ module Dragonstone
                     raise ArgumentError.new("Map##{method} expects 1 argument, got #{args.size}")
                 end
                 map.delete(args.first)
+            # A shallow copy -- see the interpreter's `Map#dup`.
+            when "dup"
+                raise ArgumentError.new("Map##{method} does not accept a block") if block_value
+                raise ArgumentError.new("Map##{method} does not take arguments") unless args.empty?
+                copy = Bytecode::MapValue.new
+                map.entries.each { |key, value| copy.entries[key] = value }
+                copy
+            when "has_key?"
+                raise ArgumentError.new("Map##{method} does not accept a block") if block_value
+                raise ArgumentError.new("Map##{method} expects 1 argument, got #{args.size}") unless args.size == 1
+                map.has_key?(args.first)
+            when "has_value?"
+                raise ArgumentError.new("Map##{method} does not accept a block") if block_value
+                raise ArgumentError.new("Map##{method} expects 1 argument, got #{args.size}") unless args.size == 1
+                map.has_value?(args.first)
+            when "each_key"
+                block = ensure_block(block_value, "Map##{method}")
+                run_enumeration_loop do
+                    map.keys.each do |key|
+                        outcome = execute_block_iteration(block, [key])
+                        next if outcome[:state] == :next
+                    end
+                end
+                map
+            when "each_value"
+                block = ensure_block(block_value, "Map##{method}")
+                run_enumeration_loop do
+                    map.values.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                    end
+                end
+                map
+            when "map"
+                block = ensure_block(block_value, "Map##{method}")
+                result = [] of Bytecode::Value
+                run_enumeration_loop do
+                    map.each do |key, value|
+                        outcome = execute_block_iteration(block, [key, value])
+                        next if outcome[:state] == :next
+                        result << outcome[:value]
+                    end
+                end
+                result
+            when "map_keys"
+                block = ensure_block(block_value, "Map##{method}")
+                result = [] of Bytecode::Value
+                run_enumeration_loop do
+                    map.keys.each do |key|
+                        outcome = execute_block_iteration(block, [key])
+                        next if outcome[:state] == :next
+                        result << outcome[:value]
+                    end
+                end
+                result
+            when "map_values"
+                block = ensure_block(block_value, "Map##{method}")
+                result = [] of Bytecode::Value
+                run_enumeration_loop do
+                    map.values.each do |value|
+                        outcome = execute_block_iteration(block, [value])
+                        next if outcome[:state] == :next
+                        result << outcome[:value]
+                    end
+                end
+                result
             else
-                raise "Unknown method '#{method}' for Map"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Map", current_location)
             end
         end
 
@@ -547,7 +625,7 @@ module Dragonstone
                 end
                 result
             else
-                raise "Unknown method '#{method}' for Tuple"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Tuple", current_location)
             end
         end
 
@@ -597,7 +675,7 @@ module Dragonstone
                 end
                 result
             else
-                raise "Unknown method '#{method}' for NamedTuple"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for NamedTuple", current_location)
             end
         end
 
@@ -608,14 +686,18 @@ module Dragonstone
             block_value : Bytecode::BlockValue?,
             self_value : Bytecode::Value
         ) : Bytecode::Value
+            if method == "name" && args.empty? && block_value.nil? && container.lookup_method("name").nil?
+                return container.name
+            end
+
             if container.is_a?(Bytecode::ClassValue)
                 klass = container.as(Bytecode::ClassValue)
                 info = klass.lookup_method_with_owner(method)
-                raise "Unknown method '#{method}' for #{container.name}" unless info
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for #{container.name}", current_location) unless info
                 fn = info[:method]
                 owner = info[:owner]
                 if fn.abstract?
-                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
+                    raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}", current_location)
                 end
                 return with_container_context(container) do
                     call_function_value(fn, args, block_value, self_value, method_owner: owner)
@@ -623,9 +705,9 @@ module Dragonstone
             end
 
             fn = container.lookup_method(method)
-            raise "Unknown method '#{method}' for #{container.name}" unless fn
+            raise ::Dragonstone::NameError.new("Unknown method '#{method}' for #{container.name}", current_location) unless fn
             if fn.abstract?
-                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}")
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{container.name}", current_location)
             end
             with_container_context(container) do
                 call_function_value(fn, args, block_value, self_value)
@@ -639,11 +721,14 @@ module Dragonstone
             block_value : Bytecode::BlockValue?
         ) : Bytecode::Value
             info = instance.klass.lookup_method_with_owner(method)
-            raise "Undefined method '#{method}' for instance of #{instance.klass.name}" unless info
+            if !info && method == "class" && args.empty? && block_value.nil?
+                return instance.klass
+            end
+            raise ::Dragonstone::NameError.new("Undefined method '#{method}' for instance of #{instance.klass.name}", current_location) unless info
             fn = info[:method]
             owner = info[:owner]
             if fn.abstract?
-                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}")
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method} on #{instance.klass.name}", current_location)
             end
             with_container_context(instance.klass) do
                 call_function_value(fn, args, block_value, instance, method_owner: owner)
@@ -665,7 +750,7 @@ module Dragonstone
                 value = args.first
                 int_value = value.is_a?(Int32) ? value.to_i64 : value.as(Int64)
                 member = enum_val.member_for_value(int_value)
-                raise "No enum member with value #{int_value} for #{enum_val.name}" unless member
+                raise ::Dragonstone::NameError.new("No enum member with value #{int_value} for #{enum_val.name}", current_location) unless member
                 return member.as(Bytecode::Value)
             when "members"
                 raise ArgumentError.new("#{enum_val.name}.members does not accept a block") if block_value
@@ -689,7 +774,7 @@ module Dragonstone
                         call_function_value(fn, args, block_value, enum_val)
                     end
                 else
-                    raise "Unknown method '#{method}' for enum #{enum_val.name}"
+                    raise ::Dragonstone::NameError.new("Unknown method '#{method}' for enum #{enum_val.name}", current_location)
                 end
             end
         end
@@ -712,7 +797,7 @@ module Dragonstone
             when "value", member.enum.value_method_name
                 member.value
             else
-                raise "Unknown method '#{method}' for enum member"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for enum member", current_location)
             end
         end
 
@@ -748,7 +833,7 @@ module Dragonstone
                 end
                 arr
             else
-                raise "Unknown method '#{method}' for Range"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Range", current_location)
             end
         end
 
@@ -806,23 +891,38 @@ module Dragonstone
             if block_value && expected == provided + 1
                 return
             end
-            raise "Function #{name} expects #{expected} arguments, got #{provided}"
+
+            required = signature.parameters.index { |param| !param.default_code.nil? } || expected
+            return if provided >= required && provided <= expected
+
+            raise ::Dragonstone::InterpreterError.new("Function #{name} expects #{expected} arguments, got #{provided}", current_location)
+        end
+
+        private def block_locals_source(block : Bytecode::BlockValue) : Frame?
+            owner_id = block.owner_frame_id
+            return current_frame unless owner_id
+            @frames.reverse_each do |frame|
+                return frame if frame.id == owner_id
+            end
+            current_frame
         end
 
         private def yield_to_block(args : Array(Bytecode::Value)) : Bytecode::Value
             frame = current_frame
             block = frame.block
-            raise "No block given" unless block
+            raise ::Dragonstone::InterpreterError.new("No block given", current_location) unless block
             ensure_arity(block.signature, args.size, "yield")
             depth_before = @frames.size
-            push_callable_frame(block.code, block.signature, args, nil, "<block>", nil, current_frame)
+            block_frame = push_callable_frame(block.code, block.signature, args, nil, "<block>", nil, block_locals_source(block))
+            block_frame.block_owner = block.owner_frame_id
             execute_with_frame_cleanup(depth_before)
         end
 
         private def call_block(block_value : Bytecode::BlockValue, args : Array(Bytecode::Value)) : Bytecode::Value
             ensure_arity(block_value.signature, args.size, "<block>")
             depth_before = @frames.size
-            push_callable_frame(block_value.code, block_value.signature, args, nil, "<block>", nil, current_frame)
+            frame = push_callable_frame(block_value.code, block_value.signature, args, nil, "<block>", nil, block_locals_source(block_value))
+            frame.block_owner = block_value.owner_frame_id
             execute_with_frame_cleanup(depth_before)
         end
 
@@ -880,15 +980,26 @@ module Dragonstone
         end
 
         private def push_loop_context(condition_ip : Int32, body_ip : Int32, exit_ip : Int32) : Nil
-            @loop_stack << LoopContext.new(condition_ip, body_ip, exit_ip, @stack.size)
+            @loop_stack << LoopContext.new(condition_ip, body_ip, exit_ip, @stack.size, @frames.size - 1, current_frame.id)
         end
 
         private def pop_loop_context : LoopContext?
             @loop_stack.pop?
         end
 
+        private def drop_stale_loop_contexts : Nil
+            while ctx = @loop_stack.last?
+                frame = @frames[ctx.frame_depth]?
+                break if frame && frame.id == ctx.frame_id
+                @loop_stack.pop
+            end
+        end
+
         private def current_loop_context : LoopContext?
-            @loop_stack.last?
+            drop_stale_loop_contexts
+            ctx = @loop_stack.last?
+            return nil unless ctx
+            ctx.frame_id == current_frame.id ? ctx : nil
         end
 
         private def trim_stack(depth : Int32) : Nil
@@ -916,7 +1027,15 @@ module Dragonstone
         end
 
         private def attach_singleton_method(receiver : Bytecode::Value, fn : Bytecode::FunctionValue) : Nil
+            if receiver.is_a?(Bytecode::ModuleValue)
+                receiver.as(Bytecode::ModuleValue).define_singleton_method(fn.name, fn)
+                return
+            end
+
             key = singleton_key_for(receiver)
+            unless key
+                raise ::Dragonstone::TypeError.new("Cannot define singleton methods on #{type_of(receiver)}", current_location)
+            end
             map = @singleton_methods[key]? || begin
                 new_map = {} of String => Bytecode::FunctionValue
                 @singleton_methods[key] = new_map
@@ -926,14 +1045,33 @@ module Dragonstone
         end
 
         private def lookup_singleton_method(receiver : Bytecode::Value, name : String) : Bytecode::FunctionValue?
-            if map = @singleton_methods[singleton_key_for(receiver)]?
-                return map[name]?
+            if receiver.is_a?(Bytecode::ModuleValue)
+                if fn = receiver.as(Bytecode::ModuleValue).lookup_singleton_method(name)
+                    return fn
+                end
+                # A subclass inherits its parent's class methods.
+                if receiver.is_a?(Bytecode::ClassValue)
+                    parent = receiver.as(Bytecode::ClassValue).superclass
+                    while parent
+                        if fn = parent.lookup_singleton_method(name)
+                            return fn
+                        end
+                        parent = parent.superclass
+                    end
+                end
+            end
+
+            if key = singleton_key_for(receiver)
+                if map = @singleton_methods[key]?
+                    return map[name]?
+                end
             end
             nil
         end
 
-        private def singleton_key_for(receiver : Bytecode::Value) : UInt64
-            receiver.hash.to_u64
+        private def singleton_key_for(receiver : Bytecode::Value) : UInt64?
+            return nil unless receiver.is_a?(Reference)
+            receiver.object_id
         end
 
         private def define_type_alias(name : String, expr : AST::TypeExpression) : Nil
@@ -953,7 +1091,7 @@ module Dragonstone
             return unless @typing_enabled
             return unless type_expr
             unless type_matches?(value, type_expr, Set(String).new)
-                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}")
+                raise ::Dragonstone::TypeError.new("Type error in #{context}: expected #{type_expr.to_source}, got #{describe_value(value)}", current_location)
             end
         end
 
@@ -1037,17 +1175,20 @@ module Dragonstone
         @stack : Array(Bytecode::Value)
         @globals : Hash(String, Bytecode::Value)
         @stdout_io : IO
-        @log_to_stdout : Bool
+        @string_char_cache : Tuple(String, Array(Char))?
         @frames : Array(Frame)
         @loop_depth : Int32
         @global_slots : Array(Bytecode::Value?)
         @global_defined : Array(Bool)
         @name_index_cache : Hash(String, Int32)
         @globals_dirty : Bool
+        @source_path : String?
         @handlers : Array(Handler)
+        @handling : Array(Bool)
         @current_exception : Bytecode::Value?
         @rethrow_after_ensure : Bool
         @container_stack : Array(Bytecode::ModuleValue)
+        @pending_arg_names : Array(Bytecode::Value)?
         @loop_stack : Array(LoopContext)
         @retry_after_ensure : Int32?
         @singleton_methods : Hash(UInt64, Hash(String, Bytecode::FunctionValue))
@@ -1063,15 +1204,17 @@ module Dragonstone
             globals : Hash(String, Bytecode::Value)? = nil,
             argv : Array(String) = [] of String,
             *,
-            stdout_io : IO = IO::Memory.new,
-            log_to_stdout : Bool = false,
-            typing_enabled : Bool = false
+            stdout_io : IO = STDOUT,
+            typing_enabled : Bool = false,
+            source_path : String? = nil
         )
             @stack = [] of Bytecode::Value
             @globals = globals ? globals.dup : {} of String => Bytecode::Value
             @stdout_io = stdout_io
-            @log_to_stdout = log_to_stdout
+            @string_char_cache = nil
             @frames = [] of Frame
+            @frame_seq = 0_u64
+            @pending_arg_names = nil
             @loop_depth = 0
             @global_slots = Array(Bytecode::Value?).new(@bytecode.names.size) { nil }
             @global_defined = Array(Bool).new(@bytecode.names.size) { false }
@@ -1082,7 +1225,9 @@ module Dragonstone
             @globals_dirty = false
             @typing_enabled = typing_enabled
             @type_aliases = {} of String => AST::TypeExpression
+            @source_path = source_path
             @handlers = [] of Handler
+            @handling = [] of Bool
             @current_exception = nil
             @rethrow_after_ensure = false
             @container_stack = [] of Bytecode::ModuleValue
@@ -1184,11 +1329,13 @@ module Dragonstone
                     flush_debug_inline
                     status_value = pop
                     status = coerce_int64(status_value, "quit").to_i64
+                    @stdout_io.flush
                     DragonstoneABI.dragonstone_io_quit(status)
                 when OPC::ABORT
                     flush_debug_inline
                     message_value = pop
                     message = message_value.nil? ? "Aborted" : stringify(message_value)
+                    @stdout_io.flush
                     DragonstoneABI.dragonstone_io_abort(message.to_unsafe)
                 when OPC::NOP
                     # nil
@@ -1202,7 +1349,14 @@ module Dragonstone
                 when OPC::LOAD
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
-                    push(resolve_variable(name_idx, name))
+                    loaded = resolve_variable(name_idx, name)
+
+                    if (receiver = @pending_self) && loaded.is_a?(Bytecode::FunctionValue)
+                        @pending_self = nil
+                        push(call_function_value(loaded.as(Bytecode::FunctionValue), [] of Bytecode::Value, nil, receiver))
+                    else
+                        push(loaded)
+                    end
                 when OPC::LOAD_ARGV
                     push(@argv_value)
                 when OPC::LOAD_STDOUT
@@ -1258,8 +1412,9 @@ module Dragonstone
                         current_frame.ip = target
                     end
                 when OPC::RETRY
-                    handler = @handlers.last? || raise "retry used outside of rescue"
-                    body_ip = handler.body_ip || raise "retry used outside of begin block"
+                    handler = @handlers.last? || raise ::Dragonstone::InterpreterError.new("retry used outside of rescue", current_location)
+                    body_ip = handler.body_ip || raise ::Dragonstone::InterpreterError.new("retry used outside of begin block", current_location)
+                    set_handling(false)
                     @current_exception = nil
                     @rethrow_after_ensure = false
                     @retry_after_ensure = body_ip
@@ -1315,6 +1470,9 @@ module Dragonstone
                     b, a = pop, pop
                     overload = invoke_operator_overload(a, "==", b)
                     push(overload.nil? ? (a == b) : overload)
+                when OPC::CASE_EQ
+                    pattern, value = pop, pop
+                    push(case_equal?(pattern, value))
                 when OPC::NE
                     b, a = pop, pop
                     overload = invoke_operator_overload(a, "!=", b)
@@ -1366,7 +1524,7 @@ module Dragonstone
                     push(nil)
                 when OPC::TYPEOF
                     value = pop
-                    push(type_of(value))
+                    push(typeof_name(value))
                 when OPC::DEBUG_ECHO
                     source_idx = fetch_byte
                     source = current_code.consts[source_idx].to_s
@@ -1419,7 +1577,13 @@ module Dragonstone
                 when OPC::MAKE_MODULE
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
-                    push(Bytecode::ModuleValue.new(name))
+                    existing = existing_container(name)
+                    if existing.is_a?(Bytecode::ModuleValue) && !existing.is_a?(Bytecode::ClassValue) &&
+                       !existing.is_a?(Bytecode::StructValue) && !existing.is_a?(Bytecode::EnumValue)
+                        push(existing)
+                    else
+                        push(Bytecode::ModuleValue.new(name))
+                    end
                 when OPC::MAKE_CLASS
                     name_idx = fetch_byte
                     abstract_flag = fetch_byte
@@ -1439,11 +1603,21 @@ module Dragonstone
                             end
                         end
                     end
-                    push(Bytecode::ClassValue.new(name, superclass, abstract_flag == 1))
+                    existing = existing_container(name)
+                    if existing.is_a?(Bytecode::ClassValue) && !existing.is_a?(Bytecode::StructValue)
+                        push(existing)
+                    else
+                        push(Bytecode::ClassValue.new(name, superclass, abstract_flag == 1))
+                    end
                 when OPC::MAKE_STRUCT
                     name_idx = fetch_byte
                     name = current_code.names[name_idx]
-                    push(Bytecode::StructValue.new(name))
+                    existing = existing_container(name)
+                    if existing.is_a?(Bytecode::StructValue)
+                        push(existing)
+                    else
+                        push(Bytecode::StructValue.new(name))
+                    end
                 when OPC::MAKE_ENUM
                     name_idx = fetch_byte
                     value_method_idx = fetch_byte
@@ -1469,6 +1643,9 @@ module Dragonstone
                         raise "DEFINE_METHOD expects FunctionValue"
                     end
                     define_method_in_current(name, fn)
+                when OPC::DECLARE_IVAR
+                    name_idx = fetch_byte
+                    declare_ivar_in_current(current_code.names[name_idx])
                 when OPC::DEFINE_ENUM_MEMBER
                     name_idx = fetch_byte
                     has_value = fetch_byte
@@ -1504,6 +1681,24 @@ module Dragonstone
                     receiver = pop
                     result = invoke_method(receiver, current_code.names[name_idx], args, nil)
                     push(result)
+                when OPC::INVOKE_NAMED
+                    name_idx = fetch_byte
+                    argc = fetch_byte
+                    names_idx = fetch_byte
+                    args = pop_values(argc)
+                    receiver = pop
+                    method_name = current_code.names[name_idx]
+                    with_pending_arg_names(current_code.consts[names_idx], "#{typeof_name(receiver)}##{method_name}") do
+                        push(invoke_method(receiver, method_name, args, nil))
+                    end
+                when OPC::CALL_NAMED
+                    argc = fetch_byte
+                    name_idx = fetch_byte
+                    names_idx = fetch_byte
+                    args = pop_values(argc)
+                    with_pending_arg_names(current_code.consts[names_idx], "Function #{current_code.names[name_idx]}") do
+                        prepare_function_call(name_idx, args, nil)
+                    end
                 when OPC::INVOKE_BLOCK
                     name_idx = fetch_byte
                     argc = fetch_byte
@@ -1550,7 +1745,8 @@ module Dragonstone
                     code_idx = fetch_byte
                     signature = current_code.consts[signature_idx].as(Bytecode::FunctionSignature)
                     code = current_code.consts[code_idx].as(CompiledCode)
-                    push(Bytecode::BlockValue.new(signature, code))
+                    owner_id = current_frame.block_owner || current_frame.id
+                    push(Bytecode::BlockValue.new(signature, code, owner_id))
                 when OPC::MAKE_PARA
                     signature_idx = fetch_byte
                     code_idx = fetch_byte
@@ -1602,7 +1798,8 @@ module Dragonstone
                     name_idx = fetch_byte
                     type_idx = fetch_byte
                     type_expr = current_code.consts[type_idx].as(AST::TypeExpression)
-                    define_type_alias(current_code.names[name_idx], type_expr)
+                    alias_name = current_code.names[name_idx]
+                    define_type_alias(alias_name, type_expr)
                 when OPC::CHECK_TYPE
                     type_idx = fetch_byte
                     value = pop
@@ -1613,6 +1810,16 @@ module Dragonstone
                 when OPC::RET
                     result = handle_return
                     return result if target_depth && @frames.size == target_depth
+                when OPC::RET_BLOCK
+                    result = pop
+                    frame = current_frame
+                    if owner = frame.block_owner
+                        raise NonLocalReturn.new(result, owner)
+                    else
+                        push(result)
+                        result = handle_return
+                        return result if target_depth && @frames.size == target_depth
+                    end
                 when OPC::DEFINE_SINGLETON_METHOD
                     fn_val = pop
                     receiver = pop
@@ -1624,16 +1831,56 @@ module Dragonstone
                 else
                     raise "Unknown opcode: #{opcode}"
                     end
+                rescue ex : NonLocalReturn
+                    raise ex unless unwind_to_frame?(ex.target_frame_id, target_depth)
+                    push(ex.value)
+                    return ex.value if target_depth && @frames.size == target_depth
+                    next
                 rescue ex : VMException
+                    drop_stale_handlers
+                    if handler = @handlers.last?
+                        raise ex if target_depth && handler.frame_depth < target_depth
+                    end
                     handle_exception(ex.value)
+                    next
+                rescue ex : ::Dragonstone::Error
+                    drop_stale_handlers
+                    if handler = @handlers.last?
+                        raise ex if target_depth && handler.frame_depth < target_depth
+                    end
+                    handle_exception(ex.original_message, ex)
                     next
                 end
             end
         end
 
+        private def unwind_to_frame?(target_frame_id : UInt64, target_depth : Int32?) : Bool
+            floor = target_depth || 0
+            index = nil
+            (floor...@frames.size).reverse_each do |i|
+                if @frames[i].id == target_frame_id
+                    index = i
+                    break
+                end
+            end
+            return false unless index
+
+            target = @frames[index]
+            while @frames.size > index
+                frame = @frames.pop
+                restore_shadowed_locals(frame)
+                exit_gc_context(frame.gc_flags)
+            end
+            truncate_stack(target.stack_base)
+            true
+        end
+
         private def fetch_byte : Int32
             frame = current_frame
-            byte = frame.code.code[frame.ip]
+            byte = frame.code.code[frame.ip]?
+            unless byte
+                raise "Ran past the end of #{frame.callable_name} (ip=#{frame.ip}, size=#{frame.code.code.size})"
+            end
             frame.ip += 1
             byte
         end
@@ -1646,6 +1893,7 @@ module Dragonstone
             sync_globals_slots
             @type_aliases.clear
             @handlers.clear
+            @handling.clear
             @current_exception = nil
             @rethrow_after_ensure = false
             @container_stack.clear
@@ -1717,11 +1965,20 @@ module Dragonstone
                         @pending_self = self_candidate
                         return fn
                     end
+
+                    if const = lookup_lexical_constant(self_candidate.klass, name)
+                        return const
+                    end
                 when Bytecode::ModuleValue
-                    if const = self_candidate.fetch_constant(name)
+                    if const = lookup_lexical_constant(self_candidate, name)
                         return const
                     end
                     if fn = self_candidate.lookup_method(name)
+                        @pending_self = self_candidate
+                        return fn
+                    end
+
+                    if fn = lookup_singleton_method(self_candidate, name)
                         @pending_self = self_candidate
                         return fn
                     end
@@ -1729,6 +1986,7 @@ module Dragonstone
                     return invoke_method(self_candidate, name, [] of Bytecode::Value, nil)
                 end
             end
+
             if frame.callable_name == "<block>" && @frames.size >= 2
                 outer = @frames[@frames.size - 2]
                 if locals = outer.locals
@@ -1740,7 +1998,19 @@ module Dragonstone
                     end
                 end
             end
-            raise "Undefined variable: #{name}"
+
+            raise ::Dragonstone::NameError.new("Undefined variable or constant: #{name}", current_location)
+        end
+
+        private def lookup_lexical_constant(container : Bytecode::ModuleValue?, name : String) : Bytecode::Value?
+            enclosing = container
+            while enclosing
+                if value = enclosing.fetch_constant(name)
+                    return value
+                end
+                enclosing = enclosing.lexical_parent
+            end
+            nil
         end
 
         private def current_self_safe : Bytecode::Value?
@@ -1753,18 +2023,18 @@ module Dragonstone
             raise "Empty constant path" if segments.empty?
             head = segments.first
             unless head.is_a?(String)
-                raise ::Dragonstone::NameError.new("Invalid constant head")
+                raise ::Dragonstone::NameError.new("Invalid constant head", current_location)
             end
             value = resolve_variable_by_name(head)
             segments[1..-1].each do |segment_value|
                 segment = segment_value.to_s
                 unless value.is_a?(Bytecode::ModuleValue)
-                    raise ::Dragonstone::NameError.new("Constant #{segment} not found in #{describe_value(value)}")
+                    raise ::Dragonstone::NameError.new("Constant #{segment} not found in #{describe_value(value)}", current_location)
                 end
                 mod = value.as(Bytecode::ModuleValue)
                 nested = mod.fetch_constant(segment)
                 unless nested
-                    raise ::Dragonstone::NameError.new("Constant #{segment} not found")
+                    raise ::Dragonstone::NameError.new("Constant #{segment} not found", current_location)
                 end
                 value = nested.nil? ? nil : nested
             end
@@ -1786,7 +2056,18 @@ module Dragonstone
                 return value
             end
 
-            raise ::Dragonstone::NameError.new("Undefined variable or constant: #{name}")
+            if self_candidate = current_self_safe
+                owner = case self_candidate
+                        when Bytecode::InstanceValue then self_candidate.klass
+                        when Bytecode::ModuleValue   then self_candidate
+                        else                              nil
+                        end
+                if owner && (const = lookup_lexical_constant(owner, name))
+                    return const
+                end
+            end
+
+            raise ::Dragonstone::NameError.new("Undefined variable or constant: #{name}", current_location)
         end
 
         private def load_instance_variable(name : String) : Bytecode::Value
@@ -1805,7 +2086,7 @@ module Dragonstone
                 return self_value.ivars
             end
 
-            raise ::Dragonstone::InterpreterError.new("Instance variables require self to be an object")
+            raise ::Dragonstone::InterpreterError.new("Instance variables require self to be an object", current_location)
         end
 
         private def wrap_exception_value(value : Bytecode::Value?) : Bytecode::Value
@@ -1841,7 +2122,7 @@ module Dragonstone
                 return container
             end
 
-            raise ::Dragonstone::InterpreterError.new("Instance variable access requires self")
+            raise ::Dragonstone::InterpreterError.new("Instance variable access requires self", current_location)
         end
 
         private def store_variable(name_idx : Int32, name : String, value : Bytecode::Value) : Nil
@@ -1875,29 +2156,67 @@ module Dragonstone
             end
         end
 
-        private def handle_exception(value : Bytecode::Value?)
+        private def current_location : ::Dragonstone::Location?
+            frame = @frames.last?
+            return nil unless frame
+            table = frame.code.lines
+            return nil if table.empty?
+
+            idx = frame.ip
+            idx -= 1 if idx > 0
+            return nil if idx >= table.size
+
+            line = table[idx]
+            return nil if line <= 0
+
+            ::Dragonstone::Location.new(
+                file: @source_path,
+                line: line,
+                column: (frame.code.cols[idx]? || 0) > 0 ? frame.code.cols[idx] : nil,
+                length: nil,
+                source_line: nil
+            )
+        end
+
+        private def handle_exception(value : Bytecode::Value?, original : ::Exception? = nil)
             @current_exception = wrap_exception_value(value)
             loop do
+                drop_stale_handlers
                 handler = @handlers.last?
                 break unless handler
                 truncate_stack(handler.stack_depth)
 
                 while (@frames.size - 1) > handler.frame_depth
                     frame = @frames.pop
+                    restore_shadowed_locals(frame)
                     truncate_stack(frame.stack_base)
                 end
 
+                if @handling.last?
+                    if handler.ensure_ip
+                        pop_handler
+                        @rethrow_after_ensure = true
+                        current_frame.ip = handler.ensure_ip.not_nil!
+                        return
+                    end
+                    pop_handler
+                    next
+                end
+
                 if handler.rescue_ip
+                    set_handling(true)
                     current_frame.ip = handler.rescue_ip.not_nil!
                     return
                 elsif handler.ensure_ip
+                    pop_handler
                     @rethrow_after_ensure = true
                     current_frame.ip = handler.ensure_ip.not_nil!
                     return
                 end
-                @handlers.pop?
+                pop_handler
             end
-            raise ::Dragonstone::RuntimeError.new("Unhandled exception: #{stringify(value)}")
+            raise original if original
+            raise ::Dragonstone::RuntimeError.new("Unhandled exception: #{stringify(value)}", current_location)
         end
 
         private def assign_global(name : String, value : Bytecode::Value) : Nil
@@ -1919,12 +2238,30 @@ module Dragonstone
             value
         end
 
+        private def existing_container(name : String) : Bytecode::Value?
+            if container = current_container
+                return container.fetch_constant(name)
+            end
+
+            if idx = @name_index_cache[name]?
+                ensure_global_capacity(idx)
+                if @global_defined[idx]
+                    return @global_slots[idx]?
+                end
+            end
+
+            @globals[name]?
+        end
+
         private def current_container : Bytecode::ModuleValue?
             @container_stack.last?
         end
 
         private def define_constant_in_current(name : String, value : Bytecode::Value)
             if container = current_container
+                if value.is_a?(Bytecode::ModuleValue)
+                    value.as(Bytecode::ModuleValue).lexical_parent = container
+                end
                 container.define_constant(name, value)
             else
                 assign_global(name, value)
@@ -1937,9 +2274,15 @@ module Dragonstone
             container.define_method(name, fn)
         end
 
+        private def declare_ivar_in_current(name : String) : Nil
+            container = current_container
+            return unless container.is_a?(Bytecode::ClassValue)
+            container.as(Bytecode::ClassValue).register_ivar(name)
+        end
+
         private def extend_current_container_with(target : Bytecode::Value) : Nil
             container = current_container
-            raise ::Dragonstone::TypeError.new("'extend' can only be used inside modules or classes") unless container
+            raise ::Dragonstone::TypeError.new("'extend' can only be used inside modules or classes", current_location) unless container
 
             extension = case target
             when Bytecode::ModuleValue
@@ -1947,7 +2290,7 @@ module Dragonstone
             when Bytecode::ClassValue
                 target
             else
-                raise ::Dragonstone::TypeError.new("Cannot extend #{container.name} with #{type_of(target)}")
+                raise ::Dragonstone::TypeError.new("Cannot extend #{container.name} with #{type_of(target)}", current_location)
             end
 
             return if extension == container
@@ -1960,7 +2303,7 @@ module Dragonstone
         private def define_enum_member(name : String, value : Bytecode::Value?)
             container = current_container
             unless container.is_a?(Bytecode::EnumValue)
-                raise "Enum member defined outside enum"
+                raise ::Dragonstone::InterpreterError.new("Enum member defined outside enum", current_location)
             end
             enum_val = container.as(Bytecode::EnumValue)
             member_value = if value.nil?
@@ -1971,7 +2314,7 @@ module Dragonstone
                 elsif value.is_a?(Int64)
                     value
                 else
-                    raise ::Dragonstone::TypeError.new("Enum values must be integers")
+                    raise ::Dragonstone::TypeError.new("Enum values must be integers", current_location)
                 end
             end
             enum_val.define_member(name, member_value)
@@ -1983,13 +2326,29 @@ module Dragonstone
                 ensure_ip >= 0 ? ensure_ip : nil,
                 body_ip >= 0 ? body_ip : nil,
                 @stack.size,
-                @frames.size - 1
+                @frames.size - 1,
+                @frames.last?.try(&.id) || 0_u64
             )
             @handlers << handler
+            @handling << false
+        end
+
+        private def drop_stale_handlers : Nil
+            while handler = @handlers.last?
+                frame = @frames[handler.frame_depth]?
+                break if frame && frame.id == handler.frame_id
+                pop_handler
+            end
         end
 
         private def pop_handler
+            @handling.pop?
             @handlers.pop?
+        end
+
+        private def set_handling(value : Bool) : Nil
+            return if @handling.empty?
+            @handling[@handling.size - 1] = value
         end
 
         private def should_store_global?(name : String) : Bool
@@ -2009,10 +2368,10 @@ module Dragonstone
                     push(value)
                     return
                 end
-                raise "Undefined function: #{name}"
+                raise ::Dragonstone::NameError.new("Undefined function: #{name}", current_location)
             end
             if value.abstract?
-                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{name}")
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{name}", current_location)
             end
             self_value = @pending_self
             @pending_self = nil
@@ -2031,7 +2390,7 @@ module Dragonstone
             method_owner : Bytecode::ClassValue? = nil
         ) : Bytecode::Value
             if fn.abstract?
-                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{fn.name}")
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract function #{fn.name}", current_location)
             end
             final_args = coerce_call_args(fn.signature, args, block_value, fn.name)
             depth_before = @frames.size
@@ -2064,8 +2423,139 @@ module Dragonstone
             gc_flags : ::Dragonstone::Runtime::GC::Flags = ::Dragonstone::Runtime::GC::Flags.new
         ) : Frame
             frame = Frame.new(code, @stack.size, use_locals, block_value, signature, callable_name, method_owner, para_env, gc_flags)
+            @frame_seq += 1
+            frame.id = @frame_seq
             @frames << frame
             frame
+        end
+
+        private def initialize_struct_instance(instance : Bytecode::InstanceValue, args : Array(Bytecode::Value)) : Nil
+            arg_names = @pending_arg_names
+            @pending_arg_names = nil
+
+            klass = instance.klass
+            field_names = klass.ivar_names
+
+            if field_names.empty?
+                unless args.empty?
+                    raise ::Dragonstone::TypeError.new("#{klass.name}.new expects 0 arguments, got #{args.size}", current_location)
+                end
+                return
+            end
+
+            if args.empty?
+                raise ::Dragonstone::TypeError.new("#{klass.name}.new expects named arguments for #{field_names.join(", ")}", current_location)
+            end
+
+            if arg_names && arg_names.size == args.size && arg_names.all?(&.is_a?(String))
+                arg_names.each_with_index do |name, index|
+                    field = name.as(String)
+                    unless field_names.includes?(field)
+                        raise ::Dragonstone::NameError.new("Unknown attribute '#{field}' for #{klass.name}", current_location)
+                    end
+                    instance.ivars[field] = args[index]
+                end
+            else
+                tuple = args.size == 1 ? args.first.as?(Bytecode::NamedTupleValue) : nil
+                unless tuple
+                    raise ::Dragonstone::TypeError.new("#{klass.name}.new expects named arguments", current_location)
+                end
+
+                tuple.entries.each do |symbol, value|
+                    name = symbol.name
+                    unless field_names.includes?(name)
+                        raise ::Dragonstone::NameError.new("Unknown attribute '#{name}' for #{klass.name}", current_location)
+                    end
+                    instance.ivars[name] = value
+                end
+            end
+
+            unset = field_names.reject { |name| instance.ivars.has_key?(name) }
+            unless unset.empty?
+                raise ::Dragonstone::TypeError.new("#{klass.name}.new missing required attributes: #{unset.join(", ")}", current_location)
+            end
+        end
+
+        private def with_pending_arg_names(names : Bytecode::Value, label : String, &)
+            previous = @pending_arg_names
+            pending = names.as?(Array(Bytecode::Value))
+            @pending_arg_names = pending
+            begin
+                yield
+
+                if pending && (still_pending = @pending_arg_names) && still_pending.same?(pending)
+                    reject_pending_arg_names(still_pending, label)
+                end
+            ensure
+                @pending_arg_names = previous
+            end
+        end
+
+        private def reject_pending_arg_names(names : Array(Bytecode::Value), label : String) : NoReturn
+            named = names.find(&.is_a?(String))
+            raise ::Dragonstone::TypeError.new("#{label} does not take named arguments ('#{named}:')", current_location)
+        end
+
+        private def reorder_named_arguments(args : Array(Bytecode::Value), names : Array(Bytecode::Value), signature : Bytecode::FunctionSignature, label : String) : Array(Bytecode::Value)
+            parameter_names = signature.parameters.map { |param| param.name }
+            slots = Array(Bytecode::Value).new(parameter_names.size, nil)
+            filled = Array(Bool).new(parameter_names.size, false)
+            next_positional = 0
+
+            args.each_with_index do |value, index|
+                name = names[index]?
+
+                if name.is_a?(String)
+                    slot = parameter_names.index(name)
+                    raise ArgumentError.new("#{label} has no parameter named '#{name}'") unless slot
+                    raise ArgumentError.new("#{label} got two values for parameter '#{name}'") if filled[slot]
+                    slots[slot] = value
+                    filled[slot] = true
+                else
+                    while next_positional < filled.size && filled[next_positional]
+                        next_positional += 1
+                    end
+                    raise ArgumentError.new("#{label} got more arguments than it has parameters") if next_positional >= slots.size
+                    slots[next_positional] = value
+                    filled[next_positional] = true
+                    next_positional += 1
+                end
+            end
+
+            last_filled = -1
+            filled.each_with_index { |present, index| last_filled = index if present }
+            reordered = [] of Bytecode::Value
+            (0..last_filled).each do |index|
+                if filled[index]
+                    reordered << slots[index]
+                    next
+                end
+
+                default_code = signature.parameters[index]?.try(&.default_code)
+                raise ArgumentError.new("#{label} is missing a value for parameter '#{parameter_names[index]}'") unless default_code
+                reordered << evaluate_default_chunk(default_code)
+            end
+            reordered
+        end
+
+        private def fill_default_arguments(args : Array(Bytecode::Value), signature : Bytecode::FunctionSignature) : Array(Bytecode::Value)
+            filled = Array(Bytecode::Value).new(signature.parameters.size)
+            args.each { |value| filled << value }
+
+            (args.size...signature.parameters.size).each do |index|
+                default_code = signature.parameters[index].default_code
+                break unless default_code
+                filled << evaluate_default_chunk(default_code)
+            end
+            filled
+        end
+
+        private def evaluate_default_chunk(code : CompiledCode) : Bytecode::Value
+            depth_before = @frames.size
+            push_frame(code, true, nil, nil, "<default>")
+            value = execute_with_frame_cleanup(depth_before)
+            pop
+            value
         end
 
         private def push_callable_frame(
@@ -2080,22 +2570,35 @@ module Dragonstone
             *,
             para_env : Hash(String, Bytecode::Value)? = nil
         ) : Frame
+            if names = @pending_arg_names
+                @pending_arg_names = nil
+                args = reorder_named_arguments(args, names, signature, callable_name || "<callable>")
+            end
+
+            if args.size < signature.parameters.size
+                args = fill_default_arguments(args, signature)
+            end
+
             frame = push_frame(code, true, block_value, signature, callable_name, method_owner, para_env, signature.gc_flags)
             enter_gc_context(frame.gc_flags)
             if ENV["DS_DEBUG_STACK_ENTRY"]?
                 STDERR.puts "ENTER #{callable_name || "<lambda>"} stack_base=#{frame.stack_base} stack=#{@stack.inspect}"
             end
+
             if locals_source
                 if source_locals = locals_source.locals
                     frame.locals = source_locals
                     frame.locals_defined = locals_source.locals_defined
                 end
             end
+
             if self_value
                 if idx = @name_index_cache["self"]?
                     assign_local(frame, idx, self_value)
                 end
             end
+            shadow_parameter_slots(frame, signature) if locals_source
+
             signature.parameters.each_with_index do |param, index|
                 value = args[index]
                 enforce_type(param.type_expression, value, "parameter #{index + 1}")
@@ -2107,16 +2610,56 @@ module Dragonstone
             frame
         end
 
+        private def shadow_parameter_slots(frame : Frame, signature : Bytecode::FunctionSignature) : Nil
+            return if signature.parameters.empty?
+            locals = frame.locals
+            defined = frame.locals_defined
+            return unless locals && defined
+
+            saved = Array(Tuple(Int32, Bytecode::Value?, Bool)).new(signature.parameters.size)
+            signature.parameters.each do |param|
+                index = param.name_index
+                next if index >= locals.size
+                saved << {index, locals[index]?, defined[index]}
+            end
+            frame.shadowed = saved unless saved.empty?
+        end
+
+        private def restore_shadowed_locals(frame : Frame) : Nil
+            saved = frame.shadowed
+            return unless saved
+            frame.shadowed = nil
+            locals = frame.locals
+            defined = frame.locals_defined
+            return unless locals && defined
+
+            saved.each do |(index, value, was_defined)|
+                next if index >= locals.size
+                locals[index] = value
+                defined[index] = was_defined
+            end
+        end
+
         private def execute_with_frame_cleanup(depth_before : Int32) : Bytecode::Value
-            execute(target_depth: depth_before)
-        rescue ex
-            cleanup_frames_from(depth_before)
-            raise ex
+            own_frame_id = @frames.last?.try(&.id)
+
+            begin
+                execute(target_depth: depth_before)
+            rescue ex : NonLocalReturn
+                cleanup_frames_from(depth_before)
+                raise ex unless own_frame_id && ex.target_frame_id == own_frame_id
+                push(ex.value)
+                ex.value
+            rescue ex
+                cleanup_frames_from(depth_before)
+                raise ex
+            end
         end
 
         private def cleanup_frames_from(depth_before : Int32) : Nil
             while @frames.size > depth_before
                 frame = @frames.pop
+                restore_shadowed_locals(frame)
                 exit_gc_context(frame.gc_flags)
                 truncate_stack(frame.stack_base)
             end
@@ -2149,12 +2692,13 @@ module Dragonstone
             result = pop
             frame = @frames.pop?
             raise "Return from empty frame stack" unless frame
+            restore_shadowed_locals(frame)
             if frame.gc_flags.escape_return && frame.gc_flags.effective_gc_area?
                 result = @gc_manager.copy(result)
             end
             exit_gc_context(frame.gc_flags)
             if @frames.empty?
-                raise "Return from top-level frame not supported"
+                raise ::Dragonstone::InterpreterError.new("Return from top-level frame not supported", current_location)
             end
             if signature = frame.signature
                 enforce_type(signature.return_type, result, "return from #{frame.callable_name || "<lambda>"}")
@@ -2188,7 +2732,7 @@ module Dragonstone
         private def pop_block : Bytecode::BlockValue
             value = pop
             unless value.is_a?(Bytecode::BlockValue)
-                raise "Expected block literal, got #{type_of(value)}"
+                raise ::Dragonstone::TypeError.new("Expected block literal, got #{type_of(value)}", current_location)
             end
             value
         end
@@ -2196,12 +2740,10 @@ module Dragonstone
         private def emit_output(text : String) : Nil
             @stdout_io << text
             @stdout_io << "\n"
-            puts text if @log_to_stdout
         end
 
         private def emit_output_inline(text : String) : Nil
             @stdout_io << text
-            print text if @log_to_stdout
         end
 
         private def flush_debug_inline : Nil
@@ -2229,7 +2771,7 @@ module Dragonstone
                 when Float32 then a + b
                 when Float64 then a + b
 
-                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+                else raise ::Dragonstone::TypeError.new("Cannot add #{type_of(a)} and #{type_of(b)}", current_location)
 
                 end
             when Int64
@@ -2237,7 +2779,7 @@ module Dragonstone
 
                 when Int32, Int64, Float32, Float64 then a + b
 
-                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+                else raise ::Dragonstone::TypeError.new("Cannot add #{type_of(a)} and #{type_of(b)}", current_location)
 
                 end
             when Float64
@@ -2245,7 +2787,7 @@ module Dragonstone
 
                 when Int32, Int64, Float32, Float64 then a + b
 
-                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+                else raise ::Dragonstone::TypeError.new("Cannot add #{type_of(a)} and #{type_of(b)}", current_location)
 
                 end
             when Float32
@@ -2253,16 +2795,23 @@ module Dragonstone
 
                 when Int32, Int64, Float32, Float64 then a + b
 
-                else raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+                else raise ::Dragonstone::TypeError.new("Cannot add #{type_of(a)} and #{type_of(b)}", current_location)
 
                 end
             when String
                 stringify(a) + stringify(b)
 
+            when Array(Bytecode::Value)
+                # Concatenation, as in the interpreter's `add_values`.
+                unless b.is_a?(Array(Bytecode::Value))
+                    raise ::Dragonstone::TypeError.new("Cannot add #{type_of(b)} to Array", current_location)
+                end
+                a + b.as(Array(Bytecode::Value))
+
             else
                 overload = invoke_operator_overload(a, "+", b)
                 return overload unless overload.nil?
-                raise "Cannot add #{type_of(a)} and #{type_of(b)}"
+                raise ::Dragonstone::TypeError.new("Cannot add #{type_of(a)} and #{type_of(b)}", current_location)
 
             end
         end
@@ -2273,25 +2822,25 @@ module Dragonstone
                 lhs = a.to_i64
                 rhs = case b
                     when Int32, Int64 then b.to_i64
-                    else raise "Type error"
+                    else raise ::Dragonstone::TypeError.new("Type error", current_location)
                 end
                 lhs % rhs
             when Float64
                 rhs = case b
                     when Int32, Int64, Float32, Float64 then b.to_f64
-                    else raise "Type error"
+                    else raise ::Dragonstone::TypeError.new("Type error", current_location)
                 end
                 a % rhs
             when Float32
                 rhs = case b
                     when Int32, Int64, Float32, Float64 then b.to_f64
-                    else raise "Type error"
+                    else raise ::Dragonstone::TypeError.new("Type error", current_location)
                 end
                 a % rhs
             else
                 overload = invoke_operator_overload(a, "%", b)
                 return overload unless overload.nil?
-                raise "Type error"
+                raise ::Dragonstone::TypeError.new("Type error", current_location)
             end
         end
 
@@ -2336,11 +2885,21 @@ module Dragonstone
             if a.is_a?(Bytecode::BuiltinStream)
                 text = display_value(b)
                 @stdout_io << text
-                print text if @log_to_stdout
+                return a
+            end
+
+            if a.is_a?(Array(Bytecode::Value))
+                a.as(Array(Bytecode::Value)) << b
                 return a
             end
 
             integer_op(a, b) { |x, y| x << y }
+        end
+
+        private def vm_values_equal?(a : Bytecode::Value, b : Bytecode::Value) : Bool
+            return true if a == b
+            overload = invoke_operator_overload(a, "==", b)
+            overload.nil? ? false : truthy?(overload)
         end
 
         private def shift_right(a : Bytecode::Value, b : Bytecode::Value) : Bytecode::Value
@@ -2355,11 +2914,11 @@ module Dragonstone
                 lhs = a.to_i64
                 rhs = case b
                     when Int32, Int64 then b.to_i64
-                    else raise "Type error"
+                    else raise ::Dragonstone::TypeError.new("Type error", current_location)
                 end
                 yield lhs, rhs
             else
-                raise "Type error"
+                raise ::Dragonstone::TypeError.new("Type error", current_location)
             end
         end
 
@@ -2401,11 +2960,11 @@ module Dragonstone
                     yield a, b
 
                 else
-                    raise "Type error"
+                    raise ::Dragonstone::TypeError.new("Type error", current_location)
 
                 end
             else
-                raise "Type error"
+                raise ::Dragonstone::TypeError.new("Type error", current_location)
 
             end
         end
@@ -2453,6 +3012,29 @@ module Dragonstone
             end
         end
 
+        private def case_equal?(pattern : Bytecode::Value, value : Bytecode::Value) : Bool
+            case pattern
+            when Range(Int64, Int64)
+                value.is_a?(Int32) || value.is_a?(Int64) ? pattern.includes?(value.as(Int32 | Int64).to_i64) : false
+            when Range(Char, Char)
+                value.is_a?(Char) ? pattern.includes?(value.as(Char)) : false
+            when Bytecode::EnumValue
+                value.is_a?(Bytecode::EnumMemberValue) && value.as(Bytecode::EnumMemberValue).enum.same?(pattern.as(Bytecode::EnumValue))
+            when Bytecode::ClassValue
+                return false unless value.is_a?(Bytecode::InstanceValue)
+                klass = value.as(Bytecode::InstanceValue).klass
+                target = pattern.as(Bytecode::ClassValue)
+                current = klass
+                while current
+                    return true if current.same?(target)
+                    current = current.superclass
+                end
+                false
+            else
+                pattern == value
+            end
+        end
+
         private def spaceship_compare(a, b) : Int64
             overload = invoke_operator_overload(a, "<=>", b)
             if overload
@@ -2469,7 +3051,7 @@ module Dragonstone
             when String
                 string_spaceship(a, b)
             else
-                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
+                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}", current_location)
             end
         end
 
@@ -2485,7 +3067,7 @@ module Dragonstone
                     when Float32 then b.to_i64
                     when Float64 then b.to_i64
                     else
-                        raise "Type error"
+                        raise ::Dragonstone::TypeError.new("Type error", current_location)
                     end
 
                 return base.to_f64 ** exp.to_f64 if exp < 0
@@ -2506,7 +3088,7 @@ module Dragonstone
                     when Float32 then b.to_f64
                     when Float64 then b
                     else
-                        raise "Type error"
+                        raise ::Dragonstone::TypeError.new("Type error", current_location)
                     end
                 a.to_f64 ** exponent
             when Float64
@@ -2515,17 +3097,17 @@ module Dragonstone
                     when Float32 then b.to_f64
                     when Float64 then b
                     else
-                        raise "Type error"
+                        raise ::Dragonstone::TypeError.new("Type error", current_location)
                     end
                 a ** exponent
             else
-                raise "Type error"
+                raise ::Dragonstone::TypeError.new("Type error", current_location)
             end
         end
 
         private def numeric_spaceship(a, b) : Int64
             unless b.is_a?(Int32) || b.is_a?(Int64) || b.is_a?(Float32) || b.is_a?(Float64)
-                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
+                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}", current_location)
             end
             l = a.is_a?(Float64) ? a : a.to_f64
             r = b.is_a?(Float64) ? b : b.to_f64
@@ -2536,7 +3118,7 @@ module Dragonstone
 
         private def string_spaceship(a : String, b) : Int64
             unless b.is_a?(String)
-                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}")
+                raise ::Dragonstone::TypeError.new("Cannot compare #{type_of(a)} with #{type_of(b)}", current_location)
             end
             (a <=> b).to_i64
         end
@@ -2552,7 +3134,7 @@ module Dragonstone
             when Float64
                 value
             else
-                raise "Cannot apply #{op} to #{type_of(value)}"
+                raise ::Dragonstone::TypeError.new("Cannot apply #{op} to #{type_of(value)}", current_location)
             end
         end
 
@@ -2563,7 +3145,7 @@ module Dragonstone
             when Int32
                 value.to_i64
             else
-                raise "Cannot apply #{op} to #{type_of(value)}"
+                raise ::Dragonstone::TypeError.new("Cannot apply #{op} to #{type_of(value)}", current_location)
             end
         end
 
@@ -2591,17 +3173,17 @@ module Dragonstone
                 finish = if b.is_a?(Int32) || b.is_a?(Int64)
                     b.to_i64
                 else
-                    raise "Unsupported range endpoint"
+                    raise ::Dragonstone::TypeError.new("Unsupported range endpoint", current_location)
                 end
                 inclusive ? Range.new(start, finish) : Range.new(start, finish, exclusive: true)
             elsif a.is_a?(Char)
                 if b.is_a?(Char)
                     inclusive ? Range.new(a, b) : Range.new(a, b, exclusive: true)
                 else
-                    raise "Unsupported range endpoint"
+                    raise ::Dragonstone::TypeError.new("Unsupported range endpoint", current_location)
                 end
             else
-                raise "Unsupported range endpoints"
+                raise ::Dragonstone::TypeError.new("Unsupported range endpoints", current_location)
             end
         end
         
@@ -2651,18 +3233,18 @@ module Dragonstone
                     pairs << "#{key.name}: #{display_value(val)}"
                 end
                 "{#{pairs.join(", ")}}"
-            when Bytecode::ModuleValue
-                "#<Module>"
             when Bytecode::RaisedExceptionValue
                 value.message
             when Bytecode::ClassValue
                 value.name
             when Bytecode::StructValue
                 value.name
-            when Bytecode::InstanceValue
-                "#<#{value.klass.name}>"
             when Bytecode::EnumValue
                 value.name
+            when Bytecode::ModuleValue
+                value.name
+            when Bytecode::InstanceValue
+                "#<#{value.klass.name}>"
             when Bytecode::EnumMemberValue
                 value.name
             when Bytecode::FunctionValue
@@ -2687,9 +3269,9 @@ module Dragonstone
             when Bool, Int32, Int64
                 value.to_s
             when Float32
-                format_float(value.to_f64)
+                value.to_f64.inspect
             when Float64
-                format_float(value)
+                value.inspect
             when Char
                 value.inspect
             when SymbolValue
@@ -2712,11 +3294,11 @@ module Dragonstone
                     pairs << "#{key.name}: #{inspect_value(val)}"
                 end
                 "{#{pairs.join(", ")}}"
-            when Bytecode::ModuleValue
-                "#<Module>"
             when Bytecode::RaisedExceptionValue
                 value.message
             when Bytecode::ClassValue
+                value.name
+            when Bytecode::ModuleValue
                 value.name
             when Bytecode::StructValue
                 value.name
@@ -2743,6 +3325,17 @@ module Dragonstone
             sprintf("%.15g", value)
         end
         
+        private def typeof_name(value : Bytecode::Value) : String
+            case value
+            when Bytecode::InstanceValue then value.klass.name
+            when Char                    then "Char"
+            when SymbolValue             then "Symbol"
+            when Bytecode::StructValue   then "Class"
+            when Bytecode::ClassValue    then "Class"
+            else                              type_of(value)
+            end
+        end
+
         private def type_of(value : Bytecode::Value) : String
             case value
             when Nil then "Nil"
@@ -2774,17 +3367,56 @@ module Dragonstone
             end
         end
         
+        private def slice_string_with_bounds(string : String, start : Int32, length : Int32) : String
+            raise ::Dragonstone::OutOfBounds.new("String#slice length must be >= 0, got #{length}", current_location) if length < 0
+            raise ::Dragonstone::OutOfBounds.new("String#slice start index #{start} is negative", current_location) if start < 0
+
+            char_count = string_chars(string).size
+
+            if start > char_count
+                raise ::Dragonstone::OutOfBounds.new("String#slice start index #{start} is out of bounds for #{char_count} characters", current_location)
+            elsif start == char_count
+                return "" if length == 0
+                raise ::Dragonstone::OutOfBounds.new("String#slice start index #{start} is out of bounds for #{char_count} characters", current_location)
+            end
+
+            return "" if length == 0
+
+            if start + length > char_count
+                raise ::Dragonstone::OutOfBounds.new("String#slice length #{length} exceeds string boundary (#{char_count} characters)", current_location)
+            end
+
+            string_slice(string, start, length)
+        end
+
+        private def string_chars(string : String) : Array(Char)
+            cached = @string_char_cache
+            return cached[1] if cached && cached[0].same?(string)
+
+            chars = string.chars
+            @string_char_cache = {string, chars}
+            chars
+        end
+
+        private def string_char_at(string : String, index : Int32) : Char?
+            return string[index]? if string.ascii_only?
+            string_chars(string)[index]?
+        end
+
+        private def string_slice(string : String, start : Int32, count : Int32) : String
+            return string[start, count] if string.ascii_only?
+            String.build { |io| string_chars(string)[start, count].each { |c| io << c } }
+        end
+
         private def index_access(obj : Bytecode::Value, index : Bytecode::Value) : Bytecode::Value
             case obj
 
             when Array
                 idx = ensure_integer_index(index, "Array")
                 obj[idx]?
-
             when String
                 idx = ensure_integer_index(index, "String")
-                char = obj[idx]?
-                char ? char.to_s : nil
+                string_char_at(obj, idx)
             when Bytecode::TupleValue
                 idx = ensure_integer_index(index, "Tuple")
                 obj.elements[idx]?
@@ -2794,7 +3426,7 @@ module Dragonstone
             when Bytecode::MapValue
                 obj[index]?
             else
-                raise "Cannot index #{type_of(obj)}"
+                raise ::Dragonstone::TypeError.new("Cannot index #{type_of(obj)}", current_location)
             end
         end
 
@@ -2811,7 +3443,7 @@ module Dragonstone
                 value
 
             else
-                raise ::Dragonstone::TypeError.new("Cannot assign index on #{type_of(obj)}")
+                raise ::Dragonstone::TypeError.new("Cannot assign index on #{type_of(obj)}", current_location)
 
             end
         end
@@ -2827,7 +3459,7 @@ module Dragonstone
             when Float64
                 index.to_i
             else
-                raise ::Dragonstone::TypeError.new("#{container} index must be integer")
+                raise ::Dragonstone::TypeError.new("#{container} index must be integer", current_location)
             end
         end
 
@@ -2838,7 +3470,18 @@ module Dragonstone
             when String
                 SymbolValue.new(index)
             else
-                raise ::Dragonstone::TypeError.new("NamedTuple index must be Symbol or String")
+                raise ::Dragonstone::TypeError.new("NamedTuple index must be Symbol or String", current_location)
+            end
+        end
+
+        private def defines_own_method?(receiver : Bytecode::Value, method : String) : Bool
+            case receiver
+            when Bytecode::InstanceValue
+                !receiver.as(Bytecode::InstanceValue).klass.lookup_method(method).nil?
+            when Bytecode::ModuleValue
+                !receiver.as(Bytecode::ModuleValue).lookup_method(method).nil?
+            else
+                false
             end
         end
 
@@ -2860,7 +3503,7 @@ module Dragonstone
             when "inspect"
                 inspect_value(receiver)
             else
-                raise "Unsupported conversion method #{method}"
+                raise ::Dragonstone::TypeError.new("Unsupported conversion method #{method}", current_location)
             end
         end
         
@@ -2876,7 +3519,19 @@ module Dragonstone
                 return receiver.nil?
             end
 
-            if conversion_method?(method)
+            if method == "object_id"
+                ensure_conversion_call_valid(args, block_value, method)
+                key = singleton_key_for(receiver)
+                return key.nil? ? nil : key.to_i64
+            end
+
+            if method == "not_nil!"
+                ensure_conversion_call_valid(args, block_value, method)
+                raise ::Dragonstone::NilAssertionError.new("not_nil! called on nil", current_location) if receiver.nil?
+                return receiver
+            end
+
+            if conversion_method?(method) && !defines_own_method?(receiver, method)
                 ensure_conversion_call_valid(args, block_value, method)
                 return conversion_result(receiver, method)
             end
@@ -2915,7 +3570,7 @@ module Dragonstone
                     raise ArgumentError.new("BuiltinStream#flush expects 0 arguments, got #{args.size}") unless args.empty?
                     nil
                 else
-                    raise "Unknown method #{method} on BuiltinStream"
+                    raise ::Dragonstone::NameError.new("Unknown method #{method} on BuiltinStream", current_location)
                 end
 
             when Bytecode::BuiltinStdin
@@ -2925,7 +3580,7 @@ module Dragonstone
                     raise ArgumentError.new("BuiltinStdin#read expects 0 arguments, got #{args.size}") unless args.empty?
                     (STDIN.gets || "").chomp
                 else
-                    raise "Unknown method #{method} on BuiltinStdin"
+                    raise ::Dragonstone::NameError.new("Unknown method #{method} on BuiltinStdin", current_location)
                 end
 
             when Bytecode::BuiltinArgf
@@ -2939,14 +3594,14 @@ module Dragonstone
                         String.build do |io|
                             @argv_value.each do |path|
                                 unless path.is_a?(String)
-                                    raise "ARGF expects argv entries to be strings"
+                                    raise ::Dragonstone::TypeError.new("ARGF expects argv entries to be strings", current_location)
                                 end
                                 io << File.read(path)
                             end
                         end
                     end
                 else
-                    raise "Unknown method #{method} on BuiltinArgf"
+                    raise ::Dragonstone::NameError.new("Unknown method #{method} on BuiltinArgf", current_location)
                 end
 
             when String
@@ -2960,6 +3615,12 @@ module Dragonstone
                 when "strip"
                     raise ArgumentError.new("String##{method} does not accept a block") if block_value
                     receiver.strip
+                when "rstrip"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.rstrip
+                when "lstrip"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver.lstrip
                 when "length", "size"
                     raise ArgumentError.new("String##{method} does not accept a block") if block_value
                     receiver.size.to_i64
@@ -2968,21 +3629,118 @@ module Dragonstone
                     if args.size == 2
                         start = ensure_integer_index(args[0], "String")
                         count = ensure_integer_index(args[1], "String")
-                        if start < 0 || count < 0 || start >= receiver.size
-                            raise ::Dragonstone::OutOfBounds.new("Slice out of bounds")
-                        end
-                        receiver[start, count]
+                        slice_string_with_bounds(receiver, start, count)
                     elsif args.size == 1 && args[0].is_a?(Range(Int64, Int64))
                         range = args[0].as(Range(Int64, Int64))
                         start = range.begin.to_i
                         last = range.end.to_i
                         last -= 1 if range.exclusive?
                         count = last - start + 1
-                        receiver[start, count]
+                        string_slice(receiver, start, count)
                     else
                         raise ArgumentError.new("Invalid arguments for String#slice")
                     end
-                else raise "Unknown method #{method} on String"
+                when "chars"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String##{method} does not take arguments") unless args.empty?
+                    result = [] of Bytecode::Value
+                    string_chars(receiver).each { |char| result << char }
+                    result
+                when "reverse"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String##{method} does not take arguments") unless args.empty?
+                    receiver.reverse
+                when "empty", "empty?"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String##{method} does not take arguments") unless args.empty?
+                    receiver.empty?
+                when "to_s"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    receiver
+                when "to_i"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    if args.size == 1
+                        base = ensure_integer_index(args[0], "String#to_i base")
+                        receiver.to_i64(base)
+                    else
+                        receiver.to_i64
+                    end
+                when "to_f"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String##{method} does not take arguments") unless args.empty?
+                    receiver.to_f64
+                when "index"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String#index expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = case arg = args[0]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#index expects a String or Char argument", current_location)
+                        end
+                    at = receiver.index(needle)
+                    at ? at.to_i64 : nil
+                when "includes?", "includes"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String#includes? expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = case arg = args[0]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#includes? expects a String or Char argument", current_location)
+                        end
+                    receiver.includes?(needle)
+                when "starts_with?"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String#starts_with? expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = case arg = args[0]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#starts_with? expects a String or Char argument", current_location)
+                        end
+                    receiver.starts_with?(needle)
+                when "ends_with?"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String#ends_with? expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = case arg = args[0]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#ends_with? expects a String or Char argument", current_location)
+                        end
+                    receiver.ends_with?(needle)
+                when "split"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    result = [] of Bytecode::Value
+                    pieces = if args.empty?
+                        receiver.split
+                    else
+                        separator = case arg = args[0]
+                            when String then arg
+                            when Char   then arg.to_s
+                            else raise ::Dragonstone::TypeError.new("String#split expects a String or Char separator", current_location)
+                            end
+                        receiver.split(separator)
+                    end
+                    pieces.each { |piece| result << piece }
+                    result
+                when "replace"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String#replace expects 2 arguments, got #{args.size}") unless args.size == 2
+                    from = case arg = args[0]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#replace expects String or Char arguments", current_location)
+                        end
+                    to = case arg = args[1]
+                        when String then arg
+                        when Char   then arg.to_s
+                        else raise ::Dragonstone::TypeError.new("String#replace expects String or Char arguments", current_location)
+                        end
+                    receiver.gsub(from, to)
+                when "last"
+                    raise ArgumentError.new("String##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("String##{method} does not take arguments") unless args.empty?
+                    chars = string_chars(receiver)
+                    chars.empty? ? nil : chars[chars.size - 1]
+                else raise ::Dragonstone::NameError.new("Unknown method #{method} on String", current_location)
                 end
             when Array
                 array = receiver.as(Array(Bytecode::Value))
@@ -3076,7 +3834,231 @@ module Dragonstone
                         end
                     end
                     found
-                else raise "Unknown method #{method} on Array"
+                # `until` under its Ruby/Crystal name; the same method.
+                when "find"
+                    block = ensure_block(block_value, "Array##{method}")
+                    match : Bytecode::Value? = nil
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            if truthy?(outcome[:value])
+                                match = element
+                                raise BreakSignal.new
+                            end
+                        end
+                    end
+                    match
+                when "reject"
+                    block = ensure_block(block_value, "Array##{method}")
+                    result = [] of Bytecode::Value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            unless truthy?(outcome[:value])
+                                result << element
+                            end
+                        end
+                    end
+                    result
+                # Flattens one level only, like Crystal and Ruby.
+                when "flat_map"
+                    block = ensure_block(block_value, "Array##{method}")
+                    result = [] of Bytecode::Value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            mapped = outcome[:value]
+                            if mapped.is_a?(Array(Bytecode::Value))
+                                mapped.each { |inner| result << inner }
+                            else
+                                result << mapped
+                            end
+                        end
+                    end
+                    result
+                # `map` then drop the nils, in one pass.
+                when "compact_map"
+                    block = ensure_block(block_value, "Array##{method}")
+                    result = [] of Bytecode::Value
+                    run_enumeration_loop do
+                        array.each do |element|
+                            outcome = execute_block_iteration(block, [element])
+                            next if outcome[:state] == :next
+                            mapped = outcome[:value]
+                            result << mapped unless mapped.nil?
+                        end
+                    end
+                    result
+                when "each_with_index"
+                    block = ensure_block(block_value, "Array##{method}")
+                    run_enumeration_loop do
+                        array.each_with_index do |element, index|
+                            outcome = execute_block_iteration(block, [element, index.to_i64.as(Bytecode::Value)])
+                            next if outcome[:state] == :next
+                        end
+                    end
+                    array
+                when "any?"
+                    matched = false
+                    if block = block_value
+                        run_enumeration_loop do
+                            array.each do |element|
+                                outcome = execute_block_iteration(block, [element])
+                                next if outcome[:state] == :next
+                                if truthy?(outcome[:value])
+                                    matched = true
+                                    raise BreakSignal.new
+                                end
+                            end
+                        end
+                    else
+                        array.each do |element|
+                            if truthy?(element)
+                                matched = true
+                                break
+                            end
+                        end
+                    end
+                    matched
+                when "all?"
+                    all_matched = true
+                    if block = block_value
+                        run_enumeration_loop do
+                            array.each do |element|
+                                outcome = execute_block_iteration(block, [element])
+                                next if outcome[:state] == :next
+                                unless truthy?(outcome[:value])
+                                    all_matched = false
+                                    raise BreakSignal.new
+                                end
+                            end
+                        end
+                    else
+                        array.each do |element|
+                            unless truthy?(element)
+                                all_matched = false
+                                break
+                            end
+                        end
+                    end
+                    all_matched
+                when "none?"
+                    none_matched = true
+                    if block = block_value
+                        run_enumeration_loop do
+                            array.each do |element|
+                                outcome = execute_block_iteration(block, [element])
+                                next if outcome[:state] == :next
+                                if truthy?(outcome[:value])
+                                    none_matched = false
+                                    raise BreakSignal.new
+                                end
+                            end
+                        end
+                    else
+                        array.each do |element|
+                            if truthy?(element)
+                                none_matched = false
+                                break
+                            end
+                        end
+                    end
+                    none_matched
+                when "count"
+                    if block = block_value
+                        unless args.empty?
+                            raise ArgumentError.new("Array##{method} takes a block or an argument, not both")
+                        end
+                        total = 0_i64
+                        run_enumeration_loop do
+                            array.each do |element|
+                                outcome = execute_block_iteration(block, [element])
+                                next if outcome[:state] == :next
+                                total += 1 if truthy?(outcome[:value])
+                            end
+                        end
+                        total
+                    elsif args.size == 1
+                        needle = args.first
+                        array.count { |element| vm_values_equal?(element, needle) }.to_i64
+                    elsif args.empty?
+                        array.size.to_i64
+                    else
+                        raise ArgumentError.new("Array##{method} expects 0 or 1 argument, got #{args.size}")
+                    end
+                when "includes?", "member?", "contains?"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = args.first
+                    array.any? { |element| vm_values_equal?(element, needle) }
+                # The position of the first equal element, or nil.
+                when "index"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} expects 1 argument, got #{args.size}") unless args.size == 1
+                    needle = args.first
+                    position = array.index { |element| vm_values_equal?(element, needle) }
+                    position ? position.to_i64 : nil
+                when "uniq"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} does not take arguments") unless args.empty?
+                    result = [] of Bytecode::Value
+                    array.each do |element|
+                        already = result.any? { |seen| vm_values_equal?(seen, element) }
+                        result << element unless already
+                    end
+                    result
+                when "compact"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} does not take arguments") unless args.empty?
+                    result = [] of Bytecode::Value
+                    array.each { |element| result << element unless element.nil? }
+                    result
+                when "reverse"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} does not take arguments") unless args.empty?
+                    array.reverse
+                # A shallow copy -- see the interpreter's `Array#dup`.
+                when "dup"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} does not take arguments") unless args.empty?
+                    array.dup
+                when "join"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} expects 0 or 1 argument, got #{args.size}") unless args.size <= 1
+                    separator = if args.empty?
+                        ""
+                    else
+                        first_arg = args.first
+                        raise ::Dragonstone::TypeError.new("Array##{method} separator must be a String", current_location) unless first_arg.is_a?(String)
+                        first_arg.as(String)
+                    end
+                    String.build do |io|
+                        array.each_with_index do |element, index|
+                            io << separator unless index == 0
+                            io << display_value(element)
+                        end
+                    end
+                when "sort"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} does not take arguments") unless args.empty?
+                    array.dup.sort! { |left_element, right_element| spaceship_compare(left_element, right_element).to_i }
+                when "concat"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    raise ArgumentError.new("Array##{method} expects 1 argument, got #{args.size}") unless args.size == 1
+                    other = args.first
+                    raise ::Dragonstone::TypeError.new("Array##{method} expects an Array, got #{type_of(other)}", current_location) unless other.is_a?(Array(Bytecode::Value))
+                    other.as(Array(Bytecode::Value)).each { |element| array << element }
+                    array
+                when "first?"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array.first?
+                when "last?"
+                    raise ArgumentError.new("Array##{method} does not accept a block") if block_value
+                    array.last?
+                else raise ::Dragonstone::NameError.new("Unknown method #{method} on Array", current_location)
                 end
             when Bytecode::BagConstructorValue
                 call_bag_constructor_method(receiver, method, args, block_value)
@@ -3096,7 +4078,7 @@ module Dragonstone
                     pop
                     result
                 else
-                    raise "Unknown method '#{method}' on Block"
+                    raise ::Dragonstone::NameError.new("Unknown method '#{method}' on Block", current_location)
                 end
             when Bytecode::ParaValue
                 case method
@@ -3110,7 +4092,7 @@ module Dragonstone
                     pop
                     result
                 else
-                    raise "Unknown method '#{method}' on Para"
+                    raise ::Dragonstone::NameError.new("Unknown method '#{method}' on Para", current_location)
                 end
             when Bytecode::FunctionValue
                 call_function_method(receiver, method, args, block_value)
@@ -3125,32 +4107,34 @@ module Dragonstone
                     raise ArgumentError.new("Exception##{method} does not take arguments") unless args.empty?
                     receiver.message
                 else
-                    raise "Unknown method #{method} on Exception"
-                end
-            when Bytecode::ClassValue
-                if method == "new"
-                    raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
-                    if receiver.abstract?
-                        raise ::Dragonstone::TypeError.new("Cannot instantiate abstract class #{receiver.name}")
-                    end
-                    missing = receiver.unimplemented_abstract_methods
-                    unless missing.empty?
-                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
-                    end
-                    instance = Bytecode::InstanceValue.new(receiver)
-                    if init_info = receiver.lookup_method_with_owner("initialize")
-                        call_function_value(init_info[:method], args, nil, instance, method_owner: init_info[:owner])
-                    end
-                    instance
-                else
-                    call_container_method(receiver, method, args, block_value, receiver)
+                    raise ::Dragonstone::NameError.new("Unknown method #{method} on Exception", current_location)
                 end
             when Bytecode::StructValue
                 if method == "new"
                     raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
                     missing = receiver.unimplemented_abstract_methods
                     unless missing.empty?
-                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}")
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}", current_location)
+                    end
+                    instance = Bytecode::InstanceValue.new(receiver)
+                    if init_info = receiver.lookup_method_with_owner("initialize")
+                        call_function_value(init_info[:method], args, nil, instance, method_owner: init_info[:owner])
+                    else
+                        initialize_struct_instance(instance, args)
+                    end
+                    instance
+                else
+                    call_container_method(receiver, method, args, block_value, receiver)
+                end
+            when Bytecode::ClassValue
+                if method == "new"
+                    raise ArgumentError.new("#{receiver.name}.new does not accept a block") if block_value
+                    if receiver.abstract?
+                        raise ::Dragonstone::TypeError.new("Cannot instantiate abstract class #{receiver.name}", current_location)
+                    end
+                    missing = receiver.unimplemented_abstract_methods
+                    unless missing.empty?
+                        raise ::Dragonstone::TypeError.new("#{receiver.name} must implement abstract methods: #{missing.to_a.sort.join(", ")}", current_location)
                     end
                     instance = Bytecode::InstanceValue.new(receiver)
                     if init_info = receiver.lookup_method_with_owner("initialize")
@@ -3174,8 +4158,145 @@ module Dragonstone
                 call_range_method(receiver, method, args, block_value)
             when Bytecode::GCHost
                 call_gc_method(receiver, method, args, block_value)
+            when Int32, Int64
+                call_int_method(receiver.is_a?(Int32) ? receiver.as(Int32).to_i64 : receiver.as(Int64), method, args, block_value)
+            when Float32, Float64
+                call_float_method(receiver.is_a?(Float32) ? receiver.as(Float32).to_f64 : receiver.as(Float64), method, args, block_value)
+            when Char
+                call_char_method(receiver.as(Char), method, args, block_value)
+            when Bool
+                call_bool_method(receiver.as(Bool), method, args, block_value)
             else
-                raise "Cannot call method #{method} on #{type_of(receiver)}"
+                raise ::Dragonstone::TypeError.new("Cannot call method #{method} on #{type_of(receiver)}", current_location)
+            end
+        end
+
+        private def reject_primitive_block(block_value : Bytecode::BlockValue?, label : String) : Nil
+            raise ArgumentError.new("#{label} does not accept a block") if block_value
+        end
+
+        private def reject_primitive_args(args : Array(Bytecode::Value), label : String) : Nil
+            raise ArgumentError.new("#{label} does not take arguments") unless args.empty?
+        end
+
+        private def call_int_method(value : Int64, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            case method
+            when "to_s"
+                reject_primitive_block(block_value, "Int##{method}")
+                if args.size == 1
+                    base = case arg = args[0]
+                        when Int64 then arg.to_i32
+                        when Int32 then arg
+                        else raise ::Dragonstone::TypeError.new("Int#to_s base must be an integer", current_location)
+                        end
+                    value.to_s(base)
+                elsif args.empty?
+                    value.to_s
+                else
+                    raise ArgumentError.new("Int#to_s expects 0 or 1 arguments, got #{args.size}")
+                end
+            when "to_i", "to_i64"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value
+            when "to_f", "to_f64"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.to_f64
+            when "chr"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.chr
+            when "abs"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.abs
+            when "even?"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.even?
+            when "odd?"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.odd?
+            when "zero?"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value.zero?
+            when "positive?"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value > 0
+            when "negative?"
+                reject_primitive_block(block_value, "Int##{method}")
+                reject_primitive_args(args, "Int##{method}")
+                value < 0
+            when "times"
+                block = ensure_block(block_value, "Int#times")
+                reject_primitive_args(args, "Int#times")
+                run_enumeration_loop do
+                    i = 0_i64
+                    while i < value
+                        outcome = execute_block_iteration(block, [i.as(Bytecode::Value)])
+                        i += 1
+                        next if outcome[:state] == :next
+                    end
+                end
+                value
+            else
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Int", current_location)
+            end
+        end
+
+        private def call_float_method(value : Float64, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            reject_primitive_block(block_value, "Float##{method}")
+            reject_primitive_args(args, "Float##{method}")
+
+            case method
+            when "to_s"          then value.to_s
+            when "to_i", "to_i64" then value.to_i64
+            when "to_f", "to_f64" then value
+            when "abs"           then value.abs
+            when "floor"         then value.floor.to_i64
+            when "ceil"          then value.ceil.to_i64
+            when "round"         then value.round.to_i64
+            when "zero?"         then value.zero?
+            when "positive?"     then value > 0.0
+            when "negative?"     then value < 0.0
+            when "nan?"          then value.nan?
+            when "infinite?"     then value.infinite? != nil
+            else
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Float", current_location)
+            end
+        end
+
+        private def call_char_method(value : Char, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            reject_primitive_block(block_value, "Char##{method}")
+            reject_primitive_args(args, "Char##{method}")
+
+            case method
+            when "to_s"          then value.to_s
+            when "ord"           then value.ord.to_i64
+            when "upcase"        then value.upcase
+            when "downcase"      then value.downcase
+            when "letter?"       then value.letter?
+            when "number?"       then value.number?
+            when "alphanumeric?" then value.alphanumeric?
+            when "whitespace?"   then value.whitespace?
+            when "ascii?"        then value.ascii?
+            else
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Char", current_location)
+            end
+        end
+
+        private def call_bool_method(value : Bool, method : String, args : Array(Bytecode::Value), block_value : Bytecode::BlockValue?) : Bytecode::Value
+            reject_primitive_block(block_value, "Bool##{method}")
+            reject_primitive_args(args, "Bool##{method}")
+
+            case method
+            when "to_s" then value.to_s
+            else
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Bool", current_location)
             end
         end
 
@@ -3185,22 +4306,22 @@ module Dragonstone
             method_name = frame.callable_name
 
             unless owner && method_name && method_name != "<block>"
-                raise ::Dragonstone::InterpreterError.new("'super' used outside of a method")
+                raise ::Dragonstone::InterpreterError.new("'super' used outside of a method", current_location)
             end
 
             receiver_self = current_self_safe
-            raise ::Dragonstone::InterpreterError.new("'super' requires a receiver") unless receiver_self
+            raise ::Dragonstone::InterpreterError.new("'super' requires a receiver", current_location) unless receiver_self
 
             super_class = owner.not_nil!.superclass
-            raise ::Dragonstone::NameError.new("No superclass available for #{owner.not_nil!.name}") unless super_class
+            raise ::Dragonstone::NameError.new("No superclass available for #{owner.not_nil!.name}", current_location) unless super_class
 
             info = super_class.not_nil!.lookup_method_with_owner(method_name.not_nil!)
-            raise ::Dragonstone::NameError.new("Undefined method '#{method_name}' for superclass of #{owner.not_nil!.name}") unless info
+            raise ::Dragonstone::NameError.new("Undefined method '#{method_name}' for superclass of #{owner.not_nil!.name}", current_location) unless info
 
             fn = info.not_nil![:method]
             super_owner = info.not_nil![:owner]
             if fn.abstract?
-                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method_name} on #{super_owner.name}")
+                raise ::Dragonstone::TypeError.new("Cannot invoke abstract method #{method_name} on #{super_owner.name}", current_location)
             end
 
             call_function_value(fn, args, block_value, receiver_self, method_owner: super_owner)
@@ -3223,7 +4344,7 @@ module Dragonstone
                 pop
                 result
             else
-                raise "Unknown method '#{method}' for Function"
+                raise ::Dragonstone::NameError.new("Unknown method '#{method}' for Function", current_location)
             end
         end
 
@@ -3264,7 +4385,7 @@ module Dragonstone
                 call_ffi_c(args)
 
             else
-                raise "Unknown FFI method: #{method}"
+                raise ::Dragonstone::NameError.new("Unknown FFI method: #{method}", current_location)
 
             end
         end
@@ -3316,18 +4437,18 @@ module Dragonstone
         private def call_ffi_ruby(args : Array(Bytecode::Value)) : Bytecode::Value
 
             unless args.size >= 2
-                raise "ffi.call_ruby requires at least 2 arguments: method_name, [args]"
+                raise ::Dragonstone::InterpreterError.new("ffi.call_ruby requires at least 2 arguments: method_name, [args]", current_location)
             end
             
             method_name = args[0]
             method_args = args[1]
             
             unless method_name.is_a?(String)
-                raise "First argument to ffi.call_ruby must be a string"
+                raise ::Dragonstone::TypeError.new("First argument to ffi.call_ruby must be a string", current_location)
             end
             
             unless method_args.is_a?(Array)
-                raise "Second argument to ffi.call_ruby must be an array"
+                raise ::Dragonstone::TypeError.new("Second argument to ffi.call_ruby must be an array", current_location)
             end
 
             ruby_args = method_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
@@ -3339,18 +4460,18 @@ module Dragonstone
         # FFI: Call native (ABI-backed) functions.
         private def call_ffi_native(args : Array(Bytecode::Value)) : Bytecode::Value
             unless args.size >= 2
-                raise "ffi.call requires at least 2 arguments: func_name, [args]"
+                raise ::Dragonstone::InterpreterError.new("ffi.call requires at least 2 arguments: func_name, [args]", current_location)
             end
 
             func_name = args[0]
             func_args = args[1]
 
             unless func_name.is_a?(String)
-                raise "First argument to ffi.call must be a string"
+                raise ::Dragonstone::TypeError.new("First argument to ffi.call must be a string", current_location)
             end
 
             unless func_args.is_a?(Array)
-                raise "Second argument to ffi.call must be an array"
+                raise ::Dragonstone::TypeError.new("Second argument to ffi.call must be an array", current_location)
             end
 
             native_args = func_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
@@ -3362,18 +4483,18 @@ module Dragonstone
         # FFI: Call Crystal functions.
         private def call_ffi_crystal(args : Array(Bytecode::Value)) : Bytecode::Value
             unless args.size >= 2
-                raise "ffi.call_crystal requires at least 2 arguments: func_name, [args]"
+                raise ::Dragonstone::InterpreterError.new("ffi.call_crystal requires at least 2 arguments: func_name, [args]", current_location)
             end
             
             func_name = args[0]
             func_args = args[1]
             
             unless func_name.is_a?(String)
-                raise "First argument to ffi.call_crystal must be a string"
+                raise ::Dragonstone::TypeError.new("First argument to ffi.call_crystal must be a string", current_location)
             end
             
             unless func_args.is_a?(Array)
-                raise "Second argument to ffi.call_crystal must be an array"
+                raise ::Dragonstone::TypeError.new("Second argument to ffi.call_crystal must be an array", current_location)
             end
 
             crystal_args = func_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
@@ -3385,18 +4506,18 @@ module Dragonstone
         # FFI: Call C functions.
         private def call_ffi_c(args : Array(Bytecode::Value)) : Bytecode::Value
             unless args.size >= 2
-                raise "ffi.call_c requires at least 2 arguments: func_name, [args]"
+                raise ::Dragonstone::InterpreterError.new("ffi.call_c requires at least 2 arguments: func_name, [args]", current_location)
             end
             
             func_name = args[0]
             func_args = args[1]
             
             unless func_name.is_a?(String)
-                raise "First argument to ffi.call_c must be a string"
+                raise ::Dragonstone::TypeError.new("First argument to ffi.call_c must be a string", current_location)
             end
             
             unless func_args.is_a?(Array)
-                raise "Second argument to ffi.call_c must be an array"
+                raise ::Dragonstone::TypeError.new("Second argument to ffi.call_c must be an array", current_location)
             end
 
             c_args = func_args.as(Array(Bytecode::Value)).map { |arg| Dragonstone::FFI.normalize(arg) }
@@ -3415,7 +4536,7 @@ module Dragonstone
             artifact = Core::Compiler.build(program)
             bytecode = artifact.bytecode
             raise "Failed to produce bytecode for VM runtime" unless bytecode
-            vm = VM.new(bytecode, log_to_stdout: true)
+            vm = VM.new(bytecode)
             vm.run
             0
             
