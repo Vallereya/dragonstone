@@ -1,0 +1,102 @@
+use "./helper"
+use { thing } from "./helper"
+
+alias MyInt = int
+
+con LIMIT : int = 10
+
+x = 1
+x : int = 2
+x += 3
+@iv = 4
+@iv : str
+
+xs = [1, 2]
+t = {1, 2}
+n = { a: 1 }
+m = { "k" -> 1 }
+xs[0] = 9
+
+b = bag(str)
+c = true ? 1 : 2
+u = -x
+
+extend Comparable
+
+if x > 1
+    echo "a"
+elsif x > 0
+    echo "b"
+else
+    echo "c"
+end
+
+unless x > 1
+    echo "u"
+end
+
+while x < 5
+    x += 1
+end
+
+begin
+    echo "t"
+rescue e
+    echo "r"
+ensure
+    echo "en"
+end
+
+case x
+
+when 1
+    echo "one"
+else
+    echo "other"
+end
+
+def f(a, b = 2) : int
+    return a + b
+end
+
+abstract class Shape
+    getter side : int
+
+    abstract def area : int
+    end
+end
+
+class Sq < Shape
+    def area : int
+        return @side * @side
+    end
+end
+
+module M
+    extend self
+
+    def g
+        yield 1
+    end
+end
+
+struct Pt
+    getter px : int
+end
+
+enum Color
+    Red
+    Blue
+end
+
+p = ->(v) { v + 1 }
+
+fn = fun (v) v * 2 end
+
+with x
+    echo "w"
+end
+
+raise "boom"
+
+quit 0

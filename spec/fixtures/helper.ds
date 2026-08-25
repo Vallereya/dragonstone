@@ -1,0 +1,7 @@
+define help
+    return 1
+end
+
+define thing
+    return 2
+end
