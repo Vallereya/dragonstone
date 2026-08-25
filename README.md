@@ -191,8 +191,8 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     crystal spec
 
     # Helper script that runs the spec for just a specific backend.
-    ./scripts/backend_ci.sh spec --backend native
-    ./scripts/backend_ci.sh spec --backend core
+    ./bin/scripts/backend_ci.sh spec --backend native
+    ./bin/scripts/backend_ci.sh spec --backend core
 ```
 
 ## ✨ Examples
@@ -602,7 +602,7 @@ echo square.call(6)
 - <2% overhead at scale.
 - Near identical for loops vs single.
 
-You can run these yourself from the `./scripts/benchmark` directory.
+You can run these yourself from the `./bin/scripts/benchmark` directory.
 
 ### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
 ```
