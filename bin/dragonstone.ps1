@@ -528,7 +528,7 @@ function Ensure-GcBuild {
         return
     }
 
-    $buildScript = Join-Path $projectRoot 'scripts/build_gc.ps1'
+    $buildScript = Join-Path $projectRoot 'bin/scripts/build_gc.ps1'
     if (-not (Test-Path -Path $buildScript)) {
         return
     }
