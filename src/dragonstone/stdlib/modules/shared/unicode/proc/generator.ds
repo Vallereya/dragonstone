@@ -27,7 +27,7 @@ module Unicode
                 name: str
                 general_category: str
                 decomposition_type: DecompositionType
-                decomposition_map: arr[int]?
+                decomposition_map: arr(int)?
                 upcase_map: int?
                 downcase_map: int?
                 casefold_map: int?
@@ -35,7 +35,7 @@ module Unicode
 
             record SpecialCaseEntry
                 codepoint: int
-                value: arr[int]
+                value: arr(int)
             end
 
             record CaseRange
@@ -112,7 +112,12 @@ module Unicode
             end
 
             def render_data_ds: str
-                xid_start, xid_continue = generate_xid_ranges
+                # Destructured in stage0 as `xid_start, xid_continue = ...`.
+                # since dragonstone doesn't have multiple assignment, this
+                # was the ONLY site in stage0's Crystal that needed redone.
+                xid_ranges = generate_xid_ranges()
+                xid_start = xid_ranges[0]
+                xid_continue = xid_ranges[1]
                 ext_pictographic = generate_extended_pictographic_ranges
 
                 return str.build do |io|
