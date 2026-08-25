@@ -1,19 +1,12 @@
 # 
 #   .gitignore for Dragonstone.
-#
-
-# IDE & OS ignores.
-.fake
-.DS_Store
-.vscode
-.idea
-.nvim
-
-# Ignore any caches from testing, and spec outputs.
-cache
-cache/
-.cache
-.cache/
+# 
+# 
+# Here I'm putting in files and folders
+# to be ignored from git. This is also
+# a cross-ignore for dragonstone, forge,
+# eden, and dragonstone-lang.org website.
+# 
 
 # Various notes, temporary files, and other artifacts.
 .dragonstone
@@ -45,3 +38,38 @@ src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/cord/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/extra/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/include/
 src/dragonstone/shared/runtime/abi/std/gc/vendor/lib/libatomic_ops/
+
+# IDE, OS, and website specific ignores. Plus, any caches 
+# from testing + abi/ffi testing, and spec outputs.
+.fake
+.DS_Store
+.vscode
+.idea
+.nvim
+/build
+/.svelte-kit
+node_modules
+.output
+.vercel
+.netlify
+.wrangler
+.env
+.env.*
+!.env.example
+!.env.test
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.cache/
+.c_cache/
+.crystal_cache/
+.ruby_cache/
+__pycache__/
+*.pyc
+.js_cache/
+
+# Others (TEMP IGNORE & REMOVE AFTER REVIEW)
+.github/workflows/
+bin/scripts/
+spec/bootstrap/
+bootstrap/
+docs/
