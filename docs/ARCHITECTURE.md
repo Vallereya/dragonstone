@@ -35,7 +35,6 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   └── FUNDING.yml
     ├── bootstrap/                      -> dragonstone bootstrap build
     ├── examples/                       -> example .ds files
-    ├── scripts/                        -> auto scripts
     ├── log/                            -> log dump from some `spec` files.
     ├── spec/                           -> spec testing files
     ├── docs/                           -> documentation
@@ -49,6 +48,7 @@ For Release, `1.X.X` this versioning will where we be using the corresponding `M
     │   ├── ARCHITECTURE.md         -> *you are here*
     │   └── ROADMAP.md                  -> project roadmap
     ├── bin/                            -> **BUILD**
+    │   ├── scripts/                    -> auto scripts (moved from [root]/scripts/ 2026-08-22)
     │   ├── payloads/                   -> 
     │   ├── dev/                        -> dev builds
     │   ├── build/                      -> dragonstone builds
