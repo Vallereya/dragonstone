@@ -5,19 +5,24 @@ usage() {
     cat <<'EOF'
 Package Dragonstone backend artifacts into backend-specific directories (and archives).
 
+Output goes to `.dragonstone/release/package/`; staged payloads under
+backends/, archives alongside them. That directory is gitignored, so
+nothing generated here can be committed by accident.
+
 Usage:
   package_backends.sh [--backend native|core|all] [--output <dir>] [--no-zip]
 
 Options:
   --backend <name>  Backend to package (native, core, or all). Default: all.
-  --output <dir>    Directory for staged payloads (defaults to release/backends).
+  --output <dir>    Directory for staged payloads.
+                    Default: .dragonstone/release/package/backends
   --no-zip          Skip creating zip archives (stages only).
   -h, --help        Show this help text.
 EOF
 }
 
 backend="all"
-output_root="dev/release/backends"
+output_root=".dragonstone/release/package/backends"
 create_zip=true
 
 while [[ $# -gt 0 ]]; do
@@ -65,8 +70,8 @@ esac
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 output_root="$(cd "$repo_root" && mkdir -p "$output_root" && cd "$output_root" && pwd)"
-mkdir -p "$repo_root/dev/release"
-archive_root="$(cd "$repo_root/dev/release" && pwd)"
+mkdir -p "$repo_root/.dragonstone/release/package"
+archive_root="$(cd "$repo_root/.dragonstone/release/package" && pwd)"
 
 COMMON_PATHS=(
     "LICENSE"
