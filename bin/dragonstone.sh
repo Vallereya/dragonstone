@@ -337,10 +337,10 @@ build_dragonstone() {
     mkdir -p "$BUILD_DIR"
     echo "Building Dragonstone....."
 
-    if [[ -x "$PROJECT_ROOT/scripts/build_gc.sh" ]]; then
-        "$PROJECT_ROOT/scripts/build_gc.sh" --if-needed
-    elif [[ -f "$PROJECT_ROOT/scripts/build_gc.sh" ]]; then
-        bash "$PROJECT_ROOT/scripts/build_gc.sh" --if-needed
+    if [[ -x "$PROJECT_ROOT/bin/scripts/build_gc.sh" ]]; then
+        "$PROJECT_ROOT/bin/scripts/build_gc.sh" --if-needed
+    elif [[ -f "$PROJECT_ROOT/bin/scripts/build_gc.sh" ]]; then
+        bash "$PROJECT_ROOT/bin/scripts/build_gc.sh" --if-needed
     fi
 
     local abi_lib
