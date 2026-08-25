@@ -8,7 +8,6 @@
     `colorama` in Python, among others, and adapted for Dragonstone.
 ]#
 
-use "strings_build"
 
 module Colorize
     extend self

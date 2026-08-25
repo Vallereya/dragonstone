@@ -2,7 +2,6 @@
     This module provides Unicode-related procedural generators.
 ]#
 
-use "strings_build"
 use "./unicode_version.ds"
 
 module Unicode
@@ -116,7 +115,7 @@ module Unicode
                 xid_start, xid_continue = generate_xid_ranges
                 ext_pictographic = generate_extended_pictographic_ranges
 
-                return strings.build do |io|
+                return str.build do |io|
                     io.append("#[\n")
                     io.append("    ---------------------------------\n")
                     io.append("    ----------- UnicodeData ---------\n")
