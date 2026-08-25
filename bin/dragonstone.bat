@@ -1,4 +1,4 @@
-@REM This adds to local path and then handoff to .ps1
+@REM !# NOTE: This adds to local path and then handoff to .ps1
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
@@ -6,7 +6,8 @@ set "SHARDS_BIN_PATH=bin\build"
 for %%I in ("%SCRIPT_DIR%.") do set "ABS_DIR=%%~fI"
 if not "%ABS_DIR:~-1%"=="\" set "ABS_DIR=%ABS_DIR%\"
 
-@REM Persistently add the bin directory to the user's PATH so contributors only need to run this once.
+@REM !# NOTE: This persistently adds the bin directory to the user's
+@REM !# NOTE: PATH so contributors, etc. only need to run this once.
 powershell.exe -NoProfile -Command ^
     "$target='%ABS_DIR%';" ^
     "$userPath=[Environment]::GetEnvironmentVariable('PATH','User');" ^
