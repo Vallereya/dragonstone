@@ -1,0 +1,11 @@
+o = 31623
+s = 0
+while o > 0
+    i = 31623
+    while i > 0
+        s = s + 1
+        i = i - 1
+    end
+    o = o - 1
+end
+echo s
