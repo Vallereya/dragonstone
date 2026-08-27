@@ -35,6 +35,11 @@ lib DragonstoneABI
     fun dragonstone_file_write(path : UInt8*, bytes : UInt8*, len : LibC::SizeT, append : Int32) : Int64
     fun dragonstone_file_delete(path : UInt8*) : Int32
 
+    # Environment functions.
+    # Answers a null pointer for an unset key, which `abi_env_get` reads as
+    # nil. Its distinct from a key set to the empty string.
+    fun dragonstone_env_get(key : UInt8*) : UInt8*
+
     # Path manipulation functions.
     fun dragonstone_path_create(path : UInt8*) : UInt8*
     fun dragonstone_path_normalize(path : UInt8*) : UInt8*

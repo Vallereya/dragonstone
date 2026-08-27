@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./io/io.h"
+#include "./env/env.h"
 #include "./file/file.h"
 #include "./path/path.h"
 #include "./gc/gc.h"
