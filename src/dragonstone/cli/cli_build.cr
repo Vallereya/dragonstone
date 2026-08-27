@@ -422,6 +422,9 @@ module Dragonstone
       "src/dragonstone/shared/runtime/abi/std/io/io.c",
       "src/dragonstone/shared/runtime/abi/std/file/file.c",
       "src/dragonstone/shared/runtime/abi/std/path/path.c",
+      "src/dragonstone/shared/runtime/abi/std/env/env.c",
+    #   "src/dragonstone/shared/runtime/abi/std/value/value.c",
+    #   "src/dragonstone/shared/runtime/abi/std/gc/gc.c",
       "src/dragonstone/shared/runtime/abi/platform/platform.c",
       "src/dragonstone/shared/runtime/abi/platform/lib_c/lib_c.c",
     ]
