@@ -97,7 +97,7 @@ run ./examples/other/inject.ds
 run ./examples/other/lambda.ds
 run ./examples/other/ternary.ds
 run ./examples/other/iterator.ds
-run ./examples/other/interop.ds
+run ./examples/interop/interop.ds
 
 run ./examples/types/types.ds
 run ./examples/types/type_casting.ds

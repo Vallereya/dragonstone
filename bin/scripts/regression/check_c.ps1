@@ -97,7 +97,7 @@ $files = @(
     ".\examples\other\lambda.ds",
     ".\examples\other\iterator.ds",
     ".\examples\other\ternary.ds",
-    ".\examples\other\interop.ds",
+    ".\examples\interop\interop.ds",
 
     ".\examples\types\types.ds",
     ".\examples\types\type_casting.ds"

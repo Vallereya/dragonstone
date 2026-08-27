@@ -1,0 +1,56 @@
+#[
+    Interop Example
+]#
+
+#[
+    Example using Dragonstone ffi to call
+    methods from C, Ruby and Crystal.
+
+    These can be on the same line or broken up.
+]#
+
+define example_one
+    ffi.call_ruby("puts", ["Hello from Ruby!"])
+    ffi.call_crystal("puts", ["Hello from Crystal!"])
+    ffi.call_c("printf", ["Hello from C!\n"])
+end
+
+example_one
+
+define old_example_two
+    Invoke Ruby
+        with puts
+        
+        as {
+            "Hi from Ruby!"
+        }
+    end
+
+    Invoke Crystal
+        with puts
+
+        as {
+            "Hi from Crystal!"
+        }
+    end
+
+    Invoke C
+        with printf
+
+        as {
+            "Hi from C!\n"
+        }
+    end
+end
+
+old_example_two
+
+# define new_example_two
+#     Invoke Ruby {
+#         require "interop_ruby"
+
+#         puts "Another from Ruby!"
+#     }
+# end
+
+# new_example_two
