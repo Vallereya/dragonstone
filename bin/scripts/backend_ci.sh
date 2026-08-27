@@ -69,6 +69,7 @@ ABI_SOURCES=(
     "$ABI_SRC_DIR/abi.c"
     "$ABI_SRC_DIR/std/std.c"
     "$ABI_SRC_DIR/std/io/io.c"
+    "$ABI_SRC_DIR/std/env/env.c"
     "$ABI_SRC_DIR/std/file/file.c"
     "$ABI_SRC_DIR/std/path/path.c"
     "$ABI_SRC_DIR/std/value/value.c"

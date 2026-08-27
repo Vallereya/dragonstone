@@ -77,6 +77,7 @@ $abiSources = @(
     (Join-Path $abiSourceDir 'abi.c'),
     (Join-Path $abiSourceDir 'std/std.c'),
     (Join-Path $abiSourceDir 'std/io/io.c'),
+    (Join-Path $abiSourceDir 'std/env/env.c'),
     (Join-Path $abiSourceDir 'std/file/file.c'),
     (Join-Path $abiSourceDir 'std/path/path.c'),
     (Join-Path $abiSourceDir 'std/value/value.c'),
