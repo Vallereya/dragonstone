@@ -8,7 +8,7 @@ require "./bytecode"
 require "../compiler/compiler"
 require "./opc"
 require "../../shared/runtime/ffi_module"
-require "../../shared/ffi/ffi"
+require "../../shared/runtime/ffi/ffi"
 require "../../shared/language/ast/ast"
 
 module Dragonstone

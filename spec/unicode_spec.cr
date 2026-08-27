@@ -1,7 +1,7 @@
 require "spec"
 require "../src/dragonstone/shared/language/lexer/lexer"
 require "../src/dragonstone/shared/language/resolver/encoding"
-require "../src/dragonstone/shared/ffi/ffi"
+require "../src/dragonstone/shared/runtime/ffi/ffi"
 
 describe "Dragonstone Unicode support" do
     it "reads UTF-8 sources that include emoji identifiers" do

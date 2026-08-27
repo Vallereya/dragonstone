@@ -1,7 +1,7 @@
 require "file_utils"
 require "socket"
 require "http"
-require "../runtime/abi/abi"
+require "../abi/abi"
 
 module Dragonstone
     module FFI
@@ -239,6 +239,9 @@ module Dragonstone
             when "path_delete"
                 raw = expect_optional_string(arguments, 0, function_name, default: ".")
                 abi_path_delete(raw)
+            when "env_get"
+                key = expect_string(arguments, 0, function_name)
+                abi_env_get(key)
             else
                 raise "Unknown native function: #{function_name}"
             end
@@ -305,6 +308,14 @@ module Dragonstone
         private def self.abi_path_delete(path : String) : String
             ptr = DragonstoneABI.dragonstone_path_delete(path)
             abi_string(ptr)
+        end
+
+        private def self.abi_env_get(key : String) : String?
+            ptr = DragonstoneABI.dragonstone_env_get(key)
+            return nil if ptr.null?
+            value = String.new(ptr)
+            DragonstoneABI.dragonstone_std_free(ptr.as(Void*))
+            value
         end
 
         private def self.abi_file_exists?(path : String) : Bool
