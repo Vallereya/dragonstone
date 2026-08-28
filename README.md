@@ -573,7 +573,7 @@ echo square.call(6)
     end
 
     # Or using the `with` keyword to import a foreign file:
-    define new_example_two
+    define example
         invoke C
             with "./something"
         end
