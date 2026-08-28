@@ -7,7 +7,7 @@ require "../src/dragonstone"
 #
 # Every case in this group passed on the interpreter but failed on the VM.
 private def with_files(name : String, files : Hash(String, String), &)
-    dir = File.join(Dir.current, "logs", "#{name}_#{Random::Secure.hex(8)}")
+    dir = File.join(Dir.current, "bin/logs", "#{name}_#{Random::Secure.hex(8)}")
     FileUtils.mkdir_p(dir)
     begin
         files.each do |relative, source|
