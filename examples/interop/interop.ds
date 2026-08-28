@@ -3,12 +3,19 @@
 ]#
 
 #[
-    Example using Dragonstone ffi to call
-    methods from C, Ruby and Crystal.
+    Calling C, Ruby and Crystal from Dragonstone.
 
-    These can be on the same line or broken up.
+    There is two styles, the first is calling the ffi
+    directly while the other is a re-design of how to
+    us it with dragonstone syntax via `invoke`.
+
+    The old style has been retired `with <bare-name>` 
+    plus an `as { ... }`, because as more functionality 
+    was built into it, it became error prone.
 ]#
 
+# Style One; call the ffi directly.
+# ffi.call_<lang>(<function>, [<args>])`
 define example_one
     ffi.call_ruby("puts", ["Hello from Ruby!"])
     ffi.call_crystal("puts", ["Hello from Crystal!"])
@@ -17,40 +24,49 @@ end
 
 example_one
 
-define old_example_two
-    Invoke Ruby
-        with puts
-        
-        as {
-            "Hi from Ruby!"
-        }
-    end
-
-    Invoke Crystal
-        with puts
-
-        as {
-            "Hi from Crystal!"
-        }
-    end
-
-    Invoke C
-        with printf
-
-        as {
-            "Hi from C!\n"
-        }
+# Style Two; call using the `invoke` keyword.
+# 
+# `invoke <Language>` opens the block, `end` closes it.
+# `with` will be retained within the new style which is
+# how to import a file from the other language, with
+# the `invoke` keyword being updated as well to be
+# lowercase like every other keyword in dragonstone 
+# but the language name stays capitalized 
+# (ex: `invoke Ruby`). The `with` keyword is NOT `use` 
+# but work similar, `with` names something a FOREIGN 
+# toolchain resolves.
+# 
+# #! Work In Progress
+# Right now `with` will NOT resolve a file yet, but its 
+# built and will work as I move through the bootstrap. In
+# the future I will be adding a delimitter as well to 
+# write foreign code within a dragonstone file.
+# 
+# NOTE: The `{}` will NOT be used as this delimiter, using 
+# it here as an example. But here's two examples of how its
+# planned:
+# 
+#       define example
+#           invoke Ruby {
+#               puts "Hi!"
+#           }
+#       end
+# 
+#       define example
+#           invoke Ruby {
+#               require "interop_ruby"
+#               
+#               puts "Hi!"
+#           }
+#       end
+# 
+# In addition to this, which works now, if you just want
+# to add a foreign source without writing the code out:
+define new_example_two
+    invoke Ruby
+        with "./interop_ruby"
     end
 end
 
-old_example_two
-
-# define new_example_two
-#     Invoke Ruby {
-#         require "interop_ruby"
-
-#         puts "Another from Ruby!"
-#     }
-# end
-
+#! This is commented out because it will throw an error.
 # new_example_two

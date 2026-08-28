@@ -46,6 +46,7 @@ module Dragonstone
     class Lexer
         KEYWORDS = %w[
             echo
+            invoke
             eecho
             puts 
             argv
@@ -643,6 +644,7 @@ module Dragonstone
                     when "alias" then :ALIAS
                     when "extend" then :EXTEND
                     when "with" then :WITH
+                    when "invoke" then :INVOKE
                     when "yield" then :YIELD
                     when "super" then :SUPER
                     else

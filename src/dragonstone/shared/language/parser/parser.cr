@@ -290,12 +290,10 @@ module Dragonstone
             case token.type
             when :ANNOTATION_START
                 parse_annotated_statement
+            when :INVOKE
+                parse_invoke_statement
             when :IDENTIFIER
-                if invoke_statement_start?
-                    parse_invoke_statement
-                else
-                    parse_expression_statement
-                end
+                parse_expression_statement
             when :INSTANCE_VAR
                 next_token = peek_token
                 if next_token && next_token.type == :COLON
@@ -2487,78 +2485,48 @@ module Dragonstone
             arguments
         end
 
-        # Parse "Invoke" statements for native interop.
-        private def invoke_statement_start? : Bool
-            # Check for "Invoke" identifier
-            return false unless current_token.type == :IDENTIFIER && current_token.value == "Invoke"
-            
-            # Peek next token: <Language> (must be Identifier)
-            lang_token = peek_token(1)
-            return false unless lang_token && lang_token.type == :IDENTIFIER
-            
-            # Peek second token: with (must be :WITH keyword)
-            with_token = peek_token(2)
-            return false unless with_token && with_token.type == :WITH
-            
-            true
-        end
-
-        # Parse "Invoke" statement and return corresponding AST node.
         private def parse_invoke_statement : AST::Node
 
-            # Consumes "Invoke"
-            invoke_token = expect(:IDENTIFIER)
+            # Consumes "invoke"
+            invoke_token = expect(:INVOKE)
             
             # Parse Language (Ruby, Crystal, C, etc.)
             language_token = expect(:IDENTIFIER)
             language_name = language_token.value.as(String)
             
-            # Parse 'with' <Method>
+            # Parse `with "<name>"`.
+            #
+            # Right now this is STRING only. The bare-identifier form 
+            # (`with puts`) and its `as { ... }` argument block were 
+            # retired along with its style.
+            #
+            # String is deliberately open for the re-design. Today it 
+            # is only sugar for `ffi.call_<lang>` as a function name; 
+            # the redesign makes it a FOREIGN FILE resolved by a 
+            # FOREIGN TOOLCHAIN. That is the whole reason it is using
+            #  `with` and not `use` as `use` resolves a `.ds` module 
+            # through its resolver, `with` hands a name to somebody 
+            # else's.
             expect(:WITH)
-            
-            # Method name can be an Identifier or a keyword like 'puts' (:ECHO).
-            method_name = if current_token.type == :IDENTIFIER
-                expect(:IDENTIFIER).value.as(String)
-            elsif current_token.type == :ECHO
-                # Handle a keyword like 'puts' which maps to :ECHO but value is "puts".
-                token = current_token
-                advance
-                token.value.to_s
-            else
-                # Allow string literals "method_name"
-                if current_token.type == :STRING
-                    expect(:STRING).value.as(String)
-                else
-                    error("Expected method name identifier or string after 'with'", current_token)
-                end
-            end
-            
-            # Parse 'as' { <Args> }
-            args = [] of AST::Node
 
-            if current_token.type == :AS
-                expect(:AS)
-                expect(:LBRACE)
-                
-                unless current_token.type == :RBRACE
-                    args << parse_expression
-                    while current_token.type == :COMMA
-                        advance
-                        args << parse_expression
-                    end
-                end
-                
-                expect(:RBRACE)
+            target_name = if current_token.type == :STRING
+                expect(:STRING).value.as(String)
+            else
+                error("Expected a quoted name after 'with'", current_token)
             end
-            
+
+            # No argument block. `as { ... }` was retired; arguments are
+            # style 1's business (`ffi.call_<lang>(name, [args])`) until the
+            # redesign gives this block an inline body of its own.
+            args = [] of AST::Node
             expect(:END)
             
-            # Option 1: Simplified AST construction
             # Prepare Arguments 
-            #! WRAPPER NODES NEEDED HERE
-            # 'method_name' (String) and 'args' (Array of Nodes), 
-            # wrap them so they can be arguments in the generated method call.
-            method_arg = AST::Literal.new(method_name, location: invoke_token.location)
+            #! WRAPPER NODES NEEDED HERE FOR BARE FFI CALLS
+            # 'method_name' (String) and 'args' 
+            # (Array of Nodes) wrap them so they can be 
+            # arguments in the generated method call.
+            method_arg = AST::Literal.new(target_name, location: invoke_token.location)
             args_array = AST::ArrayLiteral.new(args, location: invoke_token.location)
 
             # The 'ffi' variable (The builtin native object).
@@ -2577,30 +2545,6 @@ module Dragonstone
                 receiver: ffi_receiver,
                 location: invoke_token.location
             )
-
-            # Option 2: More explicit AST construction
-            # Equivalent to: FFI::Invoke.<Language>.call("Method", [Args])
-            # ffi_base = AST::ConstantPath.new(
-            #     names: ["FFI", "Invoke"], 
-            #     location: invoke_token.location
-            # )
-            
-            # lang_factory_call = AST::MethodCall.new(
-            #     name: language_name,
-            #     arguments: [] of AST::Node,
-            #     receiver: ffi_base,
-            #     location: language_token.location
-            # )
-            
-            # method_arg = AST::Literal.new(method_name, location: language_token.location)
-            # args_array = AST::ArrayLiteral.new(args, location: language_token.location)
-            
-            # AST::MethodCall.new(
-            #     name: "call",
-            #     arguments: [method_arg, args_array] of AST::Node,
-            #     receiver: lang_factory_call,
-            #     location: invoke_token.location
-            # )
         end
     end
 end
