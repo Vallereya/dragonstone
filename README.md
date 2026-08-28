@@ -548,40 +548,39 @@ square: para(int, int) = ->(x: int) { x * x }
 echo square.call(6)
 ```
 
-#### Examples the interop (some done but still a work in progress).
+#### Examples the interop (some done but still a WORK IN PROGRESS).
 ```crystal
-    # Call puts from Ruby.
-    # This works too: ffi.call_ruby("puts", ["Hello from Ruby!"])
-    Invoke Ruby
-        with puts
+    # Two ways to Call C, Crystal, and Ruby from dragonstone.
+    # 
+    # Directly:
+    #   ffi.call_ruby("puts", ["Hello from Ruby!"])
+    #   ffi.call_crystal("puts", ["Hello from Crystal!"])
+    #   ffi.call_c("printf", ["Hello from C!"])
+    # 
+    # Or code directly in a block, however `{}` will
+    # NOT be used as its error prone and is pending
+    # a redesign but for a visual:
+    invoke Ruby {
+            require "./something"
 
-        as {
-            "Hello from Ruby!"
+            puts "Hello from Ruby!"
         }
     end
 
-    # Call puts from Crystal.
-    # This works too: ffi.call_crystal("puts", ["Hello from Crystal!"])
-    Invoke Crystal
-        with puts
-
-        as {
-            "Hello from Crystal!"
+    invoke Crystal {
+            puts "Hello from Crystal!"
         }
     end
 
-    # Call printf from C.
-    # This works too: ffi.call_c("printf", ["Hello from C!"])
-    Invoke C
-        with printf
-
-        as {
-            "Hello from C!"
-        }
+    # Or using the `with` keyword to import a foreign file:
+    define new_example_two
+        invoke C
+            with "./something"
+        end
     end
 ```
 
-###### Imports via `use` are built out, so you can import a file, selectively import as well, and the same applies by importing through a url.
+###### Imports via `use` where you can import a file or selectively import, and the same applies by importing through a url.
 ```crystal
     # Both by file and selectively using `from` with it.
     use "./test_use"
