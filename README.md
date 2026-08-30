@@ -1,30 +1,29 @@
 <p align="center">
     <div align="center"> <img src="./docs/0_Index/logos/dragonstone-logo-type.png" width="500"/> </div>
+    <!-- <div align="center"> <img src="./docs/0_Index/logos/dragonstone-logo-alt-type.png" width="800"/> </div> -->
 </p>
 <br>
 <p align="center">
     <div align="center">
-        <img src="https://img.shields.io/badge/⚠️%20Warning-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE"/>
+        <img src="https://img.shields.io/badge/⚠️%20Warning-This%20language%20is%20a%20work%20in%20progress,%20and%20much%20can%20still%20be%20changed!-5E06EE?style=for-the-badge"/>
     </div>
     <br>
     <div align="center">
-        <img src="https://img.shields.io/badge/🟢%20Passing-Frontend:%20Interpreter-379144"/>
-        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20ByteCode-379144"/>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Frontend:%20Interpreter-379144?style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20ByteCode-379144?style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20LLVM-379144?style=for-the-badge"/>
         <br>
-        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20LLVM-379144"/>
-        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20C-379144"/>
-    </div>
-    <!--
-    <div align="center">
-        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20Crystal-E7CD54"/>
-        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20Ruby-E7CD54"/>
-    </div>
-    -->
-    <div align="center">
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D"/>
-        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D"/>
-        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D"/>        -->
-        <!-- <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D"/>    -->
+        <img src="https://img.shields.io/badge/🟢%20Passing-Backend:%20C-379144?style=for-the-badge"/>
+        <!--
+        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20Crystal-E7CD54?style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/🟡%20Limited-Backend:%20Ruby-E7CD54?style=for-the-badge"/>
+        -->
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Crystal-BC002D?style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Ruby-BC002D?style=for-the-badge"/>
+        <!-- 
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20Python-BC002D?style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/🔴%20Failing-Backend:%20JavaScript-BC002D?style=for-the-badge"/>
+        -->
     </div>
 </p>
 <br>
@@ -48,23 +47,23 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
             Implementation language
         </td>
         <td align="center">
-            Current Version v5: Crystal, C
+            C, Crystal, Ruby¹
         </td>
     </tr>
     <tr align="center">
         <td align="center">
-            Platform
+            Platform Supported
         </td>
         <td align="center">
-            Supports: x86, x86_64, AArch64 
+            x86, x86_64, AArch64 
         </td>
     </tr>
     <tr align="center">
         <td align="center">
-            Operating System
+            Operating System Supported
         </td>
         <td align="center">
-            Supports: Windows, Linux, MacOS
+            Windows, Linux, MacOS
         </td>
     </tr>
     <tr align="center">
@@ -72,7 +71,7 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
             File Extension
         </td>
         <td align="center">
-            .ds, .dragonstone  
+            .ds, .dragonstone, .forge²
         </td>
     </tr>
     <tr align="center">
@@ -94,6 +93,9 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
 </table>
 
 <br>
+
+> ¹ This is the v5 implementation of dragonstone; as of v4, Ruby has been retired. <br>
+> ² The `.forge` extension is for the forge package manager (wip) <br>
 
 ## ⚙️ Project Setup
 ### *Requirements*
@@ -514,23 +516,6 @@ Dragonstone is a general purpose, high-level, object-oriented programming langua
     process(true)
 ```
 
-#### Example of using/importing other files with `use`.
-###### From (./examples/use.ds)
-```crystal
-    use "./test_use"
-
-    echo add(magic, 8)
-```
-
-###### What's being grabbed from (./examples/test_use.ds).
-```crystal
-    magic = 42
-
-    def add(a, b)
-        a + b
-    end
-```
-
 #### Two examples of `para`, this is the Dragonstone version of what another languages calls a `Proc`.
 ###### For any `{}` used within Dragonstone, these can also be split between lines or placed on the same line.
 ```crystal
@@ -548,31 +533,73 @@ square: para(int, int) = ->(x: int) { x * x }
 echo square.call(6)
 ```
 
-#### Examples the interop (some done but still a WORK IN PROGRESS).
+#### Example of importing other files with `use` keyword.
+###### From (./examples/use.ds)
 ```crystal
-    # Two ways to Call C, Crystal, and Ruby from dragonstone.
-    # 
-    # Directly:
-    #   ffi.call_ruby("puts", ["Hello from Ruby!"])
-    #   ffi.call_crystal("puts", ["Hello from Crystal!"])
-    #   ffi.call_c("printf", ["Hello from C!"])
-    # 
-    # Or code directly in a block, however `{}` will
-    # NOT be used as its error prone and is pending
-    # a redesign but for a visual:
-    invoke Ruby {
+    use "./test_use"
+
+    echo add(magic, 8)
+```
+
+###### What's being grabbed from (./examples/test_use.ds).
+```crystal
+    magic = 42
+
+    def add(a, b)
+        a + b
+    end
+```
+
+###### Imports via `use` allow you to import a file or selectively import something, and the same applies by importing through a url.
+```crystal
+    # Both by file and selectively using `from` with it.
+    use "./test_use"
+    use { divide } from "./raise"
+
+    # Same with a URL
+    use "https://example.com/examples/test_use"
+    use { MyModule } from "https://example.com/examples/resolution"
+```
+
+### 🚨 WORK IN PROGRESS
+#### Example of the interop
+###### There is two ways to Call C, Crystal, and Ruby from Dragonstone.
+```crystal
+    # Direct call to Ruby via FFI
+    ffi.call_ruby("puts", ["Hello from Ruby!"])
+
+    # Direct call to Crystal via FFI
+    ffi.call_crystal("puts", ["Hello from Crystal!"])
+
+    # Direct call to C via FFI
+    ffi.call_c("printf", ["Hello from C!"])
+```
+
+###### Or code directly in a block
+```crystal
+    # Please note that `{}` will NOT be used as its error 
+    # prone and is pending a redesign but for a visual:
+    define example
+        invoke Ruby {
             require "./something"
 
             puts "Hello from Ruby!"
         }
+        end
     end
 
-    invoke Crystal {
+    define example
+        invoke Crystal {
+            require "./something"
+
             puts "Hello from Crystal!"
         }
+        end
     end
+```
 
-    # Or using the `with` keyword to import a foreign file:
+###### Or using the `with` keyword to import a foreign file
+```crystal
     define example
         invoke C
             with "./something"
@@ -580,37 +607,28 @@ echo square.call(6)
     end
 ```
 
-###### Imports via `use` where you can import a file or selectively import, and the same applies by importing through a url.
-```crystal
-    # Both by file and selectively using `from` with it.
-    use "./test_use"
-    use { divide } from "./raise"
-
-    # Any both by file and selectively via a url, I used `cdn.jsdelivr.net`
-    # because it was the only thing I could find that would grab the examples from GitHub.
-    use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
-    use { MyModule } from "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/resolution"
-```
-
-#### See the `examples/` directory for more sample `.ds` files.
+#### To see more sample Dragonstone (`.ds`) files, check out the `examples/` directory.
 
 ## ⚡ Benchmark Information
-- Built with --release.
-- Results are for this specific benchmark + machine; expect variance across CPUs/Operating Systems.
-- "Nested" means an extra loop layer (measuring loop-overhead vs a single loop), not extra work.
-- <2% overhead at scale.
-- Near identical for loops vs single.
+
+* Built with --release.
+* Results are for this specific benchmark + machine; expect variance across CPUs/Operating Systems.
+* "Nested" means an extra loop layer (measuring loop-overhead vs a single loop), not extra work.
+* <2% overhead at scale.
+* Near identical for loops vs single.
 
 You can run these yourself from the `./bin/scripts/benchmark` directory.
 
-### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
+### *Results*
+> *rough context, not direct comparable*
+###### *1 Billion Nested Loop Iteration Benchmark (Interpreter)*
 ```
     Iterations:             ~4.47M iterations/s
     Per-iteration cost:     ~223.71 ns
     Actual Time:            223.71 s (~3.73 min)
 ```
 
-### *1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)*
+###### *1 Billion Nested Loop Iteration Benchmark (LLVM Compiler)*
 ```
     Iterations:             ~811M iterations/s
     Per-iteration cost:     ~1.23 ns
@@ -618,8 +636,9 @@ You can run these yourself from the `./bin/scripts/benchmark` directory.
     Results:                ~182× vs Interpreter
 ```
 
-### *Comparison Context (Rough context, not direct comparable)*
-###### For 1 billion iterations of this benchmark (Interpreter):
+### *Comparison Context*
+> *rough context, not direct comparable*
+###### For 1 billion iterations of this benchmark (Interpreter/Bytecode):
 ```
     Ruby v2.X.X         = ~15-30 minutes    (varies by version)
     Python v3.X.X       = ~5-15 minutes     (varies by version)
@@ -640,30 +659,29 @@ You can run these yourself from the `./bin/scripts/benchmark` directory.
 ```
 
 <br>
-
----
-
-<br>
-<p align="center">
-    <b>
-        <code> © 2025<i><a href="https://github.com/vallereya"> Vallereya </a></i></code>
-    </b>
-</p>
-<br>
 <p align="center">
 	<img
         src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/footers/gray0_ctp_on_line.svg?sanitize=true"
     />
+    </img>
 </p>
 <div align="center">
     <p>
         <i>
-            Code and Contributions have
-            <b><i>Apache-2.0 License</i></b>
+            Code and Contributions have <b><i>Apache-2.0 License</i></b>
             <br>
             See <b>LICENSE</b> for more information.
         </i>
     </p>
+    <br>
+    <a href="https://github.com/vallereya">
+        <img
+            src="https://img.shields.io/badge/© 2025-VALLEREYA-302D41?style=for-the-badge&labelColor=302D41"
+            alt="Vallereya"
+        />
+        </img>
+    </a>
+    <!--
     <br>
     <a href="https://github.com/vallereya/dragonstone/blob/main/LICENSE">
         <img
@@ -672,4 +690,6 @@ You can run these yourself from the `./bin/scripts/benchmark` directory.
         >
         </img>
     </a>
+    -->
 </div>
+<br>
