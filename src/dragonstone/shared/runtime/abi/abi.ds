@@ -1,8 +1,19 @@
 #[
-    ----------------------------------
-    -------------- ABI ---------------
-    - (Application Binary Interface) -
-    ---------------------------------- 
+    -------------------------------------
+    ---------------- ABI ----------------
+    -- (Application Binary Interface) ---
+    ------------------------------------- 
 ]#
 
+#[
+    #! THIS IS NOT THE ABI ROUTE JUST A PLACEHOLDER
 
+    This file only exists to mirror the Stage1 structure, 
+    which is why this note is the only thing here.
+
+    The ABI's linkage is `lib DragonstoneABI` in `abi.cr`, 
+    a Crystal file which dragonstone can't do yet. This 
+    file is not used in any way.
+
+    Keeping for now because it will be used in the future.
+]#
