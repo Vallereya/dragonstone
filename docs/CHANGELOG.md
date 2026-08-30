@@ -24,6 +24,8 @@
 * _(syslib)_ **`path`** module added featuring `stem`, `absolute?`, and anchoring `expand` capabilities ([#27], [@Vallereya])
 * _(syslib)_ **`dir`** module added to expose absolute `current` directories, `exists?`, and `glob` pathing ([#27], [@Vallereya])
 * _(runtime)_ **`ffi.call("env_get", [key])`** reads an environment variable through the native ABI; answers `nil` when the variable is unset and `""` when it is set to nothing, which are different answers ([#27], [@Vallereya])
+* *(language)* **[breaking]** **`Invoke` is now the keyword `invoke`**, lowercase like every other keyword; the language name stays capitalized (`invoke Ruby`) because it reads as a name ([#27], [@Vallereya])
+* *(language)* **[breaking]** **`invoke` blocks take `with "<name>"` only** the bare-identifier form and its `as { ... }` argument block are retired; arguments go through `ffi.call_<lang>(name, [args])` per usual ([#27], [@Vallereya])
 
 #### architecture (stage0 & stage1)
 * _(vm)_ **stage1 execution** is now fully supported on the core backend, added performance gains over the interpreter ([#27], [@Vallereya])
