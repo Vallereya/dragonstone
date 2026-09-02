@@ -17,7 +17,7 @@ def main
     echo "age:  #{owner_age}"
 
     echo "\n---- File Input ----"
-    toml_path = "./examples/test.toml"
+    toml_path = "./examples/stdlib/test.toml"
     test_config = TOML.parse_file(toml_path)
 
     echo "[TEST]"

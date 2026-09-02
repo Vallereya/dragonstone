@@ -34,7 +34,7 @@
 
 # Local Imports
 use "./test_use"
-use { divide } from "./raise"
+use { divide } from "./handling/raise"
 
 # Imports from a URL
 use "https://cdn.jsdelivr.net/gh/vallereya/dragonstone@main/examples/unicode"
